@@ -20,3 +20,11 @@
 
 - 推送 `main`：发布 `latest` + `sha-*`。
 - 推送 `dev`：发布 `dev` + `sha-*`。
+
+## 构建兼容性（避免冲突分支回退）
+
+- 项目 MSRV 为 **Rust 1.83**（见 `Cargo.toml` 的 `rust-version`）。
+- Agent 镜像构建使用 `rust:1.85-alpine`，用于避免 `icu_normalizer_data` 在旧工具链（如 1.75）下编译失败。
+- 如果你在其它分支 cherry-pick 本仓提交，请优先保留以下两项：
+  1. `Cargo.toml` 中的 `rust-version = "1.83"`
+  2. `deploy/agent/Dockerfile` 中的 `FROM rust:1.85-alpine`
