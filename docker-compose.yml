@@ -13,7 +13,7 @@ services:
           memory: 600M
 
   swarms-agent:
-    image: ghcr.io/zhengui666/imitatort-stateless-agent:dev
+    image: ghcr.io/zhengui666/imitatort-stateless-agent:${AGENT_TAG:-dev}
     container_name: swarms-agent
     depends_on:
       - conduwuit
