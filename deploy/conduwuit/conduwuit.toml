@@ -1,0 +1,19 @@
+[global]
+server_name = "matrix.local"
+database_backend = "rocksdb"
+address = "0.0.0.0"
+port = 6167
+allow_registration = false
+allow_federation = false
+trusted_servers = []
+
+[global.rocksdb]
+block_cache_capacity_mb = 256
+limit_memtables_to_block_cache = true
+compression_algo = "zstd"
+max_background_jobs = 2
+cache_index_and_filter_blocks = true
+
+[global.retention]
+timeline = "30d"
+media = "7d"
