@@ -1,0 +1,34 @@
+services:
+  conduwuit:
+    image: girlbossceo/conduwuit:latest
+    container_name: conduwuit
+    volumes:
+      - ./deploy/conduwuit/conduwuit.toml:/etc/conduwuit/conduwuit.toml:ro
+      - conduwuit-data:/var/lib/conduwuit
+    ports:
+      - "6167:6167"
+    deploy:
+      resources:
+        limits:
+          memory: 600M
+
+  swarms-agent:
+    build:
+      context: .
+      dockerfile: deploy/agent/Dockerfile
+    container_name: swarms-agent
+    depends_on:
+      - conduwuit
+    environment:
+      MATRIX_HOMESERVER: "http://conduwuit:6167"
+      MATRIX_ROOM_ID: "!replace_me:matrix.local"
+      CONTEXT_LIMIT: "50"
+      OPENAI_MODEL: "gpt-4o-mini"
+      SYSTEM_PROMPT: "你是运行在 Matrix 网络上的无状态智能体。"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  conduwuit-data:
