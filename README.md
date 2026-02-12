@@ -32,3 +32,10 @@ docker compose up --build
 4. 将结论写回房间，作为下一轮上下文。
 
 详见 `docs/architecture.md`。
+
+
+## Build Notes (MSRV)
+
+- 最低 Rust 版本为 **1.83**（由依赖树决定）。
+- Agent Docker 构建镜像已使用 `rust:1.85-alpine`，用于规避 `icu_normalizer_data` 在 `rustc 1.75` 下的构建失败。
+- 如果你在本地直接 `cargo build`，请确认 `rustc --version` >= 1.83。
