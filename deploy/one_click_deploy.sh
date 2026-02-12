@@ -19,9 +19,8 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-# 预拉取/构建，避免在重启窗口内耗时
-$compose_cmd pull conduwuit >/dev/null 2>&1 || true
-$compose_cmd build swarms-agent
+# 预拉取镜像，避免在重启窗口内耗时
+$compose_cmd pull conduwuit swarms-agent >/dev/null 2>&1 || true
 
 # 以最短停机窗口重建容器（先后端再框架）
 $compose_cmd up -d --no-deps --no-build --force-recreate conduwuit

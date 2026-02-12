@@ -13,9 +13,7 @@ services:
           memory: 600M
 
   swarms-agent:
-    build:
-      context: .
-      dockerfile: deploy/agent/Dockerfile
+    image: ghcr.io/zhengui666/imitatort-stateless-agent:dev
     container_name: swarms-agent
     depends_on:
       - conduwuit
