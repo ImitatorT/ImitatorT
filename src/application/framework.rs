@@ -86,6 +86,19 @@ impl VirtualCompany {
         self.message_bus.broadcast(message)
     }
 
+    /// 创建群聊
+    pub async fn create_group(
+        &self,
+        group_id: &str,
+        name: &str,
+        creator: &str,
+        members: Vec<String>,
+    ) -> Result<String> {
+        self.message_bus
+            .create_group(group_id, name, creator, members)
+            .await
+    }
+
     /// 获取消息总线
     pub fn message_bus(&self) -> Arc<MessageBus> {
         self.message_bus.clone()
