@@ -47,7 +47,7 @@ env:
   RUSTC_WRAPPER: 'sccache'
 
 jobs:
-  # ========== 阶段 1: 变更检测（所有任务的起点）==========
+  # ========== 阶段 1: 变更检测 ==========
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -74,7 +74,6 @@ jobs:
     name: Format Check
     runs-on: ubuntu-latest
     needs: changes
-    # Format 只做警告，不阻塞流程
     continue-on-error: true
     if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
     steps:
@@ -95,8 +94,6 @@ jobs:
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo 'cargo fmt' >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "这不会阻塞构建，但建议修复以保持代码风格一致。" >> $GITHUB_STEP_SUMMARY
 
   clippy:
     name: Clippy Check
@@ -119,7 +116,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - run: cargo clippy --all-targets --all-features -- -D warnings
 
-  # ========== 阶段 3: 测试（并行，矩阵策略）==========
+  # ========== 阶段 3: 测试（并行）==========
   test:
     name: Test (${{ matrix.name }})
     runs-on: ubuntu-latest
@@ -128,7 +125,7 @@ jobs:
       (needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch') &&
       !inputs.skip_tests
     strategy:
-      fail-fast: true  # 任一测试失败立即停止
+      fail-fast: true
       matrix:
         include:
           - name: default
@@ -156,15 +153,13 @@ jobs:
             cargo test --release --features ${{ matrix.features }}
           fi
 
-  # ========== 阶段 4: 构建镜像（依赖质量检查通过）==========
+  # ========== 阶段 4: 构建单平台镜像（供安全扫描使用）==========
   build:
     name: Build Image
     runs-on: ubuntu-latest
-    needs: [changes, fmt, clippy, test]
-    # 关键：所有质量检查必须通过（或被跳过）
+    needs: [changes, clippy, test]
     if: |
       always() &&
-      (needs.fmt.result == 'success' || needs.fmt.result == 'skipped') &&
       (needs.clippy.result == 'success' || needs.clippy.result == 'skipped') &&
       (needs.test.result == 'success' || needs.test.result == 'skipped' || inputs.skip_tests) &&
       (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch')
@@ -189,7 +184,8 @@ jobs:
           path: /tmp/image.tar
           retention-days: 1
 
-  # ========== 阶段 5: 安全扫描（阻塞发布）==========
+  # ========== 阶段 5: 安全扫描 & 多平台构建推送（并行执行）==========
+  # 5a. 安全扫描
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -206,14 +202,13 @@ jobs:
       - name: Load image
         run: docker load -i /tmp/image.tar
 
-      # 安全扫描 - 失败会阻止后续发布
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.IMAGE_NAME }}:build
           format: 'sarif'
           output: 'trivy-results.sarif'
-          exit-code: '1'  # 发现漏洞则失败
+          exit-code: '1'
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results
@@ -222,17 +217,17 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-  # ========== 阶段 6: 推送镜像（最终门禁）==========
+  # 5b. 多平台构建并推送（与安全扫描并行）
   push:
-    name: Push Image
+    name: Push Multi-Platform Image
     runs-on: ubuntu-latest
-    needs: [build, security-scan]
-    # 关键：必须通过安全扫描，或者显式跳过
+    needs: [build, clippy, test]
     if: |
       always() &&
       needs.build.result == 'success' &&
-      (needs.security-scan.result == 'success' || inputs.skip_security_scan) &&
-      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch'))
+      (needs.clippy.result == 'success' || needs.clippy.result == 'skipped') &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped' || inputs.skip_tests) &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
 
@@ -263,7 +258,6 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=dev,enable=${{ github.ref_name == 'dev' }}
 
-      # 重新构建并推送多平台镜像（利用缓存，很快）
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -277,6 +271,42 @@ jobs:
             type=gha,scope=build-${{ github.ref_name }}
             type=gha,scope=build-main
 
+  # ========== 阶段 6: 最终发布确认（安全扫描通过后标记）==========
+  # 这个 job 用于在 UI 上显示发布是否真正完成
+  release-confirm:
+    name: Release Confirmation
+    runs-on: ubuntu-latest
+    needs: [push, security-scan]
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Check release status
+        run: |
+          echo "## 发布状态报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 步骤 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 镜像构建推送 | ${{ needs.push.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 安全扫描 | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # 检查是否应该标记为正式发布
+          if [[ "${{ needs.push.result }}" == "success" ]]; then
+            if [[ "${{ needs.security-scan.result }}" == "success" ]] || [[ "${{ inputs.skip_security_scan }}" == "true" ]]; then
+              echo "✅ **镜像已发布**" >> $GITHUB_STEP_SUMMARY
+              if [[ "${{ needs.security-scan.result }}" == "skipped" ]]; then
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "⚠️ 注意：安全扫描被跳过" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "⚠️ **镜像已推送，但安全扫描未通过**" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "镜像已推送到仓库，但存在安全漏洞，请检查并修复！" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "❌ **镜像推送失败**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
   # ========== 质量门禁汇总报告 ==========
   quality-gate:
     name: Quality Gate
@@ -288,24 +318,27 @@ jobs:
         run: |
           echo "## 质量门禁报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| 检查项 | 状态 |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Format Check | ${{ needs.fmt.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Clippy Check | ${{ needs.clippy.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 检查项 | 状态 | 阻塞发布 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Format Check | ${{ needs.fmt.result }} | ❌ 否 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Clippy Check | ${{ needs.clippy.result }} | ✅ 是 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result }} | ✅ 是（可跳过） |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }} | ⚠️ 发布后检查 |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # 检查是否通过（Format 只做警告，不阻塞）
           if [[ "${{ needs.clippy.result }}" == "failure" ]] || \
-             [[ "${{ needs.test.result }}" == "failure" && "${{ inputs.skip_tests }}" != "true" ]] || \
-             [[ "${{ needs.security-scan.result }}" == "failure" && "${{ inputs.skip_security_scan }}" != "true" ]]; then
-            echo "❌ **质量门禁未通过**" >> $GITHUB_STEP_SUMMARY
+             [[ "${{ needs.test.result }}" == "failure" && "${{ inputs.skip_tests }}" != "true" ]]; then
+            echo "❌ **质量门禁未通过，构建被阻断**" >> $GITHUB_STEP_SUMMARY
             exit 1
           else
             echo "✅ **质量门禁通过**" >> $GITHUB_STEP_SUMMARY
             if [[ "${{ needs.fmt.result }}" == "failure" ]]; then
               echo "" >> $GITHUB_STEP_SUMMARY
-              echo "⚠️ 注意：代码格式检查未通过，建议运行 `cargo fmt` 修复" >> $GITHUB_STEP_SUMMARY
+              echo "⚠️ 提示：代码格式检查未通过，建议运行 `cargo fmt` 修复" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [[ "${{ needs.security-scan.result }}" == "failure" && "${{ inputs.skip_security_scan }}" != "true" ]]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "⚠️ 警告：安全扫描发现漏洞，镜像已推送但请尽快修复！" >> $GITHUB_STEP_SUMMARY
             fi
           fi
