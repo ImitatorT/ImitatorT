@@ -1,6 +1,6 @@
 services:
   conduwuit:
-    image: girlbossceo/conduwuit:latest
+    image: forgejo.ellis.link/continuwuation/continuwuity:latest
     container_name: conduwuit
     volumes:
       - ./deploy/conduwuit/conduwuit.toml:/etc/conduwuit/conduwuit.toml:ro
