@@ -63,6 +63,7 @@ pub struct LogConfig {
     /// 时间格式（RFC3339 或自定义）
     pub time_format: TimeFormat,
     /// 请求 ID 头名称
+    #[allow(dead_code)]
     pub request_id_header: String,
 }
 
@@ -88,6 +89,7 @@ pub enum TimeFormat {
     /// RFC3339 格式
     Rfc3339,
     /// 自定义格式（chrono 格式字符串）
+    #[allow(dead_code)]
     Custom(String),
 }
 
@@ -146,24 +148,7 @@ pub fn init(config: LogConfig) {
     }
 }
 
-/// 使用默认配置初始化日志
-pub fn init_default() {
-    init(LogConfig::default());
-}
 
-/// 从环境变量初始化日志
-pub fn init_from_env() {
-    let format = std::env::var("LOG_FORMAT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(LogFormat::Pretty);
-
-    let config = LogConfig {
-        format,
-        ..Default::default()
-    };
-    init(config);
-}
 
 /// 请求追踪上下文
 #[derive(Debug, Clone)]
@@ -186,15 +171,6 @@ impl RequestContext {
         }
     }
 
-    /// 使用指定 ID 创建请求上下文
-    pub fn with_id(request_id: impl Into<String>) -> Self {
-        Self {
-            request_id: request_id.into(),
-            start_time: Instant::now(),
-            metadata: std::collections::HashMap::new(),
-        }
-    }
-
     /// 获取已流逝的时间
     pub fn elapsed(&self) -> std::time::Duration {
         self.start_time.elapsed()
@@ -204,6 +180,16 @@ impl RequestContext {
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.metadata.insert(key.into(), value.into());
         self
+    }
+
+    /// 使用指定 ID 创建请求上下文
+    #[allow(dead_code)]
+    pub fn with_id(request_id: impl Into<String>) -> Self {
+        Self {
+            request_id: request_id.into(),
+            start_time: Instant::now(),
+            metadata: std::collections::HashMap::new(),
+        }
     }
 }
 
@@ -289,17 +275,13 @@ impl Sanitizer {
     }
 
     /// 脱敏 Token - 完全隐藏
+    #[allow(dead_code)]
     pub fn token(_token: &str) -> String {
         "***TOKEN***".to_string()
     }
 
-    /// 脱敏 URL 中的凭证
-    pub fn url(url: &str) -> String {
-        // 移除 URL 中的用户名密码部分
-        url.replace_regex(r"://[^:]+:[^@]+@", "://***:***@")
-    }
-
     /// 脱敏 Matrix 访问令牌
+    #[allow(dead_code)]
     pub fn matrix_token(token: &str) -> String {
         if token.len() <= 12 {
             return "***".to_string();
@@ -308,28 +290,7 @@ impl Sanitizer {
     }
 }
 
-trait RegexReplace {
-    fn replace_regex(&self, pattern: &str, replacement: &str) -> String;
-}
 
-impl RegexReplace for str {
-    fn replace_regex(&self, _pattern: &str, replacement: &str) -> String {
-        // 简化实现，实际可以使用 regex crate
-        // 这里只做简单的字符串替换
-        if self.contains("://") && self.contains('@') {
-            // 简单处理包含凭证的 URL
-            if let Some(start) = self.find("://") {
-                let protocol = &self[..start + 3];
-                let rest = &self[start + 3..];
-                if let Some(at_pos) = rest.find('@') {
-                    let host_part = &rest[at_pos + 1..];
-                    return format!("{}{}{}", protocol, replacement, host_part);
-                }
-            }
-        }
-        self.to_string()
-    }
-}
 
 /// 自定义美观格式器
 pub struct PrettyFormatter {
@@ -413,17 +374,15 @@ where
 }
 
 /// 自定义字段格式化
-pub struct PrettyFields {
-    show_target: bool,
-}
+pub struct PrettyFields;
 
 impl PrettyFields {
-    pub fn new(show_target: bool) -> Self {
-        Self { show_target }
+    pub fn new(_show_target: bool) -> Self {
+        Self
     }
 }
 
-impl<'a> FormatFields<'a> for PrettyFields {
+impl FormatFields<'_> for PrettyFields {
     fn format_fields<R: tracing_subscriber::field::RecordFields>(
         &self,
         writer: Writer<'_>,
@@ -443,7 +402,7 @@ struct FieldVisitor<'a> {
     result: std::fmt::Result,
 }
 
-impl<'a> field::Visit for FieldVisitor<'a> {
+impl field::Visit for FieldVisitor<'_> {
     fn record_debug(&mut self, field: &field::Field, value: &dyn fmt::Debug) {
         if field.name() == "message" {
             self.result = write!(self.writer, "{:?}", value);

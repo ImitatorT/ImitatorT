@@ -85,6 +85,7 @@ impl OpenAIClient {
     }
 
     /// Simple completion without tools (for backward compatibility)
+    #[allow(dead_code)]
     pub async fn complete(&self, system_prompt: &str, context: &str, task: &str) -> Result<String> {
         let messages = vec![
             Message {

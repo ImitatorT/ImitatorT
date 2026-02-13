@@ -1,22 +1,23 @@
 # ImitatorT Stateless Virtual Company Framework
 
-基于 Rust 的无状态虚拟公司框架，采用 Swarms 风格编排，以 Conduwuit (Matrix 服务器) 作为状态中枢。
+基于 Rust 的无状态虚拟公司框架，采用 Swarms 风格编排，支持 A2A (Agent-to-Agent) 协议作为内部通信机制，Matrix 仅作为前端展示层。
 
 ## 项目概述
 
 本项目是一个**无状态智能体框架**，核心设计理念：
 
-- **计算与状态分离**：Agent 为短生命周期计算单元，状态仅保留在 Matrix/Conduwuit
-- **无本地持久化**：不落地 SQLite / Vector DB，避免跨实例同步复杂度
+- **计算与状态分离**：Agent 为短生命周期计算单元，状态仅保留在内部存储
+- **灵活的输出模式**：支持 Matrix 前端、命令行输出、A2A 协议多种模式
+- **A2A 协议支持**：Agent 间通过 A2A 协议通信，Matrix 仅作为展示层
 - **可弹性扩展**：每个 Agent 副本可随时重启，不依赖本地恢复
 - **资源优化**：针对 1GB RAM 环境优化部署
 
 ### 核心架构流程
 
-1. Agent 从 Matrix 房间拉取最近 N 条消息作为上下文
+1. Agent 从内部存储获取最近 N 条消息作为上下文
 2. 可选执行一次 MCP STDIO 工具
 3. 调用 LLM 推理
-4. 将结论写回房间，作为下一轮上下文
+4. 将结论写入输出通道（Matrix/CLI/A2A），作为下一轮上下文
 
 ## 技术栈
 
@@ -25,8 +26,10 @@
 - **HTTP 客户端**: reqwest
 - **CLI 解析**: clap
 - **日志**: tracing
-- **Matrix 服务器**: Conduwuit (轻量级 Matrix 服务端)
+- **Matrix 服务器**: Conduwuit (轻量级 Matrix 服务端) - 仅作为前端
 - **LLM 接口**: OpenAI API
+- **Agent 协议**: A2A (Agent-to-Agent) 简化实现
+- **存储**: 内存存储（默认）/ sled 持久化（可选特性）
 - **容器化**: Docker / Docker Compose
 
 ## 项目结构
@@ -37,11 +40,14 @@
 ├── docker-compose.yml      # 部署编排
 ├── .env.example            # 环境变量模板
 ├── src/
-│   ├── main.rs             # 主入口：单次执行循环
+│   ├── main.rs             # 主入口：支持多种运行模式
 │   ├── config.rs           # CLI/环境变量配置定义
-│   ├── matrix.rs           # Matrix Client-Server API 封装
+│   ├── matrix.rs           # Matrix Client-Server API 封装（前端展示）
 │   ├── llm.rs              # OpenAI Chat Completions 适配层（支持 Tool Calling）
-│   └── tool.rs             # Tool/Function Calling 工具定义与执行
+│   ├── tool.rs             # Tool/Function Calling 工具定义与执行
+│   ├── a2a.rs              # A2A 协议简化实现
+│   ├── output.rs           # 输出抽象层（Matrix/CLI/A2A）
+│   └── store.rs            # 轻量级消息存储（内存/sled）
 ├── deploy/
 │   ├── agent/
 │   │   └── Dockerfile      # Agent 容器构建（多阶段 + UPX 压缩）
@@ -63,11 +69,41 @@
 cp .env.example .env
 # 编辑 .env 填入实际值
 
-# 本地运行
+# 命令行模式（最简单，无需 Matrix）
 cargo run -- \
+  --output-mode cli \
+  --openai-api-key <api_key> \
+  --input-message "Hello, Agent!"
+
+# 交互式命令行模式
+cargo run -- \
+  --output-mode cli \
+  --openai-api-key <api_key> \
+  --interactive
+
+# Matrix 前端模式
+cargo run -- \
+  --output-mode matrix \
   --matrix-homeserver http://localhost:6167 \
   --matrix-access-token <token> \
   --matrix-room-id '!room:matrix.local' \
+  --openai-api-key <api_key>
+
+# A2A 协议模式（Agent 间通信）
+cargo run -- \
+  --output-mode a2a \
+  --agent-id agent-001 \
+  --agent-name "Agent One" \
+  --a2a-peer-agents "agent-002,agent-003" \
+  --openai-api-key <api_key>
+
+# 混合模式（Matrix 前端 + A2A 内部通信）
+cargo run -- \
+  --output-mode hybrid \
+  --matrix-homeserver http://localhost:6167 \
+  --matrix-access-token <token> \
+  --matrix-room-id '!room:matrix.local' \
+  --agent-id agent-001 \
   --openai-api-key <api_key>
 ```
 
@@ -89,20 +125,131 @@ docker compose up --build
   1. `Cargo.toml` 中的 `rust-version = "1.83"`
   2. `deploy/agent/Dockerfile` 中的 `FROM rust:1.85-alpine`
 
+### 特性开关
+
+```bash
+# 启用持久化存储（使用 sled）
+cargo run --features persistent-store -- ...
+```
+
 ## 配置说明
 
 配置通过环境变量或命令行参数传入（使用 clap 解析）：
+
+### 核心配置
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `OUTPUT_MODE` | 输出模式: `cli`, `matrix`, `a2a`, `hybrid` | cli |
+| `OPENAI_API_KEY` | OpenAI API 密钥 | - |
+| `OPENAI_MODEL` | 模型名称 | gpt-4o-mini |
+| `CONTEXT_LIMIT` | 上下文消息数量 | 50 |
+| `SYSTEM_PROMPT` | 系统提示词 | （见代码） |
+
+### Matrix 配置（matrix/hybrid 模式下需要）
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
 | `MATRIX_HOMESERVER` | Matrix 服务器地址 | - |
 | `MATRIX_ACCESS_TOKEN` | Matrix 访问令牌 | - |
 | `MATRIX_ROOM_ID` | 目标房间 ID | - |
-| `OPENAI_API_KEY` | OpenAI API 密钥 | - |
-| `OPENAI_MODEL` | 模型名称 | gpt-4o-mini |
-| `CONTEXT_LIMIT` | 上下文消息数量 | 50 |
-| `SYSTEM_PROMPT` | 系统提示词 | （见代码） |
 
+### A2A 配置
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `AGENT_ID` | 当前 Agent 唯一标识 | agent-001 |
+| `AGENT_NAME` | Agent 显示名称 | Virtual Agent |
+| `A2A_TARGET_AGENT` | A2A 默认目标 Agent ID | - |
+| `A2A_PEER_AGENTS` | 注册为 Peer 的 Agents（逗号分隔） | - |
+
+### 存储配置
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `STORE_TYPE` | 存储类型: `memory`, `persistent` | memory |
+| `STORE_PATH` | 持久化存储路径（persistent 类型使用） | ./data |
+| `STORE_MAX_SIZE` | 存储消息数量上限 | 1000 |
+
+### CLI 配置
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `INPUT_MESSAGE` | 单次执行的输入消息 | - |
+| `INTERACTIVE` | 是否以交互模式运行 | false |
+| `CLI_ECHO` | 是否在 CLI 模式下回显消息 | true |
+
+## 输出模式详解
+
+### CLI 模式
+
+最简单的模式，无需 Matrix 服务器。适用于本地测试、脚本集成。
+
+```bash
+# 单次执行
+cargo run -- --output-mode cli --openai-api-key <key> --input-message "Hello"
+
+# 交互式模式
+cargo run -- --output-mode cli --openai-api-key <key> --interactive
+```
+
+交互式命令：
+- `/quit`, `/exit` - 退出
+- `/help` - 显示帮助
+- `/clear` - 清空上下文
+- `/context` - 显示当前上下文
+
+### Matrix 模式
+
+Matrix 作为前端展示层，Agent 将消息发送到 Matrix 房间。
+
+```bash
+cargo run -- \
+  --output-mode matrix \
+  --matrix-homeserver http://localhost:6167 \
+  --matrix-access-token <token> \
+  --matrix-room-id '!room:matrix.local' \
+  --openai-api-key <key>
+```
+
+### A2A 模式
+
+Agent 间通过 A2A 协议通信，实现多 Agent 协作。
+
+```bash
+# Agent 1
+cargo run -- \
+  --output-mode a2a \
+  --agent-id agent-001 \
+  --agent-name "Alice" \
+  --a2a-peer-agents "agent-002" \
+  --openai-api-key <key> \
+  --input-message "Hello from Alice!"
+
+# Agent 2
+cargo run -- \
+  --output-mode a2a \
+  --agent-id agent-002 \
+  --agent-name "Bob" \
+  --a2a-peer-agents "agent-001" \
+  --openai-api-key <key> \
+  --input-message "Hello from Bob!"
+```
+
+### Hybrid 模式
+
+Matrix 作为前端展示层，同时内部使用 A2A 协议进行 Agent 间通信。
+
+```bash
+cargo run -- \
+  --output-mode hybrid \
+  --matrix-homeserver http://localhost:6167 \
+  --matrix-access-token <token> \
+  --matrix-room-id '!room:matrix.local' \
+  --agent-id agent-001 \
+  --a2a-peer-agents "agent-002,agent-003" \
+  --openai-api-key <key>
+```
 
 ## CI/CD 与发布
 
@@ -127,14 +274,24 @@ GitHub Actions 工作流 `.github/workflows/docker-publish.yml`：
 ### `src/config.rs`
 定义 `AppConfig` 结构体，使用 `clap::Parser` 派生宏支持从命令行参数和环境变量读取配置。
 
+新增配置项：
+- `OUTPUT_MODE`: 输出模式选择
+- `AGENT_ID`, `AGENT_NAME`: A2A Agent 标识
+- `A2A_PEER_AGENTS`: Peer Agents 列表
+- `STORE_TYPE`, `STORE_PATH`: 存储配置
+- `INTERACTIVE`, `CLI_ECHO`: CLI 模式配置
+
 ### `src/matrix.rs`
 `MatrixClient` 封装 Matrix Client-Server API：
 - `latest_context()`: 获取房间历史消息
 - `send_text_message()`: 发送文本消息到房间
 
+**注意**: Matrix 现在仅作为前端展示层，不再是状态中枢。
+
 ### `src/llm.rs`
 `OpenAIClient` 封装 OpenAI Chat Completions API：
-- `complete()`: 传入系统提示词、上下文和任务，返回 LLM 响应
+- `chat()`: 带工具调用的对话接口
+- `complete()`: 简单完成接口（向后兼容）
 
 ### `src/tool.rs`
 Tool/Function Calling 工具定义与执行：
@@ -142,15 +299,38 @@ Tool/Function Calling 工具定义与执行：
 - `ToolRegistry::execute()`: 执行指定的工具调用
 - 内置工具：`execute_command`（执行系统命令）、`fetch_url`（获取网页内容）
 
+### `src/a2a.rs`
+A2A (Agent-to-Agent) 协议简化实现：
+- `AgentCard`: Agent 能力描述
+- `A2AAgent`: Agent 运行时，支持消息发送/接收
+- `A2AClient`: HTTP 客户端（用于远程通信）
+- 支持消息类型：Text, Task, TaskResponse, Status
+
+### `src/store.rs`
+轻量级消息存储：
+- 内存存储（默认）：`MessageStore::new(max_size)`
+- 持久化存储（可选特性）：`MessageStore::new_persistent(path, max_size)`
+- 自动消息数量限制（LRU 策略）
+
+### `src/output.rs`
+输出抽象层，统一不同输出模式的接口：
+- `Output` trait: 统一输出接口
+- `MatrixOutput`: Matrix 前端输出
+- `CliOutput`: 命令行输出
+- `A2AOutput`: A2A 协议输出
+- `HybridOutput`: 混合输出
+- `OutputFactory`: 输出工厂
+
 ### `src/main.rs`
-主循环逻辑：
+主循环逻辑，支持多种运行模式：
 1. 初始化 tracing 日志
 2. 解析配置
-3. 构建 Matrix 和 LLM 客户端
-4. 拉取上下文
-5. 调用 LLM（带 tools 定义），检测是否需要 tool call
-6. 如有 tool call，执行工具并将结果再次传给 LLM 获取最终回复
-7. 回写结果到 Matrix
+3. 创建存储和输出处理器
+4. 构建 LLM 客户端
+5. 拉取上下文
+6. 调用 LLM（带 tools 定义），检测是否需要 tool call
+7. 如有 tool call，执行工具并将结果再次传给 LLM 获取最终回复
+8. 回写结果到输出通道
 
 ## 部署架构
 
@@ -180,10 +360,14 @@ Tool/Function Calling 工具定义与执行：
 - **容器安全**: Agent 最终镜像使用 `scratch`，无 shell、无包管理器，最小攻击面
 - **网络**: Conduwuit 默认关闭注册和联邦功能
 - **证书**: 生产环境确保证书有效（Agent 镜像内置 CA 证书）
+- **A2A 通信**: 当前实现为简化版本，生产环境建议添加身份验证和加密
 
 ## 扩展建议
 
 - 添加更多 LLM 提供商支持（修改 `src/llm.rs`）
-- 扩展 MCP 工具支持（修改 `src/mcp.rs`）
+- 扩展 MCP 工具支持（修改 `src/tool.rs`）
+- 完善 A2A HTTP 服务端实现（添加 HTTP 端点到 `src/a2a.rs`）
+- 添加 WebSocket 支持用于实时 A2A 通信
 - 添加健康检查端点
 - 支持更多 Matrix 事件类型
+- 添加消息持久化的自动清理策略

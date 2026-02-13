@@ -6,16 +6,23 @@ rust-version = "1.83"
 
 [dependencies]
 anyhow = "1"
+async-trait = "0.1"
 clap = { version = "4", features = ["derive", "env"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["clock"], default-features = false }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "process"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "process", "sync", "net", "io-std", "io-util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "json"] }
 urlencoding = "2"
 uuid = { version = "1", features = ["v4"] }
+# 轻量级存储，可选启用
+sled = { version = "0.34", optional = true }
+
+[features]
+default = []
+persistent-store = ["sled"]
 
 [profile.release]
 lto = true
