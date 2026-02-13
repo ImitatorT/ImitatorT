@@ -21,7 +21,7 @@
 
 ## 技术栈
 
-- **语言**: Rust (MSRV 1.83)
+- **语言**: Rust (MSRV 1.85)
 - **异步运行时**: Tokio
 - **HTTP 客户端**: reqwest
 - **CLI 解析**: clap
@@ -119,10 +119,10 @@ docker compose up --build
 
 ### 构建兼容性注意事项
 
-- **MSRV**: Rust 1.83（见 `Cargo.toml` 的 `rust-version`）
-- **Docker 构建镜像**: 使用 `rust:1.85-alpine`，用于避免 `icu_normalizer_data` 在旧工具链（如 1.75）下编译失败
+- **MSRV**: Rust 1.85（见 `Cargo.toml` 的 `rust-version`）
+- **Docker 构建镜像**: 使用 `rust:1.85-alpine`
 - 如果在其它分支 cherry-pick 本仓提交，请优先保留：
-  1. `Cargo.toml` 中的 `rust-version = "1.83"`
+  1. `Cargo.toml` 中的 `rust-version = "1.85"`
   2. `deploy/agent/Dockerfile` 中的 `FROM rust:1.85-alpine`
 
 ### 特性开关
@@ -255,11 +255,49 @@ cargo run -- \
 
 GitHub Actions 工作流 `.github/workflows/docker-publish.yml`：
 
-- **触发条件**: `main` 或 `dev` 分支推送
-- **发布目标**: GHCR (GitHub Container Registry)
-- **镜像标签**:
-  - `main` 分支: `latest` + `sha-*`
-  - `dev` 分支: `dev` + `sha-*`
+### 触发条件
+- `push` 到 `main` 或 `dev` 分支
+- 推送 `v*` 标签
+- PR 到 `main` 或 `dev` 分支
+- 手动触发 (`workflow_dispatch`)
+
+### Pipeline 流程
+
+```
+┌─────────┐    ┌─────────┐    ┌──────────────────┐    ┌───────────────┐
+│  lint   │───→│  test   │───→│  build-and-push  │───→│ security-scan │
+└─────────┘    └─────────┘    └──────────────────┘    └───────────────┘
+  - fmt检查                     (多平台构建)              (Trivy扫描)
+  - clippy检查                  (自动标签)
+                               (构建信息注入)
+```
+
+### Jobs 说明
+
+| Job | 说明 |
+|-----|------|
+| `lint` | 代码质量检查：`cargo fmt --check` + `cargo clippy` |
+| `test` | 运行单元测试：`cargo test --release --all-features` |
+| `build-and-push` | 多平台 Docker 镜像构建与推送 |
+| `security-scan` | Trivy 容器安全扫描 |
+
+### 镜像标签策略
+
+| 场景 | 生成的标签 |
+|------|-----------|
+| `main` 分支 push | `latest`, `main-<short-sha>` |
+| `dev` 分支 push | `dev`, `dev-<short-sha>` |
+| Tag (e.g., `v1.2.3`) | `1.2.3`, `1.2` |
+| PR | `pr-<number>` (仅构建，不推送) |
+
+### 多平台支持
+- `linux/amd64` (x86_64)
+- `linux/arm64` (ARM64)
+
+### 安全扫描
+- 使用 Trivy 进行漏洞扫描
+- 扫描结果上传到 GitHub Security tab
+- `CRITICAL` 和 `HIGH` 级别漏洞会导致构建失败
 
 ## 代码风格与约定
 
@@ -349,10 +387,12 @@ A2A (Agent-to-Agent) 协议简化实现：
 
 ### Agent 镜像
 
-多阶段构建：
-1. 使用 `rust:1.85-alpine` 编译
-2. 使用 UPX 压缩二进制
-3. 最终镜像基于 `scratch`（空镜像），仅包含 CA 证书和压缩后的二进制
+多阶段多平台构建：
+1. 使用 `rust:1.85-alpine` 交叉编译（支持 `linux/amd64` 和 `linux/arm64`）
+2. 使用 `cargo-chef` 实现依赖层缓存
+3. UPX 压缩二进制（仅 x86_64 平台）
+4. 最终镜像基于 `scratch`（空镜像），仅包含 CA 证书和二进制文件
+5. 注入 OCI 标准标签（版本、构建时间、Git SHA 等）
 
 ## 安全注意事项
 

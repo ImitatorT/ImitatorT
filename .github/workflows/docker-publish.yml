@@ -1,24 +1,40 @@
-name: Publish Agent Image
+name: CI/CD Pipeline
 
 on:
   push:
     branches:
       - main
       - dev
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - dev
   workflow_dispatch:
+    inputs:
+      push_image:
+        description: '是否推送镜像到仓库'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
   packages: write
+  # Trivy 扫描需要 security-events 权限
+  security-events: write
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/imitatort-stateless-agent
+  # MSRV 版本，与 Cargo.toml 保持一致
+  RUST_MSRV: '1.85'
 
 jobs:
-  test:
-    name: Run Tests
+  # 代码质量检查
+  lint:
+    name: Code Quality Check
     runs-on: ubuntu-latest
-    if: github.event_name != 'push' || github.repository == 'zhengui666/ImitatorT'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,12 +42,43 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.85
+          toolchain: ${{ env.RUST_MSRV }}
           components: rustfmt, clippy
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
-        id: cargo-cache
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run cargo fmt check
+        run: cargo fmt --all -- --check
+
+      - name: Run cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # 运行测试
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_MSRV }}
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index
@@ -43,46 +90,32 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Run tests
-        run: cargo test --release
+        run: cargo test --release --all-features
 
-  # 验证 Docker 构建是否成功（不 push，用于调试）
-  build-verify:
-    name: Verify Docker Build
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+  # 构建并推送镜像（合并了原来的 build-verify 和 push）
+  build-and-push:
+    name: Build and Push Image
     runs-on: ubuntu-latest
+    needs: [lint, test]
+    # 仅在以下情况推送镜像：
+    # 1. push 到 main/dev 分支
+    # 2. 打了 tag
+    # 3. 手动触发且选择推送
+    # PR 只构建不推送
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 使用 GitHub Actions Cache 缓存 Docker 层
-      - name: Build (no push)
-        uses: docker/build-push-action@v6
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
         with:
-          context: .
-          file: deploy/agent/Dockerfile
-          push: false
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # test 成功后构建并推送镜像
-  push:
-    name: Build and Push
-    needs: test
-    # test 成功后才能 push，避免推送有问题的镜像
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.test.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+          platforms: linux/amd64,linux/arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push_image)
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -95,20 +128,76 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-,suffix=,enable=${{ github.ref_type != 'tag' }}
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=dev,enable=${{ github.ref_name == 'dev' }}
+            type=ref,event=pr
 
-      # 使用 GitHub Actions Cache 缓存 Docker 层
-      # build-verify 的缓存会被复用
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/agent/Dockerfile
-          push: true
-          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push_image) }}
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp || github.event.repository.updated_at }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+
+      # PR 构建成功后，上传构建产物供调试
+      - name: Export image for PR debugging
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/agent/Dockerfile
+          push: false
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}
+          outputs: type=docker,dest=/tmp/image.tar
+          cache-from: type=gha
+
+      - name: Upload artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-pr-${{ github.event.number }}
+          path: /tmp/image.tar
+          retention-days: 7
+
+  # 安全扫描
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    # 只有实际推送了镜像才扫描，PR 不扫描（因为没有推送）
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push_image)
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      # 同时生成表格形式输出到日志
+      - name: Run Trivy vulnerability scanner (table output)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
