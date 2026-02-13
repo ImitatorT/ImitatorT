@@ -10,7 +10,9 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use swarms_rs::{agent::SwarmsAgent, llm::provider::openai::OpenAI, structs::agent::Agent as AgentTrait};
+use swarms_rs::{
+    agent::SwarmsAgent, llm::provider::openai::OpenAI, structs::agent::Agent as AgentTrait,
+};
 use tracing::{debug, info};
 
 use crate::messaging::{AgentMessageReceiver, Message, MessageBus};

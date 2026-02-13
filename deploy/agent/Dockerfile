@@ -26,9 +26,9 @@ RUN case "$TARGETPLATFORM" in \
         ln -sf /usr/bin/x86_64-alpine-linux-musl-gcc /usr/bin/musl-gcc ;; \
     "linux/arm64") \
         rustup target add aarch64-unknown-linux-musl && \
-        apk add --no-cache aarch64-linux-musl-gcc && \
+        apk add --no-cache gcc-aarch64-linux-musl musl-dev && \
         echo "aarch64-unknown-linux-musl" > /target.txt && \
-        ln -sf /usr/bin/aarch64-alpine-linux-musl-gcc /usr/bin/musl-gcc ;; \
+        ln -sf /usr/bin/aarch64-linux-musl-gcc /usr/bin/musl-gcc ;; \
     *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
     esac
 
