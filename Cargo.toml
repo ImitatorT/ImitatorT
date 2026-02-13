@@ -29,6 +29,9 @@ tower = "0.5"
 # 配置解析
 serde_yaml = "0.9"
 
+[dev-dependencies]
+# 测试依赖与主依赖共享
+
 [lib]
 name = "imitatort_stateless_company"
 path = "src/lib.rs"

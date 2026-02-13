@@ -1,0 +1,48 @@
+# =============================================================================
+# 极速构建 Dockerfile - "零编译" 策略
+# =============================================================================
+# 设计目标：CI 已完成 Rust 编译，此 Dockerfile 只做「文件复制 + 镜像打包」
+# 预期耗时：10-20 秒（vs 原 6分22秒 = 20-38倍加速）
+# =============================================================================
+
+# ========== 阶段 1: 最小化基础镜像准备 ==========
+# 使用 alpine 仅为了 UPX 压缩，如不需要压缩可进一步简化
+FROM alpine:3.19 AS compressor
+
+# 可选：安装 UPX 进行二进制压缩（如不需要可删除此阶段）
+RUN apk add --no-cache upx
+
+# 从构建上下文复制 CI 预编译的二进制文件
+# 这些文件在 CI 中已通过 rust-cache + sccache 加速编译完成
+COPY dist/imitatort /tmp/imitatort
+COPY dist/werewolf /tmp/werewolf
+RUN chmod +x /tmp/imitatort /tmp/werewolf
+
+# UPX 压缩（可选，可节省 ~60% 体积，耗时 ~3s）
+# 使用 --lzma 获得最大压缩比，失败也不中断构建
+RUN upx --best --lzma /tmp/imitatort 2>/dev/null || true
+RUN upx --best --lzma /tmp/werewolf 2>/dev/null || true
+
+# ========== 阶段 2: 最终生产镜像（scratch - 零依赖）==========
+FROM scratch
+
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION
+
+# 仅复制两个文件：CA 证书和二进制
+# 这一层就是最终镜像的全部内容
+COPY --from=compressor /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=compressor /tmp/imitatort /agent
+COPY --from=compressor /tmp/werewolf /werewolf
+
+# OCI 标准标签
+LABEL org.opencontainers.image.title="ImitatorT Stateless Agent"
+LABEL org.opencontainers.image.description="无状态虚拟公司框架 Agent"
+LABEL org.opencontainers.image.source="https://github.com/zhengui666/ImitatorT"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.revision="${VCS_REF}"
+LABEL org.opencontainers.image.version="${VERSION}"
+
+ENTRYPOINT ["/agent"]

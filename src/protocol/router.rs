@@ -9,9 +9,9 @@ use anyhow::{Context, Result};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::a2a_client::A2AClient;
-use crate::a2a_server::AgentInfo;
-use crate::messaging::{Message, MessageBus, MessageType};
+use crate::protocol::client::A2AClient;
+use crate::protocol::server::AgentInfo;
+use crate::core::messaging::{Message, MessageBus, MessageType};
 
 /// 路由目标
 #[derive(Debug, Clone)]

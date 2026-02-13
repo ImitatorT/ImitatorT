@@ -15,8 +15,8 @@ use swarms_rs::{
 };
 use tracing::{debug, info};
 
-use crate::messaging::{AgentMessageReceiver, Message, MessageBus};
-use crate::tool::ToolRegistry;
+use crate::core::messaging::{AgentMessageReceiver, Message, MessageBus};
+use crate::application::tool::ToolRegistry;
 
 /// Agent 配置
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -11,9 +11,9 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use crate::a2a::{A2AAgent, A2AMessage, MessageContent};
-use crate::matrix::MatrixClient;
-use crate::store::{ChatMessage, MessageStore, MessageType};
+use crate::protocol::types::{A2AAgent, A2AMessage, MessageContent};
+use crate::infrastructure::matrix::MatrixClient;
+use crate::core::store::{ChatMessage, MessageStore, MessageType};
 
 /// 输出模式
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -388,7 +388,7 @@ impl OutputBridge {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::a2a::create_default_agent_card;
+    use crate::protocol::types::create_default_agent_card;
 
     #[test]
     fn test_output_mode_from_str() {

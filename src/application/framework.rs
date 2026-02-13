@@ -7,10 +7,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tracing::info;
 
-use crate::a2a_server::{A2AServer, AgentInfo};
-use crate::agent::{Agent, AgentConfig, AgentManager};
-use crate::messaging::{Message, MessageBus};
-use crate::router::{AgentConnector, MessageRouter};
+use crate::protocol::server::{A2AServer, AgentInfo};
+use crate::core::agent::{Agent, AgentConfig, AgentManager};
+use crate::core::messaging::{Message, MessageBus};
+use crate::protocol::router::{AgentConnector, MessageRouter};
 
 /// 虚拟公司框架
 ///

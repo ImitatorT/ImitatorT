@@ -1,26 +1,42 @@
-mod a2a;
-mod a2a_client;
-mod a2a_server;
-mod agent;
-mod config;
-mod llm;
-mod logger;
-mod matrix;
-mod messaging;
-mod output;
-mod router;
-mod store;
-mod tool;
+// 核心层模块
+mod core {
+    pub mod agent;
+    pub mod config;
+    pub mod messaging;
+    pub mod store;
+}
+
+// 基础设施层模块
+mod infrastructure {
+    pub mod llm;
+    pub mod logger;
+    pub mod matrix;
+}
+
+// 协议层模块
+mod protocol {
+    pub mod client;
+    pub mod router;
+    pub mod server;
+    pub mod types;
+}
+
+// 应用层模块
+mod application {
+    pub mod framework;
+    pub mod output;
+    pub mod tool;
+}
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use config::{AppConfig, OutputMode};
-use llm::{Message, OpenAIClient};
-use logger::{LogConfig, RequestContext, Sanitizer, Timer};
-use output::{Output, OutputFactory};
+use core::config::{AppConfig, OutputMode};
+use infrastructure::llm::{Message, OpenAIClient};
+use infrastructure::logger::{LogConfig, RequestContext, Sanitizer, Timer};
+use application::output::{Output, OutputFactory};
 use std::sync::Arc;
-use store::MessageStore;
-use tool::{ToolCall, ToolRegistry};
+use core::store::MessageStore;
+use application::tool::{ToolCall, ToolRegistry};
 use tracing::{debug, error, info, info_span, Instrument};
 
 #[tokio::main]
@@ -29,7 +45,7 @@ async fn main() -> Result<()> {
     let log_format = std::env::var("LOG_FORMAT")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(logger::LogFormat::Pretty);
+        .unwrap_or(infrastructure::logger::LogFormat::Pretty);
 
     let log_config = LogConfig {
         format: log_format,
@@ -39,10 +55,10 @@ async fn main() -> Result<()> {
         show_thread_names: false,
         show_file: true,
         show_time: true,
-        time_format: logger::TimeFormat::Rfc3339,
+        time_format: infrastructure::logger::TimeFormat::Rfc3339,
         request_id_header: "request_id".to_string(),
     };
-    logger::init(log_config);
+    infrastructure::logger::init(log_config);
 
     // 创建请求上下文，用于追踪本次执行
     let request_ctx = RequestContext::new().with_metadata("version", env!("CARGO_PKG_VERSION"));
@@ -108,7 +124,7 @@ async fn run(request_ctx: RequestContext) -> Result<()> {
 /// 创建消息存储
 async fn create_store(cfg: &AppConfig) -> Result<MessageStore> {
     let store = match cfg.store_type {
-        config::StoreType::Memory => {
+        core::config::StoreType::Memory => {
             info!(
                 "Using in-memory message store (max_size: {})",
                 cfg.store_max_size
@@ -116,7 +132,7 @@ async fn create_store(cfg: &AppConfig) -> Result<MessageStore> {
             MessageStore::new(cfg.store_max_size)
         }
         #[cfg(feature = "persistent-store")]
-        config::StoreType::Persistent => {
+        core::config::StoreType::Persistent => {
             info!(
                 "Using persistent message store at {} (max_size: {})",
                 cfg.store_path, cfg.store_max_size
@@ -144,13 +160,13 @@ async fn create_output(cfg: &AppConfig, store: MessageStore) -> Result<Box<dyn O
         }
         OutputMode::Cli => OutputFactory::create_cli(store, cfg.cli_echo),
         OutputMode::A2A => {
-            let card = a2a::create_default_agent_card(&cfg.agent_id, &cfg.agent_name);
-            let agent = Arc::new(a2a::A2AAgent::new(card));
+            let card = protocol::types::create_default_agent_card(&cfg.agent_id, &cfg.agent_name);
+            let agent = Arc::new(protocol::types::A2AAgent::new(card));
 
             // 注册 Peer agents
             if let Some(ref peers) = cfg.a2a_peer_agents {
                 for peer_id in peers.split(',') {
-                    let peer_card = a2a::create_default_agent_card(peer_id.trim(), peer_id.trim());
+                    let peer_card = protocol::types::create_default_agent_card(peer_id.trim(), peer_id.trim());
                     agent.register_peer(peer_card).await;
                 }
             }
@@ -164,13 +180,13 @@ async fn create_output(cfg: &AppConfig, store: MessageStore) -> Result<Box<dyn O
                 .context("Matrix configuration missing for hybrid mode")?;
 
             // 创建 A2A Agent
-            let card = a2a::create_default_agent_card(&cfg.agent_id, &cfg.agent_name);
-            let agent = Arc::new(a2a::A2AAgent::new(card));
+            let card = protocol::types::create_default_agent_card(&cfg.agent_id, &cfg.agent_name);
+            let agent = Arc::new(protocol::types::A2AAgent::new(card));
 
             // 注册 Peer agents
             if let Some(ref peers) = cfg.a2a_peer_agents {
                 for peer_id in peers.split(',') {
-                    let peer_card = a2a::create_default_agent_card(peer_id.trim(), peer_id.trim());
+                    let peer_card = protocol::types::create_default_agent_card(peer_id.trim(), peer_id.trim());
                     agent.register_peer(peer_card).await;
                 }
             }
@@ -204,12 +220,12 @@ async fn run_single_cycle(
 
     // 如果有输入消息，添加到存储
     if let Some(ref input) = cfg.input_message {
-        let input_msg = store::ChatMessage {
+        let input_msg = core::store::ChatMessage {
             id: uuid::Uuid::new_v4().to_string(),
             sender: "user".to_string(),
             content: input.clone(),
             timestamp: chrono::Utc::now().timestamp(),
-            message_type: store::MessageType::Text,
+            message_type: core::store::MessageType::Text,
         };
         store.add_message(input_msg).await?;
     }
@@ -356,12 +372,12 @@ async fn run_interactive_loop(
                 }
 
                 // 处理用户输入
-                let input_msg = store::ChatMessage {
+                let input_msg = core::store::ChatMessage {
                     id: uuid::Uuid::new_v4().to_string(),
                     sender: "user".to_string(),
                     content: input.to_string(),
                     timestamp: chrono::Utc::now().timestamp(),
-                    message_type: store::MessageType::Text,
+                    message_type: core::store::MessageType::Text,
                 };
                 store.add_message(input_msg).await?;
 
