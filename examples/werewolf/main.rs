@@ -238,7 +238,7 @@ async fn main() -> Result<()> {
             .into_iter()
             .filter(|a| a.id == "host-001")
             .collect()
-    } else if let Some(role_filter) = args.role {
+    } else if let Some(ref role_filter) = args.role {
         all_agents
             .into_iter()
             .filter(|a| {
