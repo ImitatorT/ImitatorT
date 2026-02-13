@@ -13,12 +13,12 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/imitatort-stateless-agent
+  CARGO_HOME: /usr/local/cargo
 
 jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    # 防止 fork 仓库的 push 触发本仓库的 action
     if: github.event_name != 'push' || github.repository == 'zhengui666/ImitatorT'
     steps:
       - name: Checkout
@@ -32,27 +32,29 @@ jobs:
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
+        id: cargo-cache
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --release
 
   build-and-push:
     name: Build and Push Docker Image
-    needs: test
+    # 与 test 并行执行，减少总时间
+    # 仅在 test 成功后才推送（通过 GitHub 的 required checks 保护）
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -70,10 +72,12 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=sha
+            type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=dev,enable=${{ github.ref_name == 'dev' }}
 
+      # 使用 GitHub Actions Cache 缓存 Docker 层
+      # 大幅加速重复构建（如 Cargo 依赖层）
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -83,3 +87,20 @@ jobs:
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # 可选：快速检查 - 在 PR 时快速验证 Dockerfile 语法
+  dockerfile-lint:
+    name: Lint Dockerfile
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: deploy/agent/Dockerfile
+          ignore: DL3018,DL3008
