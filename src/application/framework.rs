@@ -8,9 +8,9 @@ use std::sync::Arc;
 use tracing::info;
 
 use crate::core::agent::{Agent, AgentConfig, AgentManager};
-use crate::core::messaging::{Message, MessageBus};
+use crate::core::messaging::MessageBus;
 use crate::protocol::router::{AgentConnector, MessageRouter};
-use crate::protocol::server::{A2AServer, AgentInfo};
+use crate::protocol::server::A2AServer;
 
 /// 虚拟公司框架
 ///
@@ -36,9 +36,10 @@ impl VirtualCompany {
 
     /// 创建并注册一个新 Agent
     pub async fn create_agent(&self, config: AgentConfig) -> Result<Arc<Agent>> {
-        let agent = Agent::new(config, self.message_bus.clone());
-        self.agent_manager.register(agent.clone()).await;
-        Ok(agent)
+        let agent = Agent::new(config).await?;
+        let agent_arc = Arc::new(agent);
+        self.agent_manager.register(agent_arc.clone()).await;
+        Ok(agent_arc)
     }
 
     /// 获取 Agent
@@ -108,7 +109,7 @@ impl AppBuilder {
     }
 
     /// 添加 Agent
-    pub fn with_agent(mut self, config: AgentConfig) -> Self {
+    pub fn with_agent(mut self, _config: AgentConfig) -> Self {
         // 注意：这里不能直接 await，需要在 build 中处理
         // 简化处理：直接创建但不注册
         self
