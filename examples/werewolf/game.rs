@@ -200,11 +200,7 @@ impl WerewolfGame {
                         info!("[{}] {}", agent.name(), speech);
 
                         // 广播到公共群聊
-                        let msg = imitatort_stateless_company::Message::group(
-                            &player_id,
-                            "public",
-                            &speech,
-                        );
+                        let msg = imitatort_stateless_company::Message::group(&player_id, "public", &speech);
                         if let Err(e) = self.company.message_bus().send(msg).await {
                             warn!("Failed to broadcast speech: {}", e);
                         }
