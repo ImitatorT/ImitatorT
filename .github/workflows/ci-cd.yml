@@ -177,20 +177,28 @@ jobs:
           driver-opts: |
             image=moby/buildkit:master
             network=host
-      - uses: docker/build-push-action@v6
+      - name: Build image
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/agent/Dockerfile
           push: false
           platforms: linux/amd64
-          # 启用内联缓存，支持 RUN --mount=type=cache
+          # 添加标签以便 security-scan 阶段使用
+          tags: ${{ env.IMAGE_NAME }}:latest
+          # 启用 BuildKit 内联缓存
           build-args: |
             BUILDKIT_INLINE_CACHE=1
+          # 缓存策略：优先从 main 分支读取，再读取当前分支，最后写入当前分支
+          # 注意：cache-from 按顺序尝试，第一个命中的会被使用
           cache-from: |
-            type=gha,scope=build-${{ github.ref_name }}
             type=gha,scope=build-main
+            type=gha,scope=build-${{ github.ref_name }}
+            type=gha,scope=build-global
           cache-to: type=gha,scope=build-${{ github.ref_name }},mode=max
           outputs: type=docker,dest=/tmp/image.tar
+          # 显示详细构建日志以便调试缓存
+          provenance: false
 
       - uses: actions/upload-artifact@v4
         with:
@@ -198,35 +206,27 @@ jobs:
           path: /tmp/image.tar
           retention-days: 1
 
-  # 2e. 安全扫描 - 阻断
+  # 2e. 安全扫描 - 阻断（复用 build 阶段的镜像）
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: changes
+    # 关键：依赖 build 任务完成，确保镜像 artifact 已生成
+    needs: [changes, build]
     if: |
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
       !inputs.skip_security_scan &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
         with:
-          driver-opts: |
-            image=moby/buildkit:master
-            network=host
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: deploy/agent/Dockerfile
-          push: false
-          platforms: linux/amd64
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-          cache-from: |
-            type=gha,scope=build-${{ github.ref_name }}
-            type=gha,scope=build-main
-          tags: ${{ env.IMAGE_NAME }}:scan
-          load: true
+          name: docker-image-${{ github.sha }}
+          path: /tmp
+
+      - name: Load image
+        run: |
+          docker load -i /tmp/image.tar
+          docker tag ${{ env.IMAGE_NAME }}:latest ${{ env.IMAGE_NAME }}:scan
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -298,9 +298,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BUILDKIT_INLINE_CACHE=1
+          # 缓存策略：优先从 main 分支读取，再读取当前分支
           cache-from: |
-            type=gha,scope=build-${{ github.ref_name }}
             type=gha,scope=build-main
+            type=gha,scope=build-${{ github.ref_name }}
           # Push 阶段也需要导出缓存，供后续构建使用
           cache-to: type=gha,scope=build-${{ github.ref_name }},mode=max
 

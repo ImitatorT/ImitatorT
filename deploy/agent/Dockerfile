@@ -37,8 +37,8 @@ COPY --from=planner /app/recipe.json recipe.json
 
 # 使用 BuildKit 缓存挂载来缓存 cargo registry 和编译产物
 # 这能显著减少重复下载和编译时间
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/app/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
     TARGET=$(cat /target.txt) && \
     cargo chef cook --release --target $TARGET --recipe-path recipe.json
 
@@ -48,8 +48,8 @@ COPY src ./src
 COPY examples ./examples
 
 # 并行构建主程序和示例（使用缓存挂载复用之前编译的依赖）
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/app/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
     TARGET=$(cat /target.txt) && \
     cargo build --release --target $TARGET --bin imitatort --example werewolf && \
     # 从缓存目录复制最终二进制文件到临时位置
