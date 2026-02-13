@@ -14,10 +14,6 @@ services:
       - conduwuit-data:/var/lib/conduwuit
     ports:
       - "6167:6167"
-    deploy:
-      resources:
-        limits:
-          memory: 600M
 
   swarms-agent:
     image: ghcr.io/zhengui666/imitatort-stateless-agent:${AGENT_TAG:-dev}
@@ -28,10 +24,6 @@ services:
       - .env
     environment:
       MATRIX_HOMESERVER: "http://conduwuit:6167"
-    deploy:
-      resources:
-        limits:
-          memory: 256M
 
 volumes:
   conduwuit-data:
