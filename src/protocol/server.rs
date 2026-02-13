@@ -225,9 +225,9 @@ async fn send_message(
     Json(req): Json<SendMessageRequest>,
 ) -> Json<ApiResponse<String>> {
     let msg_type = match req.msg_type.as_str() {
-        "private" => crate::messaging::MessageType::Private,
-        "group" => crate::messaging::MessageType::Group,
-        "broadcast" => crate::messaging::MessageType::Broadcast,
+        "private" => crate::core::messaging::MessageType::Private,
+        "group" => crate::core::messaging::MessageType::Group,
+        "broadcast" => crate::core::messaging::MessageType::Broadcast,
         _ => {
             return Json(ApiResponse::error(format!(
                 "Unknown message type: {}",
@@ -295,7 +295,7 @@ async fn invite_member(
 async fn get_group(
     State(state): State<Arc<A2AServerState>>,
     Path(group_id): Path<String>,
-) -> Result<Json<ApiResponse<Option<crate::messaging::GroupInfo>>>, StatusCode> {
+) -> Result<Json<ApiResponse<Option<crate::core::messaging::GroupInfo>>>, StatusCode> {
     let group = state.message_bus.get_group(&group_id).await;
     Ok(Json(ApiResponse::success(group)))
 }

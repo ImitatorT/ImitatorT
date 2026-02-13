@@ -244,10 +244,10 @@ impl Agent {
 
     /// 执行工具调用
     pub async fn execute_tool(&self, tool_name: &str, arguments: &str) -> Result<String> {
-        let tool_call = crate::tool::ToolCall {
+        let tool_call = crate::application::tool::ToolCall {
             id: uuid::Uuid::new_v4().to_string(),
             r#type: "function".to_string(),
-            function: crate::tool::FunctionCall {
+            function: crate::application::tool::FunctionCall {
                 name: tool_name.to_string(),
                 arguments: arguments.to_string(),
             },
@@ -256,12 +256,12 @@ impl Agent {
     }
 
     /// 获取可用工具列表
-    pub fn available_tools(&self) -> Vec<crate::tool::Tool> {
+    pub fn available_tools(&self) -> Vec<crate::application::tool::Tool> {
         ToolRegistry::get_tools()
     }
 
     /// 获取所在的所有群聊
-    pub async fn list_my_groups(&self) -> Result<Vec<crate::messaging::GroupInfo>> {
+    pub async fn list_my_groups(&self) -> Result<Vec<crate::core::messaging::GroupInfo>> {
         let bus = self
             .message_bus
             .as_ref()
