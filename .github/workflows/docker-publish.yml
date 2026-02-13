@@ -45,11 +45,35 @@ jobs:
       - name: Run tests
         run: cargo test --release
 
-  build-and-push:
-    name: Build and Push Docker Image
-    # 与 test 并行执行，减少总时间
-    # 仅在 test 成功后才推送（通过 GitHub 的 required checks 保护）
+  # 验证 Docker 构建是否成功（不 push，用于调试）
+  build-verify:
+    name: Verify Docker Build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 使用 GitHub Actions Cache 缓存 Docker 层
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/agent/Dockerfile
+          push: false
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # test 成功后构建并推送镜像
+  push:
+    name: Build and Push
+    needs: test
+    # test 成功后才能 push，避免推送有问题的镜像
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.test.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -76,7 +100,7 @@ jobs:
             type=raw,value=dev,enable=${{ github.ref_name == 'dev' }}
 
       # 使用 GitHub Actions Cache 缓存 Docker 层
-      # 大幅加速重复构建（如 Cargo 依赖层）
+      # build-verify 的缓存会被复用
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -88,5 +112,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-
