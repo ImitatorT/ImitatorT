@@ -5,6 +5,7 @@ services:
     environment:
       CONDUWUIT_SERVER_NAME: "matrix.local"
       CONDUWUIT_DATABASE_BACKEND: "rocksdb"
+      CONDUWUIT_DATABASE_PATH: "/var/lib/conduwuit"
       CONDUWUIT_ADDRESS: "0.0.0.0"
       CONDUWUIT_PORT: "6167"
       CONDUWUIT_ALLOW_REGISTRATION: "false"
@@ -23,12 +24,10 @@ services:
     container_name: swarms-agent
     depends_on:
       - conduwuit
+    env_file:
+      - .env
     environment:
       MATRIX_HOMESERVER: "http://conduwuit:6167"
-      MATRIX_ROOM_ID: "!replace_me:matrix.local"
-      CONTEXT_LIMIT: "50"
-      OPENAI_MODEL: "gpt-4o-mini"
-      SYSTEM_PROMPT: "你是运行在 Matrix 网络上的无状态智能体。"
     deploy:
       resources:
         limits:
