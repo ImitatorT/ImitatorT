@@ -61,7 +61,10 @@ pub enum MessageContent {
     #[serde(rename = "task_response")]
     TaskResponse { task_id: String, result: TaskResult },
     #[serde(rename = "status")]
-    Status { status: String, message: Option<String> },
+    Status {
+        status: String,
+        message: Option<String>,
+    },
 }
 
 /// 任务请求
@@ -76,8 +79,14 @@ pub struct TaskRequest {
 /// 任务结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TaskResult {
-    Success { output: String, artifacts: Vec<Artifact> },
-    Error { code: String, message: String },
+    Success {
+        output: String,
+        artifacts: Vec<Artifact>,
+    },
+    Error {
+        code: String,
+        message: String,
+    },
     Pending,
 }
 
@@ -153,9 +162,7 @@ impl A2AAgent {
     /// 发送消息给指定 Agent
     pub async fn send_message(&self, receiver_id: &str, content: MessageContent) -> Result<()> {
         let peers = self.peers.read().await;
-        let receiver = peers
-            .get(receiver_id)
-            .context("Peer agent not found")?;
+        let receiver = peers.get(receiver_id).context("Peer agent not found")?;
 
         let message = A2AMessage {
             id: Uuid::new_v4().to_string(),
@@ -214,7 +221,7 @@ impl A2AAgent {
     #[allow(dead_code)]
     pub async fn run(&self) -> Result<()> {
         let mut rx = self.message_rx.write().await;
-        
+
         info!("A2A Agent {} started", self.card.name);
 
         while let Some(message) = rx.recv().await {

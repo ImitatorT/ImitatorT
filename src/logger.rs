@@ -148,8 +148,6 @@ pub fn init(config: LogConfig) {
     }
 }
 
-
-
 /// 请求追踪上下文
 #[derive(Debug, Clone)]
 pub struct RequestContext {
@@ -289,8 +287,6 @@ impl Sanitizer {
         format!("{}...{}", &token[..6], &token[token.len() - 4..])
     }
 }
-
-
 
 /// 自定义美观格式器
 pub struct PrettyFormatter {

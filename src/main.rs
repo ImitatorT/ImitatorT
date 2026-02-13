@@ -92,9 +92,7 @@ async fn run(request_ctx: RequestContext) -> Result<()> {
         OutputMode::Cli if cfg.interactive => {
             run_interactive_loop(&cfg, output.as_ref(), &llm, &store, &request_ctx).await
         }
-        _ => {
-            run_single_cycle(&cfg, output.as_ref(), &llm, &store, &request_ctx).await
-        }
+        _ => run_single_cycle(&cfg, output.as_ref(), &llm, &store, &request_ctx).await,
     }
 }
 
@@ -102,7 +100,10 @@ async fn run(request_ctx: RequestContext) -> Result<()> {
 async fn create_store(cfg: &AppConfig) -> Result<MessageStore> {
     let store = match cfg.store_type {
         config::StoreType::Memory => {
-            info!("Using in-memory message store (max_size: {})", cfg.store_max_size);
+            info!(
+                "Using in-memory message store (max_size: {})",
+                cfg.store_max_size
+            );
             MessageStore::new(cfg.store_max_size)
         }
         #[cfg(feature = "persistent-store")]
@@ -119,10 +120,7 @@ async fn create_store(cfg: &AppConfig) -> Result<MessageStore> {
 }
 
 /// 创建输出处理器
-async fn create_output(
-    cfg: &AppConfig,
-    store: MessageStore,
-) -> Result<Box<dyn Output>> {
+async fn create_output(cfg: &AppConfig, store: MessageStore) -> Result<Box<dyn Output>> {
     let output: Box<dyn Output> = match cfg.output_mode {
         OutputMode::Matrix => {
             let (homeserver, token, room_id) = cfg
@@ -139,7 +137,7 @@ async fn create_output(
         OutputMode::A2A => {
             let card = a2a::create_default_agent_card(&cfg.agent_id, &cfg.agent_name);
             let agent = Arc::new(a2a::A2AAgent::new(card));
-            
+
             // 注册 Peer agents
             if let Some(ref peers) = cfg.a2a_peer_agents {
                 for peer_id in peers.split(',') {
@@ -147,7 +145,7 @@ async fn create_output(
                     agent.register_peer(peer_card).await;
                 }
             }
-            
+
             OutputFactory::create_a2a(agent, store, cfg.a2a_target_agent.clone())
         }
         OutputMode::Hybrid => {
@@ -155,11 +153,11 @@ async fn create_output(
             let (homeserver, token, room_id) = cfg
                 .matrix_config()
                 .context("Matrix configuration missing for hybrid mode")?;
-            
+
             // 创建 A2A Agent
             let card = a2a::create_default_agent_card(&cfg.agent_id, &cfg.agent_name);
             let agent = Arc::new(a2a::A2AAgent::new(card));
-            
+
             // 注册 Peer agents
             if let Some(ref peers) = cfg.a2a_peer_agents {
                 for peer_id in peers.split(',') {

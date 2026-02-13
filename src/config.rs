@@ -39,7 +39,11 @@ impl std::fmt::Display for OutputMode {
 }
 
 #[derive(Parser, Debug, Clone)]
-#[command(author, version, about = "Stateless virtual company worker with A2A protocol")]
+#[command(
+    author,
+    version,
+    about = "Stateless virtual company worker with A2A protocol"
+)]
 pub struct AppConfig {
     /// 输出模式: matrix, cli, a2a, hybrid
     #[arg(long, env = "OUTPUT_MODE", default_value = "cli")]
@@ -182,7 +186,9 @@ impl AppConfig {
             self.matrix_access_token.as_ref(),
             self.matrix_room_id.as_ref(),
         ) {
-            (Some(hs), Some(token), Some(room)) => Some((hs.as_str(), token.as_str(), room.as_str())),
+            (Some(hs), Some(token), Some(room)) => {
+                Some((hs.as_str(), token.as_str(), room.as_str()))
+            }
             _ => None,
         }
     }
@@ -213,11 +219,7 @@ mod tests {
 
     #[test]
     fn test_config_defaults() {
-        let config = AppConfig::parse_from([
-            "test",
-            "--openai-api-key",
-            "test_key",
-        ]);
+        let config = AppConfig::parse_from(["test", "--openai-api-key", "test_key"]);
 
         assert_eq!(config.output_mode, OutputMode::Cli);
         assert_eq!(config.agent_id, "agent-001");
@@ -281,11 +283,7 @@ mod tests {
 
     #[test]
     fn test_config_debug() {
-        let config = AppConfig::parse_from([
-            "test",
-            "--openai-api-key",
-            "test_key",
-        ]);
+        let config = AppConfig::parse_from(["test", "--openai-api-key", "test_key"]);
 
         let debug_str = format!("{:?}", config);
         assert!(debug_str.contains("AppConfig"));
@@ -294,11 +292,7 @@ mod tests {
 
     #[test]
     fn test_config_clone() {
-        let config = AppConfig::parse_from([
-            "test",
-            "--openai-api-key",
-            "test_key",
-        ]);
+        let config = AppConfig::parse_from(["test", "--openai-api-key", "test_key"]);
 
         let cloned = config.clone();
         assert_eq!(cloned.agent_id, config.agent_id);
