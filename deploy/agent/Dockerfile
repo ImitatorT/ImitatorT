@@ -12,9 +12,9 @@ COPY Cargo.toml ./
 COPY src ./src
 RUN rustup target add x86_64-unknown-linux-musl
 RUN cargo build --release --target x86_64-unknown-linux-musl
-RUN upx --best --lzma /app/target/x86_64-unknown-linux-musl/release/imitatort_stateless_company
+RUN upx --best --lzma /app/target/x86_64-unknown-linux-musl/release/imitatort
 
 FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/imitatort_stateless_company /agent
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/imitatort /agent
 ENTRYPOINT ["/agent"]
