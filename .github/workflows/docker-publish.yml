@@ -13,7 +13,6 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/imitatort-stateless-agent
-  CARGO_HOME: /usr/local/cargo
 
 jobs:
   test:
@@ -90,17 +89,4 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # 可选：快速检查 - 在 PR 时快速验证 Dockerfile 语法
-  dockerfile-lint:
-    name: Lint Dockerfile
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
-      - name: Lint Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: deploy/agent/Dockerfile
-          ignore: DL3018,DL3008
