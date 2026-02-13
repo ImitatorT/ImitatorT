@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline (Ultra Cache)
 
 on:
   push:
@@ -35,7 +35,6 @@ on:
         default: false
         type: boolean
 
-# 关键：当有新的 workflow 运行时，取消正在运行的旧实例
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -72,10 +71,126 @@ jobs:
             docker:
               - 'deploy/agent/Dockerfile'
               - 'docker-compose.yml'
-              - '.github/workflows/ci-cd.yml'
+              - '.github/workflows/ci-cd*.yml'
 
-  # ========== 阶段 2: 所有检查并行执行 ==========
-  # 2a. Format Check - 不阻断（无需编译，最快）
+  # ========== 阶段 2: 缓存构建器（核心优化）==========
+  # 策略：单 job 串行执行所有编译任务，建立完整缓存，避免多 job 缓存冲突
+  # 所有产物保存为 artifact，供后续 job 直接下载使用
+  cache-builder:
+    name: Cache Builder
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
+    outputs:
+      cache-hit: ${{ steps.cache-check.outputs.hit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_MSRV }}
+          targets: x86_64-unknown-linux-musl
+          components: clippy
+
+      # musl 工具链缓存
+      - name: Cache musl tools
+        uses: actions/cache@v4
+        id: musl-cache
+        with:
+          path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+          key: ${{ runner.os }}-apt-musl-${{ hashFiles('.github/workflows/ci-cd*.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-musl-
+
+      - name: Install musl tools
+        if: steps.musl-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Install musl tools (from cache)
+        if: steps.musl-cache.outputs.cache-hit == 'true'
+        run: sudo apt-get install -y musl-tools
+
+      # 检查缓存是否命中（用于后续优化）
+      - name: Check cache status
+        id: cache-check
+        run: |
+          # 检查 target 目录是否存在且非空
+          if [ -d "target/x86_64-unknown-linux-musl/release" ] && [ "$(ls -A target/x86_64-unknown-linux-musl/release 2>/dev/null)" ]; then
+            echo "hit=true" >> $GITHUB_OUTPUT
+            echo "✅ 缓存命中，跳过依赖编译"
+          else
+            echo "hit=false" >> $GITHUB_OUTPUT
+            echo "⏳ 缓存未命中，开始编译"
+          fi
+
+      # 统一的 Rust 缓存
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: x86_64-musl-all
+          shared-key: "ci-cache-musl-all"
+          cache-on-failure: true
+          cache-directories: |
+            target/x86_64-unknown-linux-musl/release
+            target/x86_64-unknown-linux-musl/release/examples
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      # ========== 并行编译优化配置 ==========
+      - name: Configure cargo for maximum parallelism
+        run: |
+          # 使用所有可用 CPU 核心
+          echo "CARGO_BUILD_JOBS=$(nproc)" >> $GITHUB_ENV
+          # 启用更激进的并行编译
+          echo "CARGO_TARGET_JOBS=$(nproc)" >> $GITHUB_ENV
+          # 显示配置
+          echo "Using $(nproc) CPU cores for compilation"
+
+      # ========== 串行执行（但每个命令内部高度并行）==========
+      # 注意：不同 cargo 命令不能并行，会竞争 target/ 目录
+      # 但每个命令内部使用所有 CPU 核心
+
+      - name: 1. Clippy check (high parallelism)
+        run: cargo clippy --target x86_64-unknown-linux-musl --all-features -- -D warnings
+        env:
+          RUSTFLAGS: "-C codegen-units=16"  # 更多 codegen units = 更多并行
+
+      - name: 2. Test (default) - parallel
+        run: cargo test --release --target x86_64-unknown-linux-musl
+        env:
+          RUSTFLAGS: "-C codegen-units=16"
+
+      - name: 3. Test (persistent-store) - parallel
+        run: cargo test --release --target x86_64-unknown-linux-musl --features persistent-store
+        env:
+          RUSTFLAGS: "-C codegen-units=16"
+
+      - name: 4. Build release binaries - parallel
+        run: |
+          cargo build --release --target x86_64-unknown-linux-musl --bin imitatort --example werewolf
+          mkdir -p dist
+          cp target/x86_64-unknown-linux-musl/release/imitatort dist/
+          cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/
+          ls -la dist/
+        env:
+          RUSTFLAGS: "-C codegen-units=16 -C link-arg=-fuse-ld=lld"  # 使用 lld 加速链接
+
+      # 上传所有编译产物
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ github.sha }}
+          path: |
+            dist/
+            target/x86_64-unknown-linux-musl/release/imitatort
+            target/x86_64-unknown-linux-musl/release/examples/werewolf
+          retention-days: 1
+
+  # ========== 阶段 3: 非阻塞检查（并行执行）==========
+
+  # 3a. Format Check - 不阻塞，快速完成
   fmt:
     name: Format Check
     runs-on: ubuntu-latest
@@ -88,243 +203,42 @@ jobs:
         with:
           toolchain: ${{ env.RUST_MSRV }}
           components: rustfmt
-      # fmt 不需要编译，无需 rust-cache
-      - name: Check format
-        run: cargo fmt --check
+      - run: cargo fmt --check
       - name: Report format issues
         if: failure()
         run: |
           echo "⚠️ **代码格式检查未通过**" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "请运行以下命令修复：" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo 'cargo fmt' >> $GITHUB_STEP_SUMMARY
-          echo '```'
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
-  # 2b. Clippy Check - 阻断（合并到 build 阶段以复用编译缓存）
-  # 原理：clippy 本质是带 lint 的编译，与 build 共用缓存可节省 90%+ 时间
-  # 原方案：58s（缓存未命中），新方案：5-10s（复用 build 缓存）
-  clippy:
-    name: Clippy Check
+  # 3b. Docker 极速构建（依赖 cache-builder 的产物）
+  docker-build:
+    name: Docker Build
     runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_MSRV }}
-          targets: x86_64-unknown-linux-musl
-          components: clippy
-
-      # 关键：与 build job 使用完全相同的缓存配置
-      - name: Cache musl tools
-        uses: actions/cache@v4
-        id: musl-cache
-        with:
-          path: |
-            /var/cache/apt/archives
-            /var/lib/apt/lists
-          key: ${{ runner.os }}-apt-musl-${{ hashFiles('.github/workflows/ci-cd.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-apt-musl-
-
-      - name: Install musl tools
-        if: steps.musl-cache.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
-
-      - name: Install musl tools (from cache)
-        if: steps.musl-cache.outputs.cache-hit == 'true'
-        run: sudo apt-get install -y musl-tools
-
-      # 与 build job 完全一致的缓存配置，确保 100% 缓存复用
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: x86_64-musl
-          shared-key: "ci-cache-musl"
-          cache-on-failure: true
-          cache-directories: |
-            target/x86_64-unknown-linux-musl/release
-            target/x86_64-unknown-linux-musl/release/examples
-
-      - uses: mozilla-actions/sccache-action@v0.0.9
-
-      # 使用 check 而非 clippy 先快速验证编译，再运行 clippy
-      # --target 必须与 build 一致，才能复用缓存
-      - name: Quick check (reuses build cache)
-        run: cargo check --target x86_64-unknown-linux-musl --all-features
-
-      - name: Clippy check
-        run: cargo clippy --target x86_64-unknown-linux-musl --all-features -- -D warnings
-
-  # 2c. 测试 - 阻断（使用 musl target 以复用缓存）
-  test:
-    name: Test (${{ matrix.name }})
-    runs-on: ubuntu-latest
-    needs: changes
-    if: |
-      (needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch') &&
-      !inputs.skip_tests
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - name: default
-            features: ''
-          - name: persistent-store
-            features: 'persistent-store'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_MSRV }}
-          targets: x86_64-unknown-linux-musl
-
-      # 与 build/clippy 完全一致的 musl 工具链缓存
-      - name: Cache musl tools
-        uses: actions/cache@v4
-        id: musl-cache
-        with:
-          path: |
-            /var/cache/apt/archives
-            /var/lib/apt/lists
-          key: ${{ runner.os }}-apt-musl-${{ hashFiles('.github/workflows/ci-cd.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-apt-musl-
-
-      - name: Install musl tools
-        if: steps.musl-cache.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
-
-      - name: Install musl tools (from cache)
-        if: steps.musl-cache.outputs.cache-hit == 'true'
-        run: sudo apt-get install -y musl-tools
-
-      # 与 build/clippy 完全一致的缓存配置
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: x86_64-musl
-          shared-key: "ci-cache-musl"
-          cache-on-failure: true
-          cache-directories: |
-            target/x86_64-unknown-linux-musl/release
-            target/x86_64-unknown-linux-musl/release/examples
-
-      - uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Run tests
-        run: |
-          if [ -z "${{ matrix.features }}" ]; then
-            cargo test --release --target x86_64-unknown-linux-musl
-          else
-            cargo test --release --target x86_64-unknown-linux-musl --features ${{ matrix.features }}
-          fi
-
-  # 2d. 编译 Rust 并构建镜像 - 阻断（复用 test/clippy 的缓存）
-  build:
-    name: Build Image
-    runs-on: ubuntu-latest
-    needs: [changes, clippy]
-    # clippy 阻断后执行，确保代码质量
+    needs: [changes, cache-builder]
     if: |
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
       (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
 
-      # 使用与 test/clippy 相同的 Rust 工具链和缓存配置
-      - uses: dtolnay/rust-toolchain@stable
+      # 直接下载预编译的二进制，无需重新编译
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          toolchain: ${{ env.RUST_MSRV }}
-          targets: x86_64-unknown-linux-musl
+          name: build-artifacts-${{ github.sha }}
+          path: dist/
 
-      # 缓存并安装 musl 工具链
-      - name: Cache musl tools
-        uses: actions/cache@v4
-        id: musl-cache
-        with:
-          path: |
-            /var/cache/apt/archives
-            /var/lib/apt/lists
-          key: ${{ runner.os }}-apt-musl-${{ hashFiles('.github/workflows/ci-cd.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-apt-musl-
-
-      - name: Install musl tools
-        if: steps.musl-cache.outputs.cache-hit != 'true'
+      - name: Verify artifacts
         run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
-
-      - name: Install musl tools (from cache)
-        if: steps.musl-cache.outputs.cache-hit == 'true'
-        run: |
-          # 使用缓存的包列表直接安装，无需更新
-          sudo apt-get install -y musl-tools
-
-      # 方案2: 优化的 rust-cache（musl-specific key + 显式目录）
-      - uses: Swatinem/rust-cache@v2
-        with:
-          # musl 目标使用独立的 cache key，避免与其他目标冲突
-          key: x86_64-musl
-          shared-key: "ci-cache-musl"
-          cache-on-failure: true
-          # 显式缓存目标目录，确保 musl 产物被缓存
-          cache-directories: |
-            target/x86_64-unknown-linux-musl/release
-            target/x86_64-unknown-linux-musl/release/examples
-
-      - uses: mozilla-actions/sccache-action@v0.0.9
-
-      # 方案3: cargo-chef 预编译依赖层
-      # 安装 cargo-chef（会被 rust-cache 缓存）
-      - name: Install cargo-chef
-        run: |
-          if ! command -v cargo-chef &> /dev/null; then
-            cargo install cargo-chef
-          fi
-
-      # 生成依赖配方
-      - name: Prepare cargo-chef recipe
-        run: cargo chef prepare --recipe-path recipe.json
-
-      # 预编译依赖（只要 Cargo.lock 不变，这一步会被缓存）
-      - name: Cook dependencies (cached layer)
-        run: cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
-
-      # 编译主程序和示例（此时只编译项目代码，依赖已预编译）
-      - name: Build release binaries
-        run: |
-          cargo build --release --target x86_64-unknown-linux-musl --bin imitatort --example werewolf
-          # 复制到 dist/ 目录供 Docker 构建使用
-          mkdir -p dist
-          cp target/x86_64-unknown-linux-musl/release/imitatort dist/
-          cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/
           ls -la dist/
-
-      # =============================================================================
-      # 极速 Docker 构建 - "零编译" 策略
-      # =============================================================================
-      # 原理：Rust 二进制已在上面通过 rust-cache + sccache 编译完成
-      # Docker 构建只做：复制文件 + 打包镜像（无 cargo chef cook）
-      # 预期耗时：10-20 秒（vs 原 cargo-chef 方案的 5-6 分钟 = 15-30倍加速）
-      # =============================================================================
-
-      # 将编译好的二进制文件放入构建上下文
-      - name: Prepare build context
-        run: |
-          mkdir -p dist
-          cp target/x86_64-unknown-linux-musl/release/imitatort dist/
-          cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/
-          ls -la dist/
+          file dist/imitatort
+          file dist/werewolf
 
       - uses: docker/setup-buildx-action@v3
 
-      # 极速构建：仅 COPY 文件，无编译步骤
       - name: Build image (instant mode)
         uses: docker/build-push-action@v6
         with:
@@ -337,32 +251,21 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ github.ref_name }}
-          # 极简缓存策略：此构建几乎不产生可复用缓存，依赖 CI 阶段的 rust-cache
-          # 如需缓存基础镜像层，可取消下面注释
-          # cache-from: type=gha,scope=instant-main
-          # cache-to: type=gha,scope=instant-${{ github.ref_name }}
           outputs: type=docker,dest=/tmp/image.tar
           provenance: false
 
-      # 上传二进制文件供后续阶段使用
-      - uses: actions/upload-artifact@v4
-        with:
-          name: binaries-${{ github.sha }}
-          path: dist/
-          retention-days: 1
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
         with:
           name: docker-image-${{ github.sha }}
           path: /tmp/image.tar
           retention-days: 1
 
-  # 2e. 安全扫描 - 阻断（复用 build 阶段的镜像）
+  # 3c. Security Scan（依赖 docker-build 的镜像）
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    # 关键：依赖 build 任务完成，确保镜像 artifact 已生成
-    needs: [changes, build]
+    needs: [changes, docker-build]
     if: |
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
       !inputs.skip_security_scan &&
@@ -394,18 +297,15 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-  # ========== 阶段 3: 推送镜像（需要所有阻断性检查通过）==========
+  # ========== 阶段 4: 推送镜像（所有检查通过后）==========
   push:
     name: Push Image
     runs-on: ubuntu-latest
-    # 依赖所有阶段2的任务
-    needs: [fmt, clippy, test, build, security-scan]
-    # 关键：所有阻断性检查必须通过
+    needs: [changes, cache-builder, fmt, docker-build, security-scan]
     if: |
       always() &&
-      (needs.clippy.result == 'success' || needs.clippy.result == 'skipped') &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped' || inputs.skip_tests) &&
-      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      (needs.cache-builder.result == 'success' || needs.cache-builder.result == 'skipped') &&
+      (needs.docker-build.result == 'success' || needs.docker-build.result == 'skipped') &&
       (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped' || inputs.skip_security_scan) &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
@@ -438,23 +338,12 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=dev,enable=${{ github.ref_name == 'dev' }}
 
-      # 复用 build 阶段的编译产物，保持一致性
-      - name: Download binaries
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: binaries-${{ github.sha }}
+          name: build-artifacts-${{ github.sha }}
           path: dist/
 
-      - name: Download image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-image-${{ github.sha }}
-          path: /tmp
-
-      - name: Load image
-        run: docker load -i /tmp/image.tar
-
-      # 极速构建推送 - "零编译" 策略
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -468,57 +357,49 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ github.ref_name }}
-          # 此构建不依赖 Docker 层缓存，因为二进制已通过 artifact 提供
 
   # ========== 质量门禁汇总报告 ==========
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: [fmt, clippy, test, build, security-scan, push]
+    needs: [changes, cache-builder, fmt, docker-build, security-scan, push]
     if: always()
     steps:
       - name: Report Status
         run: |
           echo "## 质量门禁报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 阶段 2: 并行检查" >> $GITHUB_STEP_SUMMARY
+          echo "### 编译与构建" >> $GITHUB_STEP_SUMMARY
+          echo "| 检查项 | 状态 | 说明 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Cache Builder | ${{ needs.cache-builder.result }} | 编译、测试、构建一次完成 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Build | ${{ needs.docker-build.result }} | 极速构建（复用产物） |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 代码质量" >> $GITHUB_STEP_SUMMARY
           echo "| 检查项 | 状态 | 阻断发布 |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|------|----------|" >> $GITHUB_STEP_SUMMARY
           echo "| Format Check | ${{ needs.fmt.result }} | ❌ 否 |" >> $GITHUB_STEP_SUMMARY
-          echo "| Clippy Check | ${{ needs.clippy.result }} | ✅ 是 |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests | ${{ needs.test.result }} | ✅ 是（可跳过） |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build | ${{ needs.build.result }} | ✅ 是 |" >> $GITHUB_STEP_SUMMARY
           echo "| Security Scan | ${{ needs.security-scan.result }} | ✅ 是（可跳过） |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 阶段 3: 发布" >> $GITHUB_STEP_SUMMARY
+          echo "### 发布" >> $GITHUB_STEP_SUMMARY
           echo "| 检查项 | 状态 |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
           echo "| Push Image | ${{ needs.push.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # 最终判断
           FAILED=false
-          
-          if [[ "${{ needs.clippy.result }}" == "failure" ]]; then
-            echo "❌ Clippy 检查失败" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.cache-builder.result }}" == "failure" ]]; then
+            echo "❌ 编译/测试/构建失败" >> $GITHUB_STEP_SUMMARY
             FAILED=true
           fi
-          
-          if [[ "${{ needs.test.result }}" == "failure" && "${{ inputs.skip_tests }}" != "true" ]]; then
-            echo "❌ 测试失败" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.docker-build.result }}" == "failure" ]]; then
+            echo "❌ Docker 构建失败" >> $GITHUB_STEP_SUMMARY
             FAILED=true
           fi
-          
-          if [[ "${{ needs.build.result }}" == "failure" ]]; then
-            echo "❌ 镜像构建失败" >> $GITHUB_STEP_SUMMARY
-            FAILED=true
-          fi
-          
           if [[ "${{ needs.security-scan.result }}" == "failure" && "${{ inputs.skip_security_scan }}" != "true" ]]; then
             echo "❌ 安全扫描发现漏洞" >> $GITHUB_STEP_SUMMARY
             FAILED=true
           fi
-          
           if [[ "$FAILED" == "true" ]]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "## ❌ 质量门禁未通过，发布被阻断" >> $GITHUB_STEP_SUMMARY
@@ -527,6 +408,6 @@ jobs:
             echo "## ✅ 质量门禁通过" >> $GITHUB_STEP_SUMMARY
             if [[ "${{ needs.fmt.result }}" == "failure" ]]; then
               echo "" >> $GITHUB_STEP_SUMMARY
-              echo "⚠️ 提示：代码格式检查未通过，建议运行 `cargo fmt` 修复" >> $GITHUB_STEP_SUMMARY
+              echo "⚠️ 提示：代码格式检查未通过，建议运行 \`cargo fmt\` 修复" >> $GITHUB_STEP_SUMMARY
             fi
           fi

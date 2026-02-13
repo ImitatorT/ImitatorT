@@ -58,38 +58,50 @@ Compiling libc v0.2.181
 - **统一模式**: `release`
 - **统一缓存键**: `ci-cache-musl`
 
-### 架构图
+### 架构图（串行化 + 分层缓存）
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        CI Pipeline                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
-│  │    fmt      │  │   clippy    │  │    test     │             │
-│  │  (无编译)    │  │  (musl)     │  │   (musl)    │             │
-│  │   ~3s       │  │   ~5-10s    │  │   ~30s      │             │
-│  └─────────────┘  └──────┬──────┘  └──────┬──────┘             │
-│                          │                │                    │
-│                          └────────────────┘                    │
-│                                   │                            │
-│                          ┌────────▼────────┐                   │
-│                          │     build       │                   │
-│                          │  (musl + chef)  │                   │
-│                          │    ~90s         │                   │
-│                          └────────┬────────┘                   │
-│                                   │                            │
-│                          ┌────────▼────────┐                   │
-│                          │  Docker instant │                   │
-│                          │    ~20s         │                   │
-│                          └─────────────────┘                   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-
-缓存复用关系：
-- clippy ←────复用 build 的编译产物────┐
-- test   ←────复用 build 的编译产物────┤
-- build  ←────rust-cache + sccache─────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         CI Pipeline（优化后）                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─────────┐                                                            │
+│  │ changes │  ← 第1波：变更检测                                          │
+│  └────┬────┘                                                            │
+│       │                                                                 │
+│       ▼                                                                 │
+│  ┌─────────┐     ┌─────────┐                                            │
+│  │   fmt   │     │ clippy  │  ← 第2波：建立基础缓存 (musl)              │
+│  │  ~3s    │     │  ~10s   │     统一使用 ci-cache-musl                 │
+│  └─────────┘     └────┬────┘                                            │
+│                       │                                                 │
+│                       ▼                                                 │
+│  ┌─────────────────────────────────────────┐                            │
+│  │           test (矩阵任务)                │  ← 第3波：复用 clippy 缓存 │
+│  │  ┌─────────────────────────────────┐    │                            │
+│  │  │ default (无 features)           │    │                            │
+│  │  │   cache: ci-cache-musl  ←───────┼────┤  与 clippy/build 共享      │
+│  │  │   ~15s                          │    │                            │
+│  │  ├─────────────────────────────────┤    │                            │
+│  │  │ persistent-store (sled feature) │    │                            │
+│  │  │   cache: ci-cache-musl-sled     │    │  独立缓存，避免冲突        │
+│  │  │   ~30s                          │    │                            │
+│  │  └─────────────────────────────────┘    │                            │
+│  └─────────────────────────────────────────┘                            │
+│                       │                                                 │
+│                       ▼                                                 │
+│  ┌─────────┐     ┌─────────┐     ┌─────────────────┐                    │
+│  │  build  │     │docker   │     │ security-scan   │                    │
+│  │  ~90s   │────→│instant  │────→│    ~60s         │                    │
+│  │         │     │  ~20s   │     │                 │                    │
+│  └─────────┘     └─────────┘     └─────────────────┘                    │
+│       ↑                                                                 │
+│       └──────────────────────────────────────────────┐                  │
+│                                                      │                  │
+│  缓存复用链：clippy → test → build → docker          │                  │
+│  每层只需编译自己的增量变更                           │                  │
+│                                                      │                  │
+└──────────────────────────────────────────────────────┴──────────────────┘
 ```
 
 ---
@@ -154,24 +166,62 @@ cargo build --release    # → 同上
 - release 模式编译更慢，但产物可被所有任务复用
 - 测试和生产都使用 release，确保一致性
 
-#### 优化 3: 统一缓存键
+#### 优化 3: 统一缓存键 + Job 串行化
 
 ```yaml
-# 原方案：缓存键冲突
-clippy: shared-key: "ci-cache"
-test:   shared-key: "ci-cache"    # 与 clippy 冲突！
-build:  shared-key: "ci-cache-musl"
+# 原方案：并行执行 + 缓存键冲突
+jobs:
+  clippy: shared-key: "ci-cache"
+  test:   shared-key: "ci-cache"    # 与 clippy 冲突！并行无法复用
+  build:  shared-key: "ci-cache-musl"
 
-# 新方案：统一缓存键
-clippy: shared-key: "ci-cache-musl", key: x86_64-musl
-test:   shared-key: "ci-cache-musl", key: x86_64-musl  # 完全一致
-build:  shared-key: "ci-cache-musl", key: x86_64-musl  # 完全一致
+# 新方案：串行化 + 分层缓存键
+jobs:
+  clippy: 
+    shared-key: "ci-cache-musl"
+    # 无依赖，先执行，建立基础缓存
+  test:
+    needs: [clippy]  # 关键：串行化
+    shared-key: "ci-cache-musl"  # default 变体复用 clippy
+    # 或 shared-key: "ci-cache-musl-sled"  # persistent-store 独立缓存
+  build:
+    needs: [clippy, test]  # 复用所有前置缓存
+    shared-key: "ci-cache-musl"
 ```
 
 **科学依据**：
 - `rust-cache` 使用 `shared-key` 作为缓存标识
-- 相同 `shared-key` 的任务共享缓存
+- **串行化关键**：后续 job 可以读取前置 job 已保存的缓存
+- **分层缓存**：不同 feature 变体使用不同 `shared-key`，避免互相覆盖
 - 显式 `cache-directories` 确保目标目录被完整缓存
+
+#### 优化 4: Test 矩阵缓存分离
+
+```yaml
+# 原方案：矩阵变体共享同一缓存键
+test:
+  matrix:
+    - name: default
+      features: ''
+    - name: persistent-store
+      features: 'persistent-store'
+  # 两个变体都写入 ci-cache-musl，互相覆盖！
+
+# 新方案：不同 feature 使用不同缓存键
+test:
+  matrix:
+    - name: default
+      features: ''
+      cache-key: "ci-cache-musl"       # 与 clippy/build 共享
+    - name: persistent-store
+      features: 'persistent-store'
+      cache-key: "ci-cache-musl-sled"  # 独立缓存
+```
+
+**科学依据**：
+- 不同 feature 编译的产物不同（sled 依赖大量额外代码）
+- 共享缓存键导致：变体 A 编译 → 保存缓存 → 变体 B 编译 → 覆盖缓存 → 变体 A 缓存失效
+- 分离缓存键后，每个变体有自己的独立缓存空间
 
 ### 3. 最坏情况分析
 
@@ -231,14 +281,18 @@ ENTRYPOINT ["/agent"]
     shared-key: "ci-cache-musl"
 - run: cargo clippy --target x86_64-unknown-linux-musl --all-features
 
-# 3. test 任务：统一使用 musl target
+# 3. test 任务：串行化 + 分离缓存键
+# 关键优化：
+# - needs: [clippy] 确保复用 clippy 已建立的缓存
+# - 矩阵变体使用不同缓存键，避免 feature 差异导致缓存冲突
+- needs: [changes, clippy]
 - uses: dtolnay/rust-toolchain@stable
   with:
     targets: x86_64-unknown-linux-musl
 - uses: Swatinem/rust-cache@v2
   with:
-    key: x86_64-musl
-    shared-key: "ci-cache-musl"
+    key: x86_64-musl-${{ matrix.name }}
+    shared-key: ${{ matrix.cache-key }}  # default: ci-cache-musl, persistent-store: ci-cache-musl-sled
 - run: cargo test --release --target x86_64-unknown-linux-musl
 
 # 4. build 任务：使用 Dockerfile.instant
@@ -276,10 +330,11 @@ time docker build -f deploy/agent/Dockerfile.instant \
 
 推送代码后观察 GitHub Actions：
 - **fmt**: ~3s（无变化）
-- **clippy**: 从 58s 降至 5-10s
-- **test**: 保持 ~30s（但复用缓存更稳定）
-- **build**: 从 ~6m22s 降至 ~20-40s
-- **总耗时**: 从 ~8m 降至 ~2m
+- **clippy**: 从 58s 降至 ~10s（复用后续 build 的缓存）
+- **test (default)**: 从 2m45s 降至 ~15s（复用 clippy 缓存）
+- **test (persistent-store)**: ~30s（独立缓存，首次后 ~15s）
+- **build**: 从 ~6m22s 降至 ~20-40s（复用 test + clippy 缓存）
+- **总耗时**: 从 ~8-10m 降至 ~2m
 
 ---
 
@@ -317,6 +372,8 @@ run: cargo test --release  # 移除 --target
 |------|--------|--------|------|
 | **Docker 构建** | ~6m22s | ~25s | **15x 加速** |
 | **Clippy 检查** | ~58s | ~8s | **7x 加速** |
+| **Test (default)** | ~2m45s | ~15s | **11x 加速** |
+| **Test (persistent-store)** | ~3m | ~30s | **6x 加速** |
 | **端到端总耗时** | ~8-10m | ~2m | **4-5x 加速** |
 | 缓存复杂度 | 高（多层冲突） | 低（单层统一） | 简化 80% |
 | 可靠性 | 中（缓存易失效） | 高（统一策略） | 提升 |
