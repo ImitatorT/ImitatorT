@@ -217,17 +217,25 @@ async fn main() -> Result<()> {
     info!("LLM 模型: {}", model);
 
     // 使用 AppBuilder 快速搭建虚拟公司环境
-    let mut builder = AppBuilder::new(format!("http://{}", args.bind))
-        .bind(args.bind.parse().context("Invalid bind address")?);
-
-    // 如果有种子节点，添加到配置
-    if let Some(seed) = &args.seed {
-        builder = builder.seed(seed.clone());
-        info!("种子节点: {}", seed);
-    }
+    let bind_addr = args.bind.parse().context("Invalid bind address")?;
+    let mut builder = AppBuilder::new()
+        .with_endpoint(format!("http://{}", args.bind))
+        .with_server(bind_addr);
 
     // 构建并启动虚拟公司
-    let company = builder.build().await?;
+    let mut company = builder.build().await?;
+
+    // 如果有种子节点，注册为远程 Agent
+    if let Some(seed) = &args.seed {
+        info!("种子节点: {}", seed);
+        // 解析种子节点地址并注册
+        // 格式: agent_id@endpoint
+        if let Some((agent_id, endpoint)) = seed.split_once('@') {
+            company.register_remote_agent(agent_id, endpoint);
+        } else {
+            company.register_remote_agent("seed-node", seed);
+        }
+    }
 
     // 创建角色配置
     let all_agents = create_werewolf_agents(&api_key, &base_url, &model);
@@ -260,14 +268,8 @@ async fn main() -> Result<()> {
     }
 
     // 广播自己的存在
-    let node_info = imitatort_stateless_company::AgentInfo {
-        id: format!("werewolf-node-{}", args.bind.replace(':', "-")),
-        name: "Werewolf Game Node".to_string(),
-        endpoint: format!("http://{}", args.bind),
-        capabilities: vec!["werewolf".to_string()],
-        metadata: None,
-    };
-    company.announce_presence(&node_info).await?;
+    let node_id = format!("werewolf-node-{}", args.bind.replace(':', "-"));
+    company.broadcast("system", &format!("节点 {} 已启动", node_id))?;
 
     // 如果是完整节点（非仅主持人），启动游戏
     if !args.host_only && args.role.is_none() {
