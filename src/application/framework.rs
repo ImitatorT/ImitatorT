@@ -42,9 +42,9 @@ impl VirtualCompany {
     pub async fn create_agent(&self, config: AgentConfig) -> Result<Arc<Agent>> {
         let agent = self.agent_manager.register(config).await?;
         // 注册到消息总线
-        self.message_bus.register_agent(&agent.id());
+        self.message_bus.register_agent(agent.id());
         // 注册到路由器
-        self.router.register_local_agent(&agent.id());
+        self.router.register_local_agent(agent.id());
         Ok(agent)
     }
 
@@ -107,7 +107,6 @@ impl Default for VirtualCompany {
 ///
 /// 用于链式构建和配置 VirtualCompany
 pub struct AppBuilder {
-    company: Option<VirtualCompany>,
     bind_addr: Option<SocketAddr>,
     local_endpoint: String,
 }
@@ -116,7 +115,6 @@ impl AppBuilder {
     /// 创建新的构建器
     pub fn new() -> Self {
         Self {
-            company: None,
             bind_addr: None,
             local_endpoint: "http://localhost:8080".to_string(),
         }
@@ -135,7 +133,7 @@ impl AppBuilder {
     }
 
     /// 构建并启动应用
-    pub async fn build(mut self) -> Result<VirtualCompany> {
+    pub async fn build(self) -> Result<VirtualCompany> {
         let mut company = VirtualCompany::new(self.local_endpoint);
         if let Some(bind_addr) = self.bind_addr {
             company.start_server(bind_addr).await?;
