@@ -1,0 +1,311 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - 'v*'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+  pull_request:
+    branches:
+      - main
+      - dev
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: '⚠️ 跳过测试（仅紧急修复使用）'
+        required: true
+        default: false
+        type: boolean
+      skip_security_scan:
+        description: '⚠️ 跳过安全扫描（仅紧急修复使用）'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/imitatort-stateless-agent
+  RUST_MSRV: '1.85'
+  SCCACHE_GHA_ENABLED: 'true'
+  RUSTC_WRAPPER: 'sccache'
+
+jobs:
+  # ========== 阶段 1: 变更检测（所有任务的起点）==========
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'src/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'examples/**'
+            docker:
+              - 'deploy/agent/Dockerfile'
+              - 'docker-compose.yml'
+              - '.github/workflows/ci-cd.yml'
+
+  # ========== 阶段 2: 代码质量检查（并行）==========
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
+    needs: changes
+    # Format 只做警告，不阻塞流程
+    continue-on-error: true
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_MSRV }}
+          components: rustfmt
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Check format
+        run: cargo fmt --check
+      - name: Report format issues
+        if: failure()
+        run: |
+          echo "⚠️ **代码格式检查未通过**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "请运行以下命令修复：" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo 'cargo fmt' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "这不会阻塞构建，但建议修复以保持代码风格一致。" >> $GITHUB_STEP_SUMMARY
+
+  clippy:
+    name: Clippy Check
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_MSRV }}
+          components: clippy
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # ========== 阶段 3: 测试（并行，矩阵策略）==========
+  test:
+    name: Test (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    needs: changes
+    if: |
+      (needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch') &&
+      !inputs.skip_tests
+    strategy:
+      fail-fast: true  # 任一测试失败立即停止
+      matrix:
+        include:
+          - name: default
+            features: ''
+          - name: persistent-store
+            features: 'persistent-store'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_MSRV }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Run tests
+        run: |
+          if [ -z "${{ matrix.features }}" ]; then
+            cargo test --release
+          else
+            cargo test --release --features ${{ matrix.features }}
+          fi
+
+  # ========== 阶段 4: 构建镜像（依赖质量检查通过）==========
+  build:
+    name: Build Image
+    runs-on: ubuntu-latest
+    needs: [changes, fmt, clippy, test]
+    # 关键：所有质量检查必须通过（或被跳过）
+    if: |
+      always() &&
+      (needs.fmt.result == 'success' || needs.fmt.result == 'skipped') &&
+      (needs.clippy.result == 'success' || needs.clippy.result == 'skipped') &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped' || inputs.skip_tests) &&
+      (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/agent/Dockerfile
+          push: false
+          platforms: linux/amd64
+          cache-from: |
+            type=gha,scope=build-${{ github.ref_name }}
+            type=gha,scope=build-main
+          cache-to: type=gha,scope=build-${{ github.ref_name }},mode=max
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-${{ github.sha }}
+          path: /tmp/image.tar
+          retention-days: 1
+
+  # ========== 阶段 5: 安全扫描（阻塞发布）==========
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      !inputs.skip_security_scan &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-image-${{ github.sha }}
+          path: /tmp
+
+      - name: Load image
+        run: docker load -i /tmp/image.tar
+
+      # 安全扫描 - 失败会阻止后续发布
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:build
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          exit-code: '1'  # 发现漏洞则失败
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ========== 阶段 6: 推送镜像（最终门禁）==========
+  push:
+    name: Push Image
+    runs-on: ubuntu-latest
+    needs: [build, security-scan]
+    # 关键：必须通过安全扫描，或者显式跳过
+    if: |
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.security-scan.result == 'success' || inputs.skip_security_scan) &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch'))
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-,suffix=,enable=${{ github.ref_type != 'tag' }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=dev,enable=${{ github.ref_name == 'dev' }}
+
+      # 重新构建并推送多平台镜像（利用缓存，很快）
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/agent/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=gha,scope=build-${{ github.ref_name }}
+            type=gha,scope=build-main
+
+  # ========== 质量门禁汇总报告 ==========
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    needs: [fmt, clippy, test, security-scan]
+    if: always()
+    steps:
+      - name: Report Status
+        run: |
+          echo "## 质量门禁报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 检查项 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Format Check | ${{ needs.fmt.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Clippy Check | ${{ needs.clippy.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # 检查是否通过（Format 只做警告，不阻塞）
+          if [[ "${{ needs.clippy.result }}" == "failure" ]] || \
+             [[ "${{ needs.test.result }}" == "failure" && "${{ inputs.skip_tests }}" != "true" ]] || \
+             [[ "${{ needs.security-scan.result }}" == "failure" && "${{ inputs.skip_security_scan }}" != "true" ]]; then
+            echo "❌ **质量门禁未通过**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "✅ **质量门禁通过**" >> $GITHUB_STEP_SUMMARY
+            if [[ "${{ needs.fmt.result }}" == "failure" ]]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "⚠️ 注意：代码格式检查未通过，建议运行 `cargo fmt` 修复" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
