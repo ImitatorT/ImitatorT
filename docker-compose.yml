@@ -25,5 +25,26 @@ services:
     environment:
       MATRIX_HOMESERVER: "http://conduwuit:6167"
 
+  # 狼人杀游戏服务
+  werewolf:
+    image: ghcr.io/zhengui666/imitatort-stateless-agent:${AGENT_TAG:-dev}
+    container_name: werewolf
+    # 使用 werewolf 二进制文件而不是默认的 agent
+    entrypoint: ["/werewolf"]
+    command: ["--bind", "0.0.0.0:8080"]
+    ports:
+      - "8080:8080"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-gdsc90zzy}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:54000/v1}
+      - OPENAI_MODEL=${OPENAI_MODEL:-nano}
+    # 使用 host 网络模式以便访问宿主机的 litellm 服务
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # 保持容器运行
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
 volumes:
   conduwuit-data:
