@@ -107,20 +107,24 @@ jobs:
         if: steps.musl-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools musl-dev binutils
+          sudo apt-get install -y musl-tools musl-dev binutils lld
           # 配置链接器
           mkdir -p ~/.cargo
-          echo '[target.x86_64-unknown-linux-musl]' >> ~/.cargo/config.toml
-          echo 'linker = "x86_64-linux-gnu-gcc"' >> ~/.cargo/config.toml
+          cat > ~/.cargo/config.toml << 'EOF'
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"
+EOF
 
       - name: Install musl tools (from cache)
         if: steps.musl-cache.outputs.cache-hit == 'true'
         run: |
-          sudo apt-get install -y musl-tools musl-dev binutils
+          sudo apt-get install -y musl-tools musl-dev binutils lld
           # 配置链接器
           mkdir -p ~/.cargo
-          echo '[target.x86_64-unknown-linux-musl]' >> ~/.cargo/config.toml
-          echo 'linker = "x86_64-linux-gnu-gcc"' >> ~/.cargo/config.toml
+          cat > ~/.cargo/config.toml << 'EOF'
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"
+EOF
 
       # 检查缓存是否命中（用于后续优化）
       - name: Check cache status
@@ -184,7 +188,7 @@ jobs:
           cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/
           ls -la dist/
         env:
-          RUSTFLAGS: "-C codegen-units=16 -C link-arg=-fuse-ld=lld"  # 使用 lld 加速链接
+          RUSTFLAGS: "-C codegen-units=16"  # 更多 codegen units = 更多并行
 
       # 上传所有编译产物
       - name: Upload build artifacts
