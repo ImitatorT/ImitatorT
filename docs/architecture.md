@@ -11,7 +11,7 @@
 - `src/main.rs`：单次执行循环（拉上下文 -> 推理 -> 回写）。
 - `src/matrix.rs`：直接调用 Matrix Client-Server API 获取消息/发送消息。
 - `src/llm.rs`：OpenAI Chat Completions 适配层。
-- `src/mcp.rs`：STDIO 模式的外部工具桥接。
+- `src/tool.rs`：Tool/Function Calling 工具定义与执行。
 - `deploy/conduwuit/conduwuit.toml`：RocksDB 内存与保留策略。
 - `docker-compose.yml`：Conduwuit + Agent 资源隔离部署。
 - `.github/workflows/docker-publish.yml`：`main`/`dev` 自动发布 GHCR 镜像。

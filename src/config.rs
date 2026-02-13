@@ -24,10 +24,7 @@ pub struct AppConfig {
     #[arg(
         long,
         env = "SYSTEM_PROMPT",
-        default_value = "你是运行在 Matrix 网络中的无状态虚拟公司智能体。所有记忆来自传入上下文。信息不足时明确提出所需信息。"
+        default_value = "你是运行在 Matrix 网络中的无状态虚拟公司智能体。所有记忆来自传入上下文。信息不足时明确提出所需信息。你可以使用工具来执行命令或获取网页内容。"
     )]
     pub system_prompt: String,
-
-    #[arg(long, env = "MCP_TOOL_COMMAND", default_value = "")]
-    pub mcp_tool_command: String,
 }
