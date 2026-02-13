@@ -1,0 +1,62 @@
+# 使用 cargo-chef 进行依赖预编译，最大化缓存效率
+# 这是 Dockerfile.cached 的增强版，结合 cargo-chef 和预编译二进制
+
+# ========== 第一阶段：规划依赖 ==========
+FROM rust:1.85-alpine AS chef
+RUN apk add --no-cache musl-dev
+RUN cargo install cargo-chef
+
+WORKDIR /app
+
+# ========== 第二阶段：生成依赖配方 ==========
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY examples ./examples
+# 生成 recipe.json（包含所有依赖信息）
+RUN cargo chef prepare --recipe-path recipe.json
+
+# ========== 第三阶段：构建依赖层（可缓存） ==========
+FROM chef AS builder
+
+# 安装 musl 工具链
+RUN rustup target add x86_64-unknown-linux-musl
+RUN apk add --no-cache musl-tools upx
+
+WORKDIR /app
+
+# 仅复制配方文件 - 这一步可以缓存，只要依赖不变就不会重新编译
+COPY --from=planner /app/recipe.json recipe.json
+
+# 预编译所有依赖（这是耗时最长的步骤，会被 Docker 层缓存）
+RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
+
+# ========== 第四阶段：复制 CI 预编译的二进制 ==========
+# CI 中已使用 rust-cache + sccache 编译完成，直接复制进来
+COPY dist/imitatort /tmp/imitatort
+COPY dist/werewolf /tmp/werewolf
+
+# UPX 压缩
+RUN upx --best --lzma /tmp/imitatort || true
+RUN upx --best --lzma /tmp/werewolf || true
+
+# ========== 最终镜像（最小化 scratch） ==========
+FROM scratch
+
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION
+
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /tmp/imitatort /agent
+COPY --from=builder /tmp/werewolf /werewolf
+
+LABEL org.opencontainers.image.title="ImitatorT Stateless Agent"
+LABEL org.opencontainers.image.description="无状态虚拟公司框架 Agent"
+LABEL org.opencontainers.image.source="https://github.com/zhengui666/ImitatorT"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.revision="${VCS_REF}"
+LABEL org.opencontainers.image.version="${VERSION}"
+
+ENTRYPOINT ["/agent"]

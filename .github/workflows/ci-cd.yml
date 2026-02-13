@@ -179,21 +179,43 @@ jobs:
           toolchain: ${{ env.RUST_MSRV }}
           targets: x86_64-unknown-linux-musl
 
-      # 复用统一的 CI 缓存
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "ci-cache"
-          cache-on-failure: true
-
-      - uses: mozilla-actions/sccache-action@v0.0.9
-
-      # 安装 musl 工具链用于静态链接
+      # 安装 musl 工具链
       - name: Install musl tools
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      # 编译主程序和示例（复用 test/clippy 的缓存）
+      # 方案2: 优化的 rust-cache（musl-specific key + 显式目录）
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # musl 目标使用独立的 cache key，避免与其他目标冲突
+          key: x86_64-musl
+          shared-key: "ci-cache-musl"
+          cache-on-failure: true
+          # 显式缓存目标目录，确保 musl 产物被缓存
+          cache-directories: |
+            target/x86_64-unknown-linux-musl/release
+            target/x86_64-unknown-linux-musl/release/examples
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      # 方案3: cargo-chef 预编译依赖层
+      # 安装 cargo-chef（会被 rust-cache 缓存）
+      - name: Install cargo-chef
+        run: |
+          if ! command -v cargo-chef &> /dev/null; then
+            cargo install cargo-chef
+          fi
+
+      # 生成依赖配方
+      - name: Prepare cargo-chef recipe
+        run: cargo chef prepare --recipe-path recipe.json
+
+      # 预编译依赖（只要 Cargo.lock 不变，这一步会被缓存）
+      - name: Cook dependencies (cached layer)
+        run: cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
+
+      # 编译主程序和示例（此时只编译项目代码，依赖已预编译）
       - name: Build release binaries
         run: |
           cargo build --release --target x86_64-unknown-linux-musl --bin imitatort --example werewolf
@@ -203,14 +225,14 @@ jobs:
           cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/
           ls -la dist/
 
-      # 使用精简 Dockerfile 构建镜像（跳过编译阶段，直接复制产物）
+      # 使用 cargo-chef 优化的 Dockerfile 构建镜像
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build image from pre-built binaries
+      - name: Build image with cargo-chef caching
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/agent/Dockerfile.cached
+          file: deploy/agent/Dockerfile.chef
           push: false
           platforms: linux/amd64
           tags: ${{ env.IMAGE_NAME }}:latest
@@ -218,11 +240,17 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ github.ref_name }}
-          # 缓存策略
+          # 多层缓存策略：
+          # 1. 优先从 main 分支读取（稳定依赖缓存）
+          # 2. 读取当前分支缓存
+          # 3. cargo-chef 的依赖层会大幅加速
           cache-from: |
+            type=gha,scope=chef-main
+            type=gha,scope=chef-${{ github.ref_name }}
             type=gha,scope=build-main
             type=gha,scope=build-${{ github.ref_name }}
-          cache-to: type=gha,scope=build-${{ github.ref_name }},mode=max
+          cache-to: |
+            type=gha,scope=chef-${{ github.ref_name }},mode=max
           outputs: type=docker,dest=/tmp/image.tar
           provenance: false
 
@@ -296,7 +324,7 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -336,13 +364,12 @@ jobs:
       - name: Load image
         run: docker load -i /tmp/image.tar
 
-      # 如果需要多平台，使用原 Dockerfile 进行多平台构建
-      # 但仅推送 amd64 平台以保持一致性（复用缓存编译的产物）
+      # 使用 cargo-chef 优化的 Dockerfile 进行构建推送
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/agent/Dockerfile.cached
+          file: deploy/agent/Dockerfile.chef
           push: true
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
@@ -351,12 +378,14 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ github.ref_name }}
-          # 缓存策略：优先从 main 分支读取，再读取当前分支
+          # 多层缓存策略，复用 build 阶段的 chef 缓存
           cache-from: |
+            type=gha,scope=chef-main
+            type=gha,scope=chef-${{ github.ref_name }}
             type=gha,scope=build-main
             type=gha,scope=build-${{ github.ref_name }}
-          # Push 阶段也需要导出缓存，供后续构建使用
-          cache-to: type=gha,scope=build-${{ github.ref_name }},mode=max
+          # Push 阶段也导出缓存
+          cache-to: type=gha,scope=chef-${{ github.ref_name }},mode=max
 
   # ========== 质量门禁汇总报告 ==========
   quality-gate:
