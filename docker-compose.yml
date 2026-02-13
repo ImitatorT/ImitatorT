@@ -2,8 +2,14 @@ services:
   conduwuit:
     image: forgejo.ellis.link/continuwuation/continuwuity:latest
     container_name: conduwuit
+    environment:
+      CONDUWUIT_SERVER_NAME: "matrix.local"
+      CONDUWUIT_DATABASE_BACKEND: "rocksdb"
+      CONDUWUIT_ADDRESS: "0.0.0.0"
+      CONDUWUIT_PORT: "6167"
+      CONDUWUIT_ALLOW_REGISTRATION: "false"
+      CONDUWUIT_ALLOW_FEDERATION: "false"
     volumes:
-      - ./deploy/conduwuit/conduwuit.toml:/etc/conduwuit/conduwuit.toml:ro
       - conduwuit-data:/var/lib/conduwuit
     ports:
       - "6167:6167"
