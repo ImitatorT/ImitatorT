@@ -35,6 +35,7 @@ RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path r
 # CI 中已使用 rust-cache + sccache 编译完成，直接复制进来
 COPY dist/imitatort /tmp/imitatort
 COPY dist/werewolf /tmp/werewolf
+RUN chmod +x /tmp/imitatort /tmp/werewolf
 
 # UPX 压缩
 RUN upx --best --lzma /tmp/imitatort || true
