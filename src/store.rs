@@ -175,10 +175,16 @@ mod tests {
     #[tokio::test]
     async fn test_store_add_and_get() {
         let store = MessageStore::new(10);
-        
-        store.add_message(create_test_message("1", "alice", "Hello")).await.unwrap();
-        store.add_message(create_test_message("2", "bob", "Hi")).await.unwrap();
-        
+
+        store
+            .add_message(create_test_message("1", "alice", "Hello"))
+            .await
+            .unwrap();
+        store
+            .add_message(create_test_message("2", "bob", "Hi"))
+            .await
+            .unwrap();
+
         let messages = store.get_recent(10).await;
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].sender, "alice");
@@ -188,12 +194,24 @@ mod tests {
     #[tokio::test]
     async fn test_store_max_size() {
         let store = MessageStore::new(3);
-        
-        store.add_message(create_test_message("1", "user1", "msg1")).await.unwrap();
-        store.add_message(create_test_message("2", "user2", "msg2")).await.unwrap();
-        store.add_message(create_test_message("3", "user3", "msg3")).await.unwrap();
-        store.add_message(create_test_message("4", "user4", "msg4")).await.unwrap();
-        
+
+        store
+            .add_message(create_test_message("1", "user1", "msg1"))
+            .await
+            .unwrap();
+        store
+            .add_message(create_test_message("2", "user2", "msg2"))
+            .await
+            .unwrap();
+        store
+            .add_message(create_test_message("3", "user3", "msg3"))
+            .await
+            .unwrap();
+        store
+            .add_message(create_test_message("4", "user4", "msg4"))
+            .await
+            .unwrap();
+
         let messages = store.get_recent(10).await;
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[0].sender, "user2"); // msg1 was removed
@@ -202,10 +220,16 @@ mod tests {
     #[tokio::test]
     async fn test_get_context_string() {
         let store = MessageStore::new(10);
-        
-        store.add_message(create_test_message("1", "alice", "Hello")).await.unwrap();
-        store.add_message(create_test_message("2", "bob", "World")).await.unwrap();
-        
+
+        store
+            .add_message(create_test_message("1", "alice", "Hello"))
+            .await
+            .unwrap();
+        store
+            .add_message(create_test_message("2", "bob", "World"))
+            .await
+            .unwrap();
+
         let context = store.get_context_string(10).await;
         assert!(context.contains("alice: Hello"));
         assert!(context.contains("bob: World"));
