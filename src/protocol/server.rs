@@ -112,6 +112,7 @@ pub struct A2AServerState {
     /// 消息总线
     message_bus: Arc<MessageBus>,
     /// 服务端地址
+    #[allow(dead_code)]
     bind_addr: SocketAddr,
 }
 

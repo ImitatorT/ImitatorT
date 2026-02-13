@@ -15,8 +15,8 @@ use swarms_rs::{
 };
 use tracing::{debug, info};
 
-use crate::core::messaging::{AgentMessageReceiver, Message, MessageBus};
 use crate::application::tool::ToolRegistry;
+use crate::core::messaging::{AgentMessageReceiver, Message, MessageBus};
 
 /// Agent 配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +42,7 @@ pub struct AgentConfig {
 pub struct Agent {
     config: AgentConfig,
     inner: SwarmsAgent<OpenAI>,
+    #[allow(dead_code)]
     tool_registry: ToolRegistry,
     /// Agent 的消息接收器（由外部注入）
     message_receiver: Option<AgentMessageReceiver>,

@@ -1,12 +1,13 @@
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use clap::Parser;
+use imitatort_stateless_company::application::output::{Output, OutputFactory};
+use imitatort_stateless_company::application::tool::{ToolCall, ToolRegistry};
 use imitatort_stateless_company::core::config::{AppConfig, OutputMode};
+use imitatort_stateless_company::core::store::MessageStore;
 use imitatort_stateless_company::infrastructure::llm::{Message, OpenAIClient};
 use imitatort_stateless_company::infrastructure::logger::{LogConfig, RequestContext, Sanitizer, Timer};
-use imitatort_stateless_company::application::output::{Output, OutputFactory};
-use std::sync::Arc;
-use imitatort_stateless_company::core::store::MessageStore;
-use imitatort_stateless_company::application::tool::{ToolCall, ToolRegistry};
 use tracing::{debug, error, info, info_span, Instrument};
 
 #[tokio::main]

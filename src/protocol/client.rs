@@ -11,11 +11,11 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
+use crate::core::messaging::GroupInfo;
 use crate::protocol::server::{
     AgentInfo, ApiResponse, CreateGroupRequest, InviteMemberRequest, RegisterAgentRequest,
     SendMessageRequest,
 };
-use crate::core::messaging::GroupInfo;
 
 /// A2A HTTP 客户端
 pub struct A2AClient {

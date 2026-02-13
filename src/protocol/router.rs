@@ -9,9 +9,9 @@ use anyhow::{Context, Result};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
+use crate::core::messaging::{Message, MessageBus, MessageType};
 use crate::protocol::client::A2AClient;
 use crate::protocol::server::AgentInfo;
-use crate::core::messaging::{Message, MessageBus, MessageType};
 
 /// 路由目标
 #[derive(Debug, Clone)]
@@ -85,10 +85,10 @@ impl MessageRouter {
     pub fn get_route_target(&self, agent_id: &str) -> Option<RouteTarget> {
         if self.is_local(agent_id) {
             Some(RouteTarget::Local)
-        } else if let Some(endpoint) = self.remote_agents.get(agent_id) {
-            Some(RouteTarget::Remote(endpoint.clone()))
         } else {
-            None
+            self.remote_agents
+                .get(agent_id)
+                .map(|endpoint| RouteTarget::Remote(endpoint.clone()))
         }
     }
 
