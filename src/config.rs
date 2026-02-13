@@ -83,6 +83,10 @@ pub struct AppConfig {
     #[arg(long, env = "OPENAI_MODEL", default_value = "gpt-4o-mini")]
     pub openai_model: String,
 
+    /// OpenAI API Base URL（支持自定义端点，如 LiteLLM、Ollama、Azure 等）
+    #[arg(long, env = "OPENAI_BASE_URL", default_value = "https://api.openai.com/v1")]
+    pub openai_base_url: String,
+
     // 存储配置
     /// 消息存储类型: memory, persistent
     #[arg(long, env = "STORE_TYPE", default_value = "memory")]

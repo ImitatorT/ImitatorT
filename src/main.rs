@@ -85,7 +85,11 @@ async fn run(request_ctx: RequestContext) -> Result<()> {
     let output = create_output(&cfg, store.clone()).await?;
 
     // 创建 LLM 客户端
-    let llm = OpenAIClient::new(cfg.openai_api_key.clone(), cfg.openai_model.clone());
+    let llm = OpenAIClient::new_with_base_url(
+        cfg.openai_api_key.clone(),
+        cfg.openai_model.clone(),
+        cfg.openai_base_url.clone(),
+    );
 
     // 根据模式执行不同的主循环
     match cfg.output_mode {

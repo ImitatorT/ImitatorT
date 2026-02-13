@@ -7,6 +7,7 @@ use crate::tool::{Tool, ToolCall};
 pub struct OpenAIClient {
     api_key: String,
     model: String,
+    base_url: String,
     http: reqwest::Client,
 }
 
@@ -42,9 +43,16 @@ struct Choice {
 
 impl OpenAIClient {
     pub fn new(api_key: String, model: String) -> Self {
+        Self::new_with_base_url(api_key, model, "https://api.openai.com/v1".to_string())
+    }
+
+    pub fn new_with_base_url(api_key: String, model: String, base_url: String) -> Self {
+        // 确保 base_url 不以斜杠结尾，避免路径拼接问题
+        let base_url = base_url.trim_end_matches('/').to_string();
         Self {
             api_key,
             model,
+            base_url,
             http: reqwest::Client::new(),
         }
     }
@@ -61,9 +69,10 @@ impl OpenAIClient {
             tools,
         };
 
+        let url = format!("{}/chat/completions", self.base_url);
         let res: ChatResponse = self
             .http
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(&url)
             .bearer_auth(&self.api_key)
             .json(&req)
             .send()
