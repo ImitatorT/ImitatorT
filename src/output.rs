@@ -196,10 +196,8 @@ impl A2AOutput {
             text: content.to_string(),
         };
 
-        self.agent
-            .send_message(receiver_id, content)
-            .await
-            .context("Failed to send A2A message")?;
+        let result: anyhow::Result<()> = self.agent.send_message(receiver_id, content).await;
+        result.map_err(|e| anyhow::anyhow!("Failed to send A2A message: {}", e))?;
 
         info!("Sent A2A message to {}", receiver_id);
         Ok(())
@@ -236,10 +234,8 @@ impl Output for A2AOutput {
             let a2a_content = MessageContent::Text {
                 text: content.to_string(),
             };
-            self.agent
-                .send_message(receiver, a2a_content)
-                .await
-                .context("Failed to send A2A message")?;
+            let result: anyhow::Result<()> = self.agent.send_message(receiver, a2a_content).await;
+            result.map_err(|e| anyhow::anyhow!("Failed to send A2A message: {}", e))?;
         }
 
         debug!("Message output via A2A from {}", sender);

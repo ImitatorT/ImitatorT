@@ -19,6 +19,23 @@ urlencoding = "2"
 uuid = { version = "1", features = ["v4"] }
 # 轻量级存储，可选启用
 sled = { version = "0.34", optional = true }
+# swarms-rs 多 Agent 框架
+swarms-rs = "0.1"
+dashmap = "6"
+dotenv = "0.15"
+# HTTP 服务端
+axum = "0.7"
+tower = "0.5"
+# 配置解析
+serde_yaml = "0.9"
+
+[lib]
+name = "imitatort_stateless_company"
+path = "src/lib.rs"
+
+[[bin]]
+name = "imitatort"
+path = "src/main.rs"
 
 [features]
 default = []

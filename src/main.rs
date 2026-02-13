@@ -1,9 +1,14 @@
 mod a2a;
+mod a2a_client;
+mod a2a_server;
+mod agent;
 mod config;
 mod llm;
 mod logger;
 mod matrix;
+mod messaging;
 mod output;
+mod router;
 mod store;
 mod tool;
 
