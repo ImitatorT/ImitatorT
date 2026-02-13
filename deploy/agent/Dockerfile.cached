@@ -1,0 +1,45 @@
+# 使用预编译二进制文件的最小化 Dockerfile
+# 复用 CI 中 rust-cache + sccache 编译的产物
+
+# 构建阶段：从主机复制预编译的二进制文件
+FROM alpine:3.19 AS builder
+
+# 安装 UPX（用于压缩）
+RUN apk add --no-cache upx
+
+# 从构建上下文复制预编译的二进制文件
+# 这些文件由 CI 中的 cargo build --release 生成，复用了 test/clippy 的缓存
+# CI 会将二进制文件放在 dist/ 目录下
+COPY dist/imitatort /tmp/imitatort
+COPY dist/werewolf /tmp/werewolf
+
+# UPX 压缩（仅在 amd64 平台）
+RUN if [ -f /tmp/imitatort ]; then \
+        upx --best --lzma /tmp/imitatort || true; \
+        upx --best --lzma /tmp/werewolf || true; \
+    fi
+
+# 最终镜像（最小化 scratch 镜像）
+FROM scratch
+
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION
+
+# 复制 CA 证书（从 Alpine 获取）
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# 复制压缩后的二进制文件
+COPY --from=builder /tmp/imitatort /agent
+COPY --from=builder /tmp/werewolf /werewolf
+
+# OCI 镜像标签
+LABEL org.opencontainers.image.title="ImitatorT Stateless Agent"
+LABEL org.opencontainers.image.description="无状态虚拟公司框架 Agent"
+LABEL org.opencontainers.image.source="https://github.com/zhengui666/ImitatorT"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.revision="${VCS_REF}"
+LABEL org.opencontainers.image.version="${VERSION}"
+
+ENTRYPOINT ["/agent"]

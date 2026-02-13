@@ -88,10 +88,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_MSRV }}
           components: rustfmt
-      # 使用 Swatinem/rust-cache 替代手动 cargo 缓存，更智能
+      # 使用统一的 shared-key 复用缓存
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "fmt"
+          shared-key: "ci-cache"
           cache-on-failure: true
       - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Check format
@@ -118,10 +118,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_MSRV }}
           components: clippy
-      # rust-cache 会自动处理 target 目录和 cargo 注册表的缓存
+      # 复用统一的 CI 缓存
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "clippy"
+          shared-key: "ci-cache"
           cache-on-failure: true
       - uses: mozilla-actions/sccache-action@v0.0.9
       - run: cargo clippy --all-targets --all-features
@@ -147,10 +147,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_MSRV }}
-      # 使用矩阵 key 区分不同 feature 的缓存
+      # 复用统一的 CI 缓存，矩阵任务通过环境自动区分
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "test-${{ matrix.name }}"
+          shared-key: "ci-cache"
           cache-on-failure: true
       - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Run tests
@@ -161,44 +161,77 @@ jobs:
             cargo test --release --features ${{ matrix.features }}
           fi
 
-  # 2d. 构建镜像 - 阻断（构建失败则无法发布）
+  # 2d. 编译 Rust 并构建镜像 - 阻断（复用 test/clippy 的缓存）
   build:
     name: Build Image
     runs-on: ubuntu-latest
-    needs: changes
+    needs: [changes, clippy]
+    # clippy 阻断后执行，确保代码质量
     if: |
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
       (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+
+      # 使用与 test/clippy 相同的 Rust 工具链和缓存配置
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          # 启用 BuildKit 内联缓存导出，用于缓存挂载
-          driver-opts: |
-            image=moby/buildkit:master
-            network=host
-      - name: Build image
+          toolchain: ${{ env.RUST_MSRV }}
+          targets: x86_64-unknown-linux-musl
+
+      # 复用统一的 CI 缓存
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-cache"
+          cache-on-failure: true
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      # 安装 musl 工具链用于静态链接
+      - name: Install musl tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      # 编译主程序和示例（复用 test/clippy 的缓存）
+      - name: Build release binaries
+        run: |
+          cargo build --release --target x86_64-unknown-linux-musl --bin imitatort --example werewolf
+          # 复制到 dist/ 目录供 Docker 构建使用
+          mkdir -p dist
+          cp target/x86_64-unknown-linux-musl/release/imitatort dist/
+          cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/
+          ls -la dist/
+
+      # 使用精简 Dockerfile 构建镜像（跳过编译阶段，直接复制产物）
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image from pre-built binaries
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/agent/Dockerfile
+          file: deploy/agent/Dockerfile.cached
           push: false
           platforms: linux/amd64
-          # 添加标签以便 security-scan 阶段使用
           tags: ${{ env.IMAGE_NAME }}:latest
-          # 启用 BuildKit 内联缓存
           build-args: |
-            BUILDKIT_INLINE_CACHE=1
-          # 缓存策略：优先从 main 分支读取，再读取当前分支，最后写入当前分支
-          # 注意：cache-from 按顺序尝试，第一个命中的会被使用
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+          # 缓存策略
           cache-from: |
             type=gha,scope=build-main
             type=gha,scope=build-${{ github.ref_name }}
-            type=gha,scope=build-global
           cache-to: type=gha,scope=build-${{ github.ref_name }},mode=max
           outputs: type=docker,dest=/tmp/image.tar
-          # 显示详细构建日志以便调试缓存
           provenance: false
+
+      # 上传二进制文件供后续阶段使用
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ github.sha }}
+          path: dist/
+          retention-days: 1
 
       - uses: actions/upload-artifact@v4
         with:
@@ -287,17 +320,37 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=dev,enable=${{ github.ref_name == 'dev' }}
 
+      # 复用 build 阶段的编译产物，保持一致性
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries-${{ github.sha }}
+          path: dist/
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image-${{ github.sha }}
+          path: /tmp
+
+      - name: Load image
+        run: docker load -i /tmp/image.tar
+
+      # 如果需要多平台，使用原 Dockerfile 进行多平台构建
+      # 但仅推送 amd64 平台以保持一致性（复用缓存编译的产物）
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/agent/Dockerfile
+          file: deploy/agent/Dockerfile.cached
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILDKIT_INLINE_CACHE=1
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
           # 缓存策略：优先从 main 分支读取，再读取当前分支
           cache-from: |
             type=gha,scope=build-main
