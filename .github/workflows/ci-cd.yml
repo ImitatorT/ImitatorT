@@ -88,6 +88,11 @@ jobs:
         with:
           toolchain: ${{ env.RUST_MSRV }}
           components: rustfmt
+      # 使用 Swatinem/rust-cache 替代手动 cargo 缓存，更智能
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "fmt"
+          cache-on-failure: true
       - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Check format
         run: cargo fmt --check
@@ -113,14 +118,12 @@ jobs:
         with:
           toolchain: ${{ env.RUST_MSRV }}
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.9
-      - uses: actions/cache@v4
+      # rust-cache 会自动处理 target 目录和 cargo 注册表的缓存
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          shared-key: "clippy"
+          cache-on-failure: true
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - run: cargo clippy --all-targets --all-features
 
   # 2c. 测试 - 阻断
@@ -144,14 +147,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_MSRV }}
-      - uses: mozilla-actions/sccache-action@v0.0.9
-      - uses: actions/cache@v4
+      # 使用矩阵 key 区分不同 feature 的缓存
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          shared-key: "test-${{ matrix.name }}"
+          cache-on-failure: true
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Run tests
         run: |
           if [ -z "${{ matrix.features }}" ]; then
@@ -171,12 +172,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+        with:
+          # 启用 BuildKit 内联缓存导出，用于缓存挂载
+          driver-opts: |
+            image=moby/buildkit:master
+            network=host
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/agent/Dockerfile
           push: false
           platforms: linux/amd64
+          # 启用内联缓存，支持 RUN --mount=type=cache
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
           cache-from: |
             type=gha,scope=build-${{ github.ref_name }}
             type=gha,scope=build-main
@@ -201,12 +210,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:master
+            network=host
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/agent/Dockerfile
           push: false
           platforms: linux/amd64
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
           cache-from: |
             type=gha,scope=build-${{ github.ref_name }}
             type=gha,scope=build-main
@@ -281,9 +296,13 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
           cache-from: |
             type=gha,scope=build-${{ github.ref_name }}
             type=gha,scope=build-main
+          # Push 阶段也需要导出缓存，供后续构建使用
+          cache-to: type=gha,scope=build-${{ github.ref_name }},mode=max
 
   # ========== 质量门禁汇总报告 ==========
   quality-gate:
