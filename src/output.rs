@@ -107,7 +107,10 @@ impl Output for MatrixOutput {
         match self.client.latest_context(&self.room_id, limit).await {
             Ok(context) => Ok(context),
             Err(e) => {
-                warn!("Failed to get context from Matrix: {}, falling back to store", e);
+                warn!(
+                    "Failed to get context from Matrix: {}, falling back to store",
+                    e
+                );
                 Ok(self.store.get_context_string(limit).await)
             }
         }
@@ -174,7 +177,11 @@ pub struct A2AOutput {
 }
 
 impl A2AOutput {
-    pub fn new(agent: Arc<A2AAgent>, store: MessageStore, default_receiver: Option<String>) -> Self {
+    pub fn new(
+        agent: Arc<A2AAgent>,
+        store: MessageStore,
+        default_receiver: Option<String>,
+    ) -> Self {
         Self {
             agent,
             store,
@@ -269,7 +276,7 @@ impl HybridOutput {
 impl Output for HybridOutput {
     async fn send_message(&self, sender: &str, content: &str) -> Result<()> {
         let mut last_error = None;
-        
+
         for output in &self.outputs {
             if let Err(e) = output.send_message(sender, content).await {
                 error!("Output {:?} failed: {}", output.mode(), e);
@@ -389,10 +396,7 @@ mod tests {
 
     #[test]
     fn test_output_mode_from_str() {
-        assert_eq!(
-            "matrix".parse::<OutputMode>().unwrap(),
-            OutputMode::Matrix
-        );
+        assert_eq!("matrix".parse::<OutputMode>().unwrap(), OutputMode::Matrix);
         assert_eq!("cli".parse::<OutputMode>().unwrap(), OutputMode::Cli);
         assert_eq!("a2a".parse::<OutputMode>().unwrap(), OutputMode::A2A);
         assert!("unknown".parse::<OutputMode>().is_err());

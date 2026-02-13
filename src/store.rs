@@ -28,8 +28,6 @@ pub enum MessageType {
     ToolResult,
 }
 
-
-
 /// 轻量级消息存储
 #[derive(Clone)]
 pub struct MessageStore {
@@ -61,7 +59,7 @@ impl MessageStore {
     pub fn new_persistent(path: &str, max_size: usize) -> Result<Self> {
         let db = sled::open(path)?;
         let messages = Self::load_from_db(&db, max_size)?;
-        
+
         Ok(Self {
             inner: Arc::new(RwLock::new(StoreInner {
                 messages,
@@ -89,14 +87,14 @@ impl MessageStore {
     /// 添加消息
     pub async fn add_message(&self, message: ChatMessage) -> Result<()> {
         let mut inner = self.inner.write().await;
-        
+
         // 如果超过最大大小，移除最旧的消息
         if inner.messages.len() >= inner.max_size {
             inner.messages.pop_front();
         }
-        
+
         inner.messages.push_back(message.clone());
-        
+
         // 如果启用持久化，写入数据库
         #[cfg(feature = "persistent-store")]
         if let Some(ref db) = inner.db {
@@ -104,7 +102,7 @@ impl MessageStore {
             let value = serde_json::to_vec(&message)?;
             db.insert(key, value)?;
         }
-        
+
         Ok(())
     }
 
@@ -140,12 +138,12 @@ impl MessageStore {
     pub async fn clear(&self) -> Result<()> {
         let mut inner = self.inner.write().await;
         inner.messages.clear();
-        
+
         #[cfg(feature = "persistent-store")]
         if let Some(ref db) = inner.db {
             db.clear()?;
         }
-        
+
         Ok(())
     }
 

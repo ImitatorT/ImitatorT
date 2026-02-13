@@ -165,7 +165,7 @@ async fn create_output(cfg: &AppConfig, store: MessageStore) -> Result<Box<dyn O
                     agent.register_peer(peer_card).await;
                 }
             }
-            
+
             // 创建 Matrix 输出（作为主要输出）
             // 注意：Hybrid 模式目前使用 Matrix 作为主要输出
             // 可以通过桥接器将 A2A 消息同步到 Matrix
@@ -261,9 +261,8 @@ async fn run_single_cycle(
 
         // Execute each tool call and add results
         for (idx, tool_call) in tool_calls.iter().enumerate() {
-            let _tool_timer =
-                Timer::new(format!("tool_{}_{}", idx, tool_call.function.name))
-                    .with_context(request_ctx);
+            let _tool_timer = Timer::new(format!("tool_{}_{}", idx, tool_call.function.name))
+                .with_context(request_ctx);
             let result = execute_tool(tool_call).await;
             messages.push(Message {
                 role: "tool".to_string(),
@@ -282,7 +281,7 @@ async fn run_single_cycle(
     let answer = message
         .content
         .unwrap_or_else(|| "(无响应内容)".to_string());
-    
+
     output
         .send_message(&cfg.agent_name, &answer)
         .await
@@ -318,7 +317,7 @@ async fn run_interactive_loop(
         match lines.next_line().await {
             Ok(Some(line)) => {
                 let input = line.trim();
-                
+
                 if input.is_empty() {
                     continue;
                 }
@@ -359,7 +358,7 @@ async fn run_interactive_loop(
 
                 // 获取上下文并调用 LLM
                 let context = store.get_context_string(cfg.context_limit).await;
-                
+
                 let mut messages = vec![
                     Message {
                         role: "system".to_string(),
