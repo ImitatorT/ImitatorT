@@ -107,20 +107,20 @@ jobs:
         if: steps.musl-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools musl-dev
+          sudo apt-get install -y musl-tools musl-dev binutils
           # 配置链接器
           mkdir -p ~/.cargo
           echo '[target.x86_64-unknown-linux-musl]' >> ~/.cargo/config.toml
-          echo 'linker = "musl-gcc"' >> ~/.cargo/config.toml
+          echo 'linker = "x86_64-linux-gnu-gcc"' >> ~/.cargo/config.toml
 
       - name: Install musl tools (from cache)
         if: steps.musl-cache.outputs.cache-hit == 'true'
         run: |
-          sudo apt-get install -y musl-tools musl-dev
+          sudo apt-get install -y musl-tools musl-dev binutils
           # 配置链接器
           mkdir -p ~/.cargo
           echo '[target.x86_64-unknown-linux-musl]' >> ~/.cargo/config.toml
-          echo 'linker = "musl-gcc"' >> ~/.cargo/config.toml
+          echo 'linker = "x86_64-linux-gnu-gcc"' >> ~/.cargo/config.toml
 
       # 检查缓存是否命中（用于后续优化）
       - name: Check cache status
