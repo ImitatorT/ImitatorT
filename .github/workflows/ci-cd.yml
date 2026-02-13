@@ -69,7 +69,8 @@ jobs:
               - 'docker-compose.yml'
               - '.github/workflows/ci-cd.yml'
 
-  # ========== 阶段 2: 代码质量检查（并行）==========
+  # ========== 阶段 2: 质量检查（并行，全部通过才能进入下一阶段）==========
+  # 2a. Format Check - 不阻断
   fmt:
     name: Format Check
     runs-on: ubuntu-latest
@@ -95,6 +96,7 @@ jobs:
           echo 'cargo fmt' >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
+  # 2b. Clippy Check - 阻断
   clippy:
     name: Clippy Check
     runs-on: ubuntu-latest
@@ -116,7 +118,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - run: cargo clippy --all-targets --all-features -- -D warnings
 
-  # ========== 阶段 3: 测试（并行）==========
+  # 2c. 测试 - 阻断
   test:
     name: Test (${{ matrix.name }})
     runs-on: ubuntu-latest
@@ -153,11 +155,13 @@ jobs:
             cargo test --release --features ${{ matrix.features }}
           fi
 
-  # ========== 阶段 4: 构建单平台镜像（供安全扫描使用）==========
+  # ========== 阶段 3: 构建与安全扫描（并行执行）==========
+  # 3a. 构建镜像
   build:
     name: Build Image
     runs-on: ubuntu-latest
-    needs: [changes, clippy, test]
+    needs: [changes, fmt, clippy, test]
+    # 关键：阻断性检查必须通过才能开始构建
     if: |
       always() &&
       (needs.clippy.result == 'success' || needs.clippy.result == 'skipped') &&
@@ -184,28 +188,38 @@ jobs:
           path: /tmp/image.tar
           retention-days: 1
 
-  # ========== 阶段 5: 安全扫描 & 多平台构建推送（并行执行）==========
-  # 5a. 安全扫描
+  # 3b. 安全扫描 - 与 build 并行，但阻断 push
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: build
+    needs: [changes, fmt, clippy, test]
+    # 与 build 相同的准入条件，并行执行
     if: |
+      always() &&
       !inputs.skip_security_scan &&
+      (needs.clippy.result == 'success' || needs.clippy.result == 'skipped') &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped' || inputs.skip_tests) &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # 单独构建一个镜像用于安全扫描（与 build job 并行）
+      - uses: docker/build-push-action@v6
         with:
-          name: docker-image-${{ github.sha }}
-          path: /tmp
-
-      - name: Load image
-        run: docker load -i /tmp/image.tar
+          context: .
+          file: deploy/agent/Dockerfile
+          push: false
+          platforms: linux/amd64
+          cache-from: |
+            type=gha,scope=build-${{ github.ref_name }}
+            type=gha,scope=build-main
+          tags: ${{ env.IMAGE_NAME }}:scan
+          load: true
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:build
+          image-ref: ${{ env.IMAGE_NAME }}:scan
           format: 'sarif'
           output: 'trivy-results.sarif'
           exit-code: '1'
@@ -217,16 +231,16 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-  # 5b. 多平台构建并推送（与安全扫描并行）
+  # ========== 阶段 4: 推送镜像（需要 build 和 security-scan 都通过）==========
   push:
-    name: Push Multi-Platform Image
+    name: Push Image
     runs-on: ubuntu-latest
-    needs: [build, clippy, test]
+    needs: [build, security-scan]
+    # 关键：必须 build 成功，且 security-scan 通过（或被跳过）
     if: |
       always() &&
       needs.build.result == 'success' &&
-      (needs.clippy.result == 'success' || needs.clippy.result == 'skipped') &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped' || inputs.skip_tests) &&
+      (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped' || inputs.skip_security_scan) &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
@@ -258,6 +272,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=dev,enable=${{ github.ref_name == 'dev' }}
 
+      # 重新构建多平台并推送（利用缓存，很快）
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -271,74 +286,64 @@ jobs:
             type=gha,scope=build-${{ github.ref_name }}
             type=gha,scope=build-main
 
-  # ========== 阶段 6: 最终发布确认（安全扫描通过后标记）==========
-  # 这个 job 用于在 UI 上显示发布是否真正完成
-  release-confirm:
-    name: Release Confirmation
-    runs-on: ubuntu-latest
-    needs: [push, security-scan]
-    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    steps:
-      - name: Check release status
-        run: |
-          echo "## 发布状态报告" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| 步骤 | 状态 |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| 镜像构建推送 | ${{ needs.push.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 安全扫描 | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # 检查是否应该标记为正式发布
-          if [[ "${{ needs.push.result }}" == "success" ]]; then
-            if [[ "${{ needs.security-scan.result }}" == "success" ]] || [[ "${{ inputs.skip_security_scan }}" == "true" ]]; then
-              echo "✅ **镜像已发布**" >> $GITHUB_STEP_SUMMARY
-              if [[ "${{ needs.security-scan.result }}" == "skipped" ]]; then
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo "⚠️ 注意：安全扫描被跳过" >> $GITHUB_STEP_SUMMARY
-              fi
-            else
-              echo "⚠️ **镜像已推送，但安全扫描未通过**" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "镜像已推送到仓库，但存在安全漏洞，请检查并修复！" >> $GITHUB_STEP_SUMMARY
-            fi
-          else
-            echo "❌ **镜像推送失败**" >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-
   # ========== 质量门禁汇总报告 ==========
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: [fmt, clippy, test, security-scan]
+    needs: [fmt, clippy, test, security-scan, push]
     if: always()
     steps:
       - name: Report Status
         run: |
           echo "## 质量门禁报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| 检查项 | 状态 | 阻塞发布 |" >> $GITHUB_STEP_SUMMARY
+          echo "### 阶段 1: 代码检查" >> $GITHUB_STEP_SUMMARY
+          echo "| 检查项 | 状态 | 阻断构建 |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|------|----------|" >> $GITHUB_STEP_SUMMARY
           echo "| Format Check | ${{ needs.fmt.result }} | ❌ 否 |" >> $GITHUB_STEP_SUMMARY
           echo "| Clippy Check | ${{ needs.clippy.result }} | ✅ 是 |" >> $GITHUB_STEP_SUMMARY
           echo "| Tests | ${{ needs.test.result }} | ✅ 是（可跳过） |" >> $GITHUB_STEP_SUMMARY
-          echo "| Security Scan | ${{ needs.security-scan.result }} | ⚠️ 发布后检查 |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # 检查是否通过（Format 只做警告，不阻塞）
-          if [[ "${{ needs.clippy.result }}" == "failure" ]] || \
-             [[ "${{ needs.test.result }}" == "failure" && "${{ inputs.skip_tests }}" != "true" ]]; then
-            echo "❌ **质量门禁未通过，构建被阻断**" >> $GITHUB_STEP_SUMMARY
+          echo "### 阶段 2: 构建与安全扫描" >> $GITHUB_STEP_SUMMARY
+          echo "| 检查项 | 状态 | 阻断发布 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result }} | ✅ 是 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }} | ✅ 是（可跳过） |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 阶段 3: 发布" >> $GITHUB_STEP_SUMMARY
+          echo "| 检查项 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Push Image | ${{ needs.push.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # 最终判断
+          FAILED=false
+          
+          if [[ "${{ needs.clippy.result }}" == "failure" ]]; then
+            echo "❌ Clippy 检查失败" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          fi
+          
+          if [[ "${{ needs.test.result }}" == "failure" && "${{ inputs.skip_tests }}" != "true" ]]; then
+            echo "❌ 测试失败" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          fi
+          
+          if [[ "${{ needs.security-scan.result }}" == "failure" && "${{ inputs.skip_security_scan }}" != "true" ]]; then
+            echo "❌ 安全扫描发现漏洞" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          fi
+          
+          if [[ "$FAILED" == "true" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## ❌ 质量门禁未通过" >> $GITHUB_STEP_SUMMARY
             exit 1
           else
-            echo "✅ **质量门禁通过**" >> $GITHUB_STEP_SUMMARY
+            echo "## ✅ 质量门禁通过" >> $GITHUB_STEP_SUMMARY
             if [[ "${{ needs.fmt.result }}" == "failure" ]]; then
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "⚠️ 提示：代码格式检查未通过，建议运行 `cargo fmt` 修复" >> $GITHUB_STEP_SUMMARY
-            fi
-            if [[ "${{ needs.security-scan.result }}" == "failure" && "${{ inputs.skip_security_scan }}" != "true" ]]; then
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "⚠️ 警告：安全扫描发现漏洞，镜像已推送但请尽快修复！" >> $GITHUB_STEP_SUMMARY
             fi
           fi
