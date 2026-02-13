@@ -19,10 +19,12 @@ pub mod tool;
 // 内部模块，不对外暴露
 mod config;
 mod llm;
-mod logger;
 mod matrix;
 mod output;
 mod store;
+
+// 公开日志模块
+pub mod logger;
 
 // 重新导出常用类型
 pub use a2a_client::{A2AClient, AgentNetwork};
