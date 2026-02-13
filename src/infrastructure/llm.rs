@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::tool::{Tool, ToolCall};
+use crate::application::tool::{Tool, ToolCall};
 
 #[derive(Clone)]
 pub struct OpenAIClient {
@@ -120,7 +120,7 @@ impl OpenAIClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tool::{Function, Tool};
+    use crate::application::tool::{Function, Tool};
     use serde_json::json;
 
     #[test]
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn test_message_with_tool_calls() {
-        use crate::tool::{FunctionCall, ToolCall};
+        use crate::application::tool::{FunctionCall, ToolCall};
 
         let tool_call = ToolCall {
             id: "call_123".to_string(),
