@@ -35,6 +35,11 @@ on:
         default: false
         type: boolean
 
+# 关键：当有新的 workflow 运行时，取消正在运行的旧实例
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
@@ -69,7 +74,7 @@ jobs:
               - 'docker-compose.yml'
               - '.github/workflows/ci-cd.yml'
 
-  # ========== 阶段 2: 质量检查（并行，全部通过才能进入下一阶段）==========
+  # ========== 阶段 2: 所有检查并行执行 ==========
   # 2a. Format Check - 不阻断
   fmt:
     name: Format Check
@@ -155,17 +160,13 @@ jobs:
             cargo test --release --features ${{ matrix.features }}
           fi
 
-  # ========== 阶段 3: 构建与安全扫描（并行执行）==========
-  # 3a. 构建镜像
+  # 2d. 构建镜像 - 阻断（构建失败则无法发布）
   build:
     name: Build Image
     runs-on: ubuntu-latest
-    needs: [changes, fmt, clippy, test]
-    # 关键：阻断性检查必须通过才能开始构建
+    needs: changes
     if: |
-      always() &&
-      (needs.clippy.result == 'success' || needs.clippy.result == 'skipped') &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped' || inputs.skip_tests) &&
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
       (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
@@ -188,22 +189,18 @@ jobs:
           path: /tmp/image.tar
           retention-days: 1
 
-  # 3b. 安全扫描 - 与 build 并行，但阻断 push
+  # 2e. 安全扫描 - 阻断
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: [changes, fmt, clippy, test]
-    # 与 build 相同的准入条件，并行执行
+    needs: changes
     if: |
-      always() &&
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
       !inputs.skip_security_scan &&
-      (needs.clippy.result == 'success' || needs.clippy.result == 'skipped') &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped' || inputs.skip_tests) &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      # 单独构建一个镜像用于安全扫描（与 build job 并行）
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -231,15 +228,18 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-  # ========== 阶段 4: 推送镜像（需要 build 和 security-scan 都通过）==========
+  # ========== 阶段 3: 推送镜像（需要所有阻断性检查通过）==========
   push:
     name: Push Image
     runs-on: ubuntu-latest
-    needs: [build, security-scan]
-    # 关键：必须 build 成功，且 security-scan 通过（或被跳过）
+    # 依赖所有阶段2的任务
+    needs: [fmt, clippy, test, build, security-scan]
+    # 关键：所有阻断性检查必须通过
     if: |
       always() &&
-      needs.build.result == 'success' &&
+      (needs.clippy.result == 'success' || needs.clippy.result == 'skipped') &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped' || inputs.skip_tests) &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
       (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped' || inputs.skip_security_scan) &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
@@ -272,7 +272,6 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=dev,enable=${{ github.ref_name == 'dev' }}
 
-      # 重新构建多平台并推送（利用缓存，很快）
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -290,28 +289,22 @@ jobs:
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: [fmt, clippy, test, security-scan, push]
+    needs: [fmt, clippy, test, build, security-scan, push]
     if: always()
     steps:
       - name: Report Status
         run: |
           echo "## 质量门禁报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 阶段 1: 代码检查" >> $GITHUB_STEP_SUMMARY
-          echo "| 检查项 | 状态 | 阻断构建 |" >> $GITHUB_STEP_SUMMARY
+          echo "### 阶段 2: 并行检查" >> $GITHUB_STEP_SUMMARY
+          echo "| 检查项 | 状态 | 阻断发布 |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|------|----------|" >> $GITHUB_STEP_SUMMARY
           echo "| Format Check | ${{ needs.fmt.result }} | ❌ 否 |" >> $GITHUB_STEP_SUMMARY
           echo "| Clippy Check | ${{ needs.clippy.result }} | ✅ 是 |" >> $GITHUB_STEP_SUMMARY
           echo "| Tests | ${{ needs.test.result }} | ✅ 是（可跳过） |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          echo "### 阶段 2: 构建与安全扫描" >> $GITHUB_STEP_SUMMARY
-          echo "| 检查项 | 状态 | 阻断发布 |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|------|----------|" >> $GITHUB_STEP_SUMMARY
           echo "| Build | ${{ needs.build.result }} | ✅ 是 |" >> $GITHUB_STEP_SUMMARY
           echo "| Security Scan | ${{ needs.security-scan.result }} | ✅ 是（可跳过） |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
           echo "### 阶段 3: 发布" >> $GITHUB_STEP_SUMMARY
           echo "| 检查项 | 状态 |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
@@ -331,6 +324,11 @@ jobs:
             FAILED=true
           fi
           
+          if [[ "${{ needs.build.result }}" == "failure" ]]; then
+            echo "❌ 镜像构建失败" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          fi
+          
           if [[ "${{ needs.security-scan.result }}" == "failure" && "${{ inputs.skip_security_scan }}" != "true" ]]; then
             echo "❌ 安全扫描发现漏洞" >> $GITHUB_STEP_SUMMARY
             FAILED=true
@@ -338,7 +336,7 @@ jobs:
           
           if [[ "$FAILED" == "true" ]]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "## ❌ 质量门禁未通过" >> $GITHUB_STEP_SUMMARY
+            echo "## ❌ 质量门禁未通过，发布被阻断" >> $GITHUB_STEP_SUMMARY
             exit 1
           else
             echo "## ✅ 质量门禁通过" >> $GITHUB_STEP_SUMMARY
