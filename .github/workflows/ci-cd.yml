@@ -179,10 +179,28 @@ jobs:
           toolchain: ${{ env.RUST_MSRV }}
           targets: x86_64-unknown-linux-musl
 
-      # 安装 musl 工具链
+      # 缓存并安装 musl 工具链
+      - name: Cache musl tools
+        uses: actions/cache@v4
+        id: musl-cache
+        with:
+          path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+          key: ${{ runner.os }}-apt-musl-${{ hashFiles('.github/workflows/ci-cd.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-musl-
+
       - name: Install musl tools
+        if: steps.musl-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Install musl tools (from cache)
+        if: steps.musl-cache.outputs.cache-hit == 'true'
+        run: |
+          # 使用缓存的包列表直接安装，无需更新
           sudo apt-get install -y musl-tools
 
       # 方案2: 优化的 rust-cache（musl-specific key + 显式目录）
