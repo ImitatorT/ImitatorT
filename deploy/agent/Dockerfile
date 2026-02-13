@@ -8,13 +8,17 @@ ENV CC_x86_64_unknown_linux_musl=/usr/bin/x86_64-alpine-linux-musl-gcc \
     CC=/usr/bin/x86_64-alpine-linux-musl-gcc \
     CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=/usr/bin/x86_64-alpine-linux-musl-gcc
 WORKDIR /app
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY examples ./examples
 RUN rustup target add x86_64-unknown-linux-musl
 RUN cargo build --release --target x86_64-unknown-linux-musl
+RUN cargo build --release --target x86_64-unknown-linux-musl --example werewolf
 RUN upx --best --lzma /app/target/x86_64-unknown-linux-musl/release/imitatort
+RUN upx --best --lzma /app/target/x86_64-unknown-linux-musl/release/examples/werewolf
 
 FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/imitatort /agent
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/examples/werewolf /werewolf
 ENTRYPOINT ["/agent"]
