@@ -45,7 +45,7 @@ pub use protocol::client::{A2AClient, AgentNetwork};
 pub use protocol::router::{AgentConnector, MessageRouter, RouteTarget};
 pub use protocol::server::{A2AServer, AgentInfo};
 pub use protocol::types::{
-    create_default_agent_card, AgentCard, AgentEndpoints, A2AAgent, A2AMessage, Artifact,
+    create_default_agent_card, A2AAgent, A2AMessage, AgentCard, AgentEndpoints, Artifact,
     MessageContent, Skill, TaskRequest, TaskResult, TextMessageHandler,
 };
 

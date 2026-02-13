@@ -7,7 +7,9 @@ use imitatort_stateless_company::application::tool::{ToolCall, ToolRegistry};
 use imitatort_stateless_company::core::config::{AppConfig, OutputMode};
 use imitatort_stateless_company::core::store::MessageStore;
 use imitatort_stateless_company::infrastructure::llm::{Message, OpenAIClient};
-use imitatort_stateless_company::infrastructure::logger::{LogConfig, RequestContext, Sanitizer, Timer};
+use imitatort_stateless_company::infrastructure::logger::{
+    LogConfig, RequestContext, Sanitizer, Timer,
+};
 use tracing::{debug, error, info, info_span, Instrument};
 
 #[tokio::main]
@@ -131,13 +133,22 @@ async fn create_output(cfg: &AppConfig, store: MessageStore) -> Result<Box<dyn O
         }
         OutputMode::Cli => OutputFactory::create_cli(store, cfg.cli_echo),
         OutputMode::A2A => {
-            let card = imitatort_stateless_company::protocol::types::create_default_agent_card(&cfg.agent_id, &cfg.agent_name);
-            let agent = Arc::new(imitatort_stateless_company::protocol::types::A2AAgent::new(card));
+            let card = imitatort_stateless_company::protocol::types::create_default_agent_card(
+                &cfg.agent_id,
+                &cfg.agent_name,
+            );
+            let agent = Arc::new(imitatort_stateless_company::protocol::types::A2AAgent::new(
+                card,
+            ));
 
             // 注册 Peer agents
             if let Some(ref peers) = cfg.a2a_peer_agents {
                 for peer_id in peers.split(',') {
-                    let peer_card = imitatort_stateless_company::protocol::types::create_default_agent_card(peer_id.trim(), peer_id.trim());
+                    let peer_card =
+                        imitatort_stateless_company::protocol::types::create_default_agent_card(
+                            peer_id.trim(),
+                            peer_id.trim(),
+                        );
                     agent.register_peer(peer_card).await;
                 }
             }
@@ -151,13 +162,22 @@ async fn create_output(cfg: &AppConfig, store: MessageStore) -> Result<Box<dyn O
                 .context("Matrix configuration missing for hybrid mode")?;
 
             // 创建 A2A Agent
-            let card = imitatort_stateless_company::protocol::types::create_default_agent_card(&cfg.agent_id, &cfg.agent_name);
-            let agent = Arc::new(imitatort_stateless_company::protocol::types::A2AAgent::new(card));
+            let card = imitatort_stateless_company::protocol::types::create_default_agent_card(
+                &cfg.agent_id,
+                &cfg.agent_name,
+            );
+            let agent = Arc::new(imitatort_stateless_company::protocol::types::A2AAgent::new(
+                card,
+            ));
 
             // 注册 Peer agents
             if let Some(ref peers) = cfg.a2a_peer_agents {
                 for peer_id in peers.split(',') {
-                    let peer_card = imitatort_stateless_company::protocol::types::create_default_agent_card(peer_id.trim(), peer_id.trim());
+                    let peer_card =
+                        imitatort_stateless_company::protocol::types::create_default_agent_card(
+                            peer_id.trim(),
+                            peer_id.trim(),
+                        );
                     agent.register_peer(peer_card).await;
                 }
             }

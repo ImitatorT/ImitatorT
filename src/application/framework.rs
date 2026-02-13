@@ -62,7 +62,11 @@ impl VirtualCompany {
     }
 
     /// 连接到远程 Agent
-    pub async fn connect_to_remote(&self, agent_id: &str, endpoint: &str) -> Result<AgentConnector> {
+    pub async fn connect_to_remote(
+        &self,
+        agent_id: &str,
+        endpoint: &str,
+    ) -> Result<AgentConnector> {
         let router = MessageRouter::new(self.message_bus.clone());
         let connector = router.connect_to(agent_id, endpoint).await?;
         Ok(connector)
