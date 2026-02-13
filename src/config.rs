@@ -38,10 +38,14 @@ mod tests {
         // Test that default values are set correctly
         let config = AppConfig::parse_from([
             "test",
-            "--matrix-homeserver", "http://localhost:8008",
-            "--matrix-access-token", "test_token",
-            "--matrix-room-id", "!test:matrix.org",
-            "--openai-api-key", "test_key",
+            "--matrix-homeserver",
+            "http://localhost:8008",
+            "--matrix-access-token",
+            "test_token",
+            "--matrix-room-id",
+            "!test:matrix.org",
+            "--openai-api-key",
+            "test_key",
         ]);
 
         assert_eq!(config.matrix_homeserver, "http://localhost:8008");
@@ -57,13 +61,20 @@ mod tests {
     fn test_config_custom_values() {
         let config = AppConfig::parse_from([
             "test",
-            "--matrix-homeserver", "https://matrix.example.com",
-            "--matrix-access-token", "custom_token",
-            "--matrix-room-id", "!room:example.com",
-            "--openai-api-key", "sk-custom",
-            "--openai-model", "gpt-4",
-            "--context-limit", "100",
-            "--system-prompt", "Custom prompt",
+            "--matrix-homeserver",
+            "https://matrix.example.com",
+            "--matrix-access-token",
+            "custom_token",
+            "--matrix-room-id",
+            "!room:example.com",
+            "--openai-api-key",
+            "sk-custom",
+            "--openai-model",
+            "gpt-4",
+            "--context-limit",
+            "100",
+            "--system-prompt",
+            "Custom prompt",
         ]);
 
         assert_eq!(config.matrix_homeserver, "https://matrix.example.com");
@@ -79,10 +90,14 @@ mod tests {
     fn test_config_debug() {
         let config = AppConfig::parse_from([
             "test",
-            "--matrix-homeserver", "http://localhost:8008",
-            "--matrix-access-token", "test_token",
-            "--matrix-room-id", "!test:matrix.org",
-            "--openai-api-key", "test_key",
+            "--matrix-homeserver",
+            "http://localhost:8008",
+            "--matrix-access-token",
+            "test_token",
+            "--matrix-room-id",
+            "!test:matrix.org",
+            "--openai-api-key",
+            "test_key",
         ]);
 
         let debug_str = format!("{:?}", config);
@@ -94,10 +109,14 @@ mod tests {
     fn test_config_clone() {
         let config = AppConfig::parse_from([
             "test",
-            "--matrix-homeserver", "http://localhost:8008",
-            "--matrix-access-token", "test_token",
-            "--matrix-room-id", "!test:matrix.org",
-            "--openai-api-key", "test_key",
+            "--matrix-homeserver",
+            "http://localhost:8008",
+            "--matrix-access-token",
+            "test_token",
+            "--matrix-room-id",
+            "!test:matrix.org",
+            "--openai-api-key",
+            "test_key",
         ]);
 
         let cloned = config.clone();

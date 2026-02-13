@@ -115,9 +115,7 @@ async fn execute_shell_command(command: &str) -> Result<String> {
     } else {
         Ok(format!(
             "命令执行失败 (exit code: {}):\nstdout: {}\nstderr: {}",
-            output.status,
-            stdout,
-            stderr
+            output.status, stdout, stderr
         ))
     }
 }
@@ -133,22 +131,23 @@ async fn fetch_url_content(url: &str) -> Result<String> {
         .build()
         .context("创建 HTTP 客户端失败")?;
 
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .context("请求失败")?;
+    let response = client.get(url).send().await.context("请求失败")?;
 
     let status = response.status();
-    let text = response
-        .text()
-        .await
-        .context("读取响应内容失败")?;
+    let text = response.text().await.context("读取响应内容失败")?;
 
     if status.is_success() {
-        Ok(format!("URL 内容 ({} 字符):\n{}", text.len(), text.chars().take(2000).collect::<String>()))
+        Ok(format!(
+            "URL 内容 ({} 字符):\n{}",
+            text.len(),
+            text.chars().take(2000).collect::<String>()
+        ))
     } else {
-        Ok(format!("请求失败，状态码: {}\n响应: {}", status, text.chars().take(500).collect::<String>()))
+        Ok(format!(
+            "请求失败，状态码: {}\n响应: {}",
+            status,
+            text.chars().take(500).collect::<String>()
+        ))
     }
 }
 
@@ -160,11 +159,11 @@ mod tests {
     fn test_get_tools() {
         let tools = ToolRegistry::get_tools();
         assert_eq!(tools.len(), 2);
-        
+
         // Check execute_command tool
         assert_eq!(tools[0].function.name, "execute_command");
         assert_eq!(tools[0].r#type, "function");
-        
+
         // Check fetch_url tool
         assert_eq!(tools[1].function.name, "fetch_url");
         assert_eq!(tools[1].r#type, "function");
@@ -174,7 +173,7 @@ mod tests {
     async fn test_execute_shell_command_empty() {
         let result = execute_shell_command("").await.unwrap();
         assert_eq!(result, "命令不能为空");
-        
+
         let result = execute_shell_command("   ").await.unwrap();
         assert_eq!(result, "命令不能为空");
     }
@@ -189,7 +188,9 @@ mod tests {
     #[tokio::test]
     async fn test_execute_shell_command_with_stderr() {
         // This command should fail and produce stderr
-        let result = execute_shell_command("ls /nonexistent_directory_12345").await.unwrap();
+        let result = execute_shell_command("ls /nonexistent_directory_12345")
+            .await
+            .unwrap();
         assert!(result.contains("命令执行失败"));
     }
 
@@ -197,7 +198,7 @@ mod tests {
     async fn test_fetch_url_content_empty() {
         let result = fetch_url_content("").await.unwrap();
         assert_eq!(result, "URL 不能为空");
-        
+
         let result = fetch_url_content("   ").await.unwrap();
         assert_eq!(result, "URL 不能为空");
     }
@@ -212,7 +213,7 @@ mod tests {
                 arguments: "{}".to_string(),
             },
         };
-        
+
         let result = ToolRegistry::execute(&tool_call).await.unwrap();
         assert!(result.contains("未知工具"));
         assert!(result.contains("unknown_tool"));
@@ -228,7 +229,7 @@ mod tests {
                 arguments: r#"{"command": "echo test123"}"#.to_string(),
             },
         };
-        
+
         let result = ToolRegistry::execute(&tool_call).await.unwrap();
         assert!(result.contains("test123"));
     }
@@ -243,7 +244,7 @@ mod tests {
                 arguments: "invalid json".to_string(),
             },
         };
-        
+
         let result = ToolRegistry::execute(&tool_call).await;
         assert!(result.is_err());
     }

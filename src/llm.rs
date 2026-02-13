@@ -75,8 +75,12 @@ impl OpenAIClient {
             .await
             .context("failed to parse openai response")?;
 
-        let choice = res.choices.into_iter().next().context("empty response from openai")?;
-        
+        let choice = res
+            .choices
+            .into_iter()
+            .next()
+            .context("empty response from openai")?;
+
         Ok((choice.message, choice.finish_reason))
     }
 
@@ -98,7 +102,7 @@ impl OpenAIClient {
         ];
 
         let (message, _) = self.chat(messages, None).await?;
-        
+
         Ok(message.content.unwrap_or_else(|| "(空响应)".to_string()))
     }
 }
@@ -111,10 +115,7 @@ mod tests {
 
     #[test]
     fn test_openai_client_new() {
-        let client = OpenAIClient::new(
-            "test-api-key".to_string(),
-            "gpt-4o-mini".to_string(),
-        );
+        let client = OpenAIClient::new("test-api-key".to_string(), "gpt-4o-mini".to_string());
         assert_eq!(client.api_key, "test-api-key");
         assert_eq!(client.model, "gpt-4o-mini");
     }
@@ -127,7 +128,7 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
         };
-        
+
         let json_str = serde_json::to_string(&msg).unwrap();
         assert!(json_str.contains("user"));
         assert!(json_str.contains("Hello"));
@@ -144,7 +145,7 @@ mod tests {
     #[test]
     fn test_message_with_tool_calls() {
         use crate::tool::{FunctionCall, ToolCall};
-        
+
         let tool_call = ToolCall {
             id: "call_123".to_string(),
             r#type: "function".to_string(),
@@ -153,14 +154,14 @@ mod tests {
                 arguments: r#"{"command": "ls"}"#.to_string(),
             },
         };
-        
+
         let msg = Message {
             role: "assistant".to_string(),
             content: None,
             tool_calls: Some(vec![tool_call]),
             tool_call_id: None,
         };
-        
+
         let json_str = serde_json::to_string(&msg).unwrap();
         assert!(json_str.contains("tool_calls"));
         assert!(json_str.contains("execute_command"));
@@ -176,7 +177,7 @@ mod tests {
                 parameters: json!({"type": "object"}),
             },
         };
-        
+
         let req = ChatRequest {
             model: "gpt-4o-mini".to_string(),
             messages: vec![Message {
@@ -187,7 +188,7 @@ mod tests {
             }],
             tools: Some(vec![tool]),
         };
-        
+
         let json_str = serde_json::to_string(&req).unwrap();
         assert!(json_str.contains("gpt-4o-mini"));
         assert!(json_str.contains("tools"));
@@ -205,7 +206,7 @@ mod tests {
             }],
             tools: None,
         };
-        
+
         let json_str = serde_json::to_string(&req).unwrap();
         // When tools is None, it should be skipped
         assert!(!json_str.contains("tools"));
@@ -224,7 +225,7 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let resp: ChatResponse = serde_json::from_str(json_str).unwrap();
         assert_eq!(resp.choices.len(), 1);
         assert_eq!(resp.choices[0].message.role, "assistant");

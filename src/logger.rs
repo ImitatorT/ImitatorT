@@ -109,8 +109,7 @@ pub enum TimeFormat {
 /// init(config);
 /// ```
 pub fn init(config: LogConfig) {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let subscriber = tracing_subscriber::registry().with(env_filter);
 
@@ -361,11 +360,7 @@ where
                     write!(writer, "{} ", chrono::Local::now().to_rfc3339())?;
                 }
                 TimeFormat::Custom(format) => {
-                    write!(
-                        writer,
-                        "{} ",
-                        chrono::Local::now().format(format)
-                    )?;
+                    write!(writer, "{} ", chrono::Local::now().format(format))?;
                 }
             }
         }
@@ -375,8 +370,8 @@ where
         if self.config.enable_color {
             match *level {
                 Level::ERROR => write!(writer, "\x1b[31m[ERROR]\x1b[0m ")?, // 红色
-                Level::WARN => write!(writer, "\x1b[33m[WARN]\x1b[0m ")?,  // 黄色
-                Level::INFO => write!(writer, "\x1b[32m[INFO]\x1b[0m ")?,  // 绿色
+                Level::WARN => write!(writer, "\x1b[33m[WARN]\x1b[0m ")?,   // 黄色
+                Level::INFO => write!(writer, "\x1b[32m[INFO]\x1b[0m ")?,   // 绿色
                 Level::DEBUG => write!(writer, "\x1b[34m[DEBUG]\x1b[0m ")?, // 蓝色
                 Level::TRACE => write!(writer, "\x1b[35m[TRACE]\x1b[0m ")?, // 紫色
             }
@@ -488,18 +483,9 @@ mod tests {
 
     #[test]
     fn test_log_format_parse() {
-        assert_eq!(
-            "pretty".parse::<LogFormat>().unwrap(),
-            LogFormat::Pretty
-        );
-        assert_eq!(
-            "compact".parse::<LogFormat>().unwrap(),
-            LogFormat::Compact
-        );
-        assert_eq!(
-            "json".parse::<LogFormat>().unwrap(),
-            LogFormat::Json
-        );
+        assert_eq!("pretty".parse::<LogFormat>().unwrap(), LogFormat::Pretty);
+        assert_eq!("compact".parse::<LogFormat>().unwrap(), LogFormat::Compact);
+        assert_eq!("json".parse::<LogFormat>().unwrap(), LogFormat::Json);
         assert!("invalid".parse::<LogFormat>().is_err());
     }
 
@@ -515,7 +501,10 @@ mod tests {
         let ctx_with_meta = RequestContext::new()
             .with_metadata("key1", "value1")
             .with_metadata("key2", "value2");
-        assert_eq!(ctx_with_meta.metadata.get("key1"), Some(&"value1".to_string()));
+        assert_eq!(
+            ctx_with_meta.metadata.get("key1"),
+            Some(&"value1".to_string())
+        );
     }
 
     #[test]

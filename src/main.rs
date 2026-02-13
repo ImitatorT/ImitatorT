@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(logger::LogFormat::Pretty);
-    
+
     let log_config = LogConfig {
         format: log_format,
         enable_color: true,
@@ -35,12 +35,13 @@ async fn main() -> Result<()> {
     logger::init(log_config);
 
     // 创建请求上下文，用于追踪本次执行
-    let request_ctx = RequestContext::new()
-        .with_metadata("version", env!("CARGO_PKG_VERSION"));
-    
+    let request_ctx = RequestContext::new().with_metadata("version", env!("CARGO_PKG_VERSION"));
+
     // 在 span 中执行主逻辑，自动关联 request_id
-    let result = run(request_ctx.clone()).instrument(info_span!("request", request_id = %request_ctx.request_id)).await;
-    
+    let result = run(request_ctx.clone())
+        .instrument(info_span!("request", request_id = %request_ctx.request_id))
+        .await;
+
     // 记录执行时间
     info!(
         target: "metrics",
@@ -48,15 +49,15 @@ async fn main() -> Result<()> {
         total_duration_ms = %format!("{:.2}", request_ctx.elapsed().as_secs_f64() * 1000.0),
         "request completed"
     );
-    
+
     result
 }
 
 async fn run(request_ctx: RequestContext) -> Result<()> {
     let _timer = Timer::new("main_execution").with_context(&request_ctx);
-    
+
     let cfg = AppConfig::parse();
-    
+
     info!(
         target: "config",
         matrix_homeserver = %cfg.matrix_homeserver,
@@ -67,7 +68,7 @@ async fn run(request_ctx: RequestContext) -> Result<()> {
         context_limit = cfg.context_limit,
         "configuration loaded"
     );
-    
+
     let matrix = MatrixClient::new(
         cfg.matrix_homeserver.clone(),
         cfg.matrix_access_token.clone(),
@@ -101,7 +102,7 @@ async fn run(request_ctx: RequestContext) -> Result<()> {
     // Get available tools
     let tools = ToolRegistry::get_tools();
     let _tools_enabled = !tools.is_empty();
-    
+
     info!("tools loaded: {}", tools.len());
 
     // First LLM call with tools
@@ -143,7 +144,9 @@ async fn run(request_ctx: RequestContext) -> Result<()> {
     }
 
     // Send final response to Matrix
-    let answer = message.content.unwrap_or_else(|| "(无响应内容)".to_string());
+    let answer = message
+        .content
+        .unwrap_or_else(|| "(无响应内容)".to_string());
     matrix
         .send_text_message(&cfg.matrix_room_id, &answer)
         .await?;
@@ -160,7 +163,7 @@ async fn execute_tool(tool_call: &ToolCall) -> String {
         tool_id = %tool_call.id,
         "executing tool"
     );
-    
+
     match ToolRegistry::execute(tool_call).await {
         Ok(result) => {
             info!(

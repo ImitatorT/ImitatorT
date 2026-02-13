@@ -139,12 +139,18 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let resp: MessagesResponse = serde_json::from_str(json_str).unwrap();
         assert_eq!(resp.chunk.len(), 2);
         assert_eq!(resp.chunk[0].sender, Some("@user:example.com".to_string()));
-        assert_eq!(resp.chunk[0].content.as_ref().unwrap().body, Some("Hello world".to_string()));
-        assert_eq!(resp.chunk[0].content.as_ref().unwrap().msgtype, Some("m.text".to_string()));
+        assert_eq!(
+            resp.chunk[0].content.as_ref().unwrap().body,
+            Some("Hello world".to_string())
+        );
+        assert_eq!(
+            resp.chunk[0].content.as_ref().unwrap().msgtype,
+            Some("m.text".to_string())
+        );
     }
 
     #[test]
@@ -160,11 +166,14 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let resp: MessagesResponse = serde_json::from_str(json_str).unwrap();
         assert_eq!(resp.chunk.len(), 1);
         // Non-text messages should be filtered out in latest_context
-        assert_eq!(resp.chunk[0].content.as_ref().unwrap().msgtype, Some("m.image".to_string()));
+        assert_eq!(
+            resp.chunk[0].content.as_ref().unwrap().msgtype,
+            Some("m.image".to_string())
+        );
     }
 
     #[test]
