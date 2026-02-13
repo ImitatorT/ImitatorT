@@ -299,6 +299,75 @@ GitHub Actions 工作流 `.github/workflows/docker-publish.yml`：
 - 扫描结果上传到 GitHub Security tab
 - `CRITICAL` 和 `HIGH` 级别漏洞会导致构建失败
 
+## 服务器部署流程（重要）
+
+### 🚫 严禁在服务器上本地构建
+
+**绝对禁止**在服务器（107.173.156.228）上执行以下操作：
+- 安装 Rust/Cargo 环境
+- 运行 `cargo build` 或 `cargo run`
+- 运行 `docker build` 构建镜像
+- 任何其他形式的本地编译或构建操作
+
+**原因**：
+1. 服务器资源有限（1GB RAM），构建会耗尽内存
+2. 构建过程可能引入安全风险
+3. 无法保证构建环境的一致性
+4. 违反"计算与状态分离"的设计原则
+
+### ✅ 正确的部署流程
+
+所有部署必须通过 **GitHub Actions CI/CD** 完成：
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ 本地开发    │────→│  push 到 dev    │────→│ GitHub Actions  │
+│ 修改代码    │     │  或 main 分支   │     │ 自动构建镜像    │
+└─────────────┘     └─────────────────┘     └─────────────────┘
+                                                    │
+                                                    ▼
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ 运行部署    │←────│  服务器执行     │←────│ 镜像推送到      │
+│ 脚本测试    │     │  ./deploy/      │     │ GHCR 仓库       │
+│             │     │  one_click_     │     │                 │
+│             │     │  deploy.sh      │     │                 │
+└─────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+### 部署步骤
+
+1. **本地修改代码**并测试
+2. **Push 到 GitHub**：
+   ```bash
+   git add .
+   git commit -m "feat: xxx"
+   git push origin dev  # 或 main
+   ```
+3. **等待 GitHub Actions 完成**：
+   - 访问 `https://github.com/zhengui666/ImitatorT/actions`
+   - 确认 `build-and-push` job 成功
+4. **在服务器上更新部署**：
+   ```bash
+   ssh zzy@107.173.156.228
+   cd /home/zzy/ImitatorT
+   git pull
+   ./deploy/one_click_deploy.sh
+   ```
+
+### 狼人杀游戏部署
+
+狼人杀游戏已打包在镜像中（路径 `/werewolf`），通过 docker-compose 启动：
+
+```bash
+# 启动狼人杀服务（使用已构建的镜像）
+docker compose up -d werewolf
+
+# 查看日志
+docker logs -f werewolf
+```
+
+**注意**：狼人杀服务依赖 LLM 服务（litellm），请确保 `.env` 中的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL` 配置正确。
+
 ## 代码风格与约定
 
 - 使用标准 Rust 格式化：`cargo fmt`
