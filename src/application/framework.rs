@@ -21,7 +21,8 @@ pub struct VirtualCompany {
     agent_manager: AgentManager,
     /// 消息总线
     message_bus: Arc<MessageBus>,
-    /// A2A 服务端
+    /// A2A 服务端（当前在后台运行，不存储实例）
+    #[allow(dead_code)]
     server: Option<A2AServer>,
     /// 消息路由器
     router: MessageRouter,
@@ -151,7 +152,8 @@ impl AppBuilder {
         let mut company = VirtualCompany::new(self.local_endpoint);
         if let Some(bind_addr) = self.bind_addr {
             // 服务器在后台运行，不阻塞主流程
-            let _handle = company.start_server(bind_addr).await?;
+            #[allow(unused_variables)]
+            let handle = company.start_server(bind_addr).await?;
         }
         Ok(company)
     }
