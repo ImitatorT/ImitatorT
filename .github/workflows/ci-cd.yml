@@ -236,7 +236,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ github.sha }}
-          path: dist/
+          path: .
 
       - name: Verify artifacts
         run: |
@@ -349,7 +349,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ github.sha }}
-          path: dist/
+          path: .
 
       - name: Build and push
         uses: docker/build-push-action@v6
