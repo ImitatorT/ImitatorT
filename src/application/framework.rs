@@ -137,10 +137,27 @@ pub struct AppBuilder {
 
 impl AppBuilder {
     /// 创建新的构建器
+    /// 
+    /// # 示例
+    /// ```
+    /// // 不带参数使用默认端点
+    /// let builder = AppBuilder::new();
+    /// 
+    /// // 带端点参数
+    /// let builder = AppBuilder::new_with_endpoint("http://localhost:8080");
+    /// ```
     pub fn new() -> Self {
         Self {
             bind_addr: None,
             local_endpoint: "http://localhost:8080".to_string(),
+        }
+    }
+
+    /// 创建新的构建器（带端点）
+    pub fn new_with_endpoint(endpoint: impl Into<String>) -> Self {
+        Self {
+            bind_addr: None,
+            local_endpoint: endpoint.into(),
         }
     }
 

@@ -17,43 +17,38 @@ fn test_virtual_company_local_endpoint() {
 
 #[test]
 fn test_app_builder_creation() {
-    let builder = AppBuilder::new("http://localhost:8080");
+    let builder = AppBuilder::new_with_endpoint("http://localhost:8080");
     // Builder is created successfully
 }
 
 #[test]
 fn test_app_builder_with_bind() {
-    let builder = AppBuilder::new("http://localhost:8080")
-        .bind("0.0.0.0:8080".parse().unwrap());
+    let builder = AppBuilder::new_with_endpoint("http://localhost:8080")
+        .with_server("0.0.0.0:8080".parse().unwrap());
 
     // Builder with bind address is created successfully
 }
 
 #[test]
 fn test_app_builder_with_seed() {
-    let builder = AppBuilder::new("http://localhost:8080")
-        .seed("http://seed1:8080")
-        .seed("http://seed2:8080");
+    // Note: seed 方法已移除，使用 register_remote_agent 替代
+    let builder = AppBuilder::new_with_endpoint("http://localhost:8080");
 
     // Builder with seeds is created successfully
 }
 
 #[test]
 fn test_app_builder_chaining() {
-    let builder = AppBuilder::new("http://localhost:8080")
-        .bind("0.0.0.0:8080".parse().unwrap())
-        .seed("http://seed1:8080")
-        .seed("http://seed2:8080");
+    let builder = AppBuilder::new_with_endpoint("http://localhost:8080")
+        .with_server("0.0.0.0:8080".parse().unwrap());
 
     // Builder with all options is created successfully
 }
 
 #[test]
 fn test_app_builder_multiple_seeds() {
-    let builder = AppBuilder::new("http://localhost:8080")
-        .seed("http://seed1:8080")
-        .seed("http://seed2:8080")
-        .seed("http://seed3:8080");
+    // Note: seed 方法已移除
+    let builder = AppBuilder::new_with_endpoint("http://localhost:8080");
 
     // Builder with multiple seeds
 }
