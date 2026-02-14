@@ -120,30 +120,35 @@ jobs:
           mkdir -p ~/.cargo
           printf '[target.x86_64-unknown-linux-musl]\nlinker = "rust-lld"\n' > ~/.cargo/config.toml
 
-      # 检查缓存是否命中（用于后续优化）
-      - name: Check cache status
-        id: cache-check
-        run: |
-          # 检查 target 目录是否存在且非空
-          if [ -d "target/x86_64-unknown-linux-musl/release" ] && [ "$(ls -A target/x86_64-unknown-linux-musl/release 2>/dev/null)" ]; then
-            echo "hit=true" >> $GITHUB_OUTPUT
-            echo "✅ 缓存命中，跳过依赖编译"
-          else
-            echo "hit=false" >> $GITHUB_OUTPUT
-            echo "⏳ 缓存未命中，开始编译"
-          fi
-
-      # 统一的 Rust 缓存
+      # 统一的 Rust 缓存 - 必须先于缓存检查执行
       - uses: Swatinem/rust-cache@v2
+        id: rust-cache
         with:
           key: x86_64-musl-all
           shared-key: "ci-cache-musl-all"
           cache-on-failure: true
           cache-directories: |
+            ~/.cargo/registry
+            ~/.cargo/git
             target/x86_64-unknown-linux-musl/release
             target/x86_64-unknown-linux-musl/release/examples
 
       - uses: mozilla-actions/sccache-action@v0.0.9
+
+      # 检查缓存是否命中（必须在 rust-cache 之后执行）
+      - name: Check cache status
+        id: cache-check
+        run: |
+          echo "Rust Cache Hit: ${{ steps.rust-cache.outputs.cache-hit }}"
+          # 检查 target 目录是否存在且非空
+          if [ -d "target/x86_64-unknown-linux-musl/release" ] && [ "$(ls -A target/x86_64-unknown-linux-musl/release/deps/*.rlib 2>/dev/null | head -1)" ]; then
+            echo "hit=true" >> $GITHUB_OUTPUT
+            echo "✅ 缓存命中，已恢复编译产物"
+            du -sh target/x86_64-unknown-linux-musl/release 2>/dev/null || true
+          else
+            echo "hit=false" >> $GITHUB_OUTPUT
+            echo "⏳ 缓存未命中或部分命中，将使用 sccache 加速编译"
+          fi
 
       # ========== 并行编译优化配置 ==========
       - name: Configure cargo for maximum parallelism
@@ -160,17 +165,26 @@ jobs:
       # 但每个命令内部使用所有 CPU 核心
 
       - name: 1. Clippy check (high parallelism)
-        run: cargo clippy --target x86_64-unknown-linux-musl --all-features -- -D warnings
+        run: |
+          cargo clippy --target x86_64-unknown-linux-musl --all-features -- -D warnings
+          echo "=== SCCache Stats after clippy ==="
+          sccache --show-stats || true
         env:
           RUSTFLAGS: "-C codegen-units=16"  # 更多 codegen units = 更多并行
 
       - name: 2. Test (default) - parallel
-        run: cargo test --release --target x86_64-unknown-linux-musl
+        run: |
+          cargo test --release --target x86_64-unknown-linux-musl
+          echo "=== SCCache Stats after test ==="
+          sccache --show-stats || true
         env:
           RUSTFLAGS: "-C codegen-units=16"
 
       - name: 3. Test (persistent-store) - parallel
-        run: cargo test --release --target x86_64-unknown-linux-musl --features persistent-store
+        run: |
+          cargo test --release --target x86_64-unknown-linux-musl --features persistent-store
+          echo "=== SCCache Stats after test (persistent-store) ==="
+          sccache --show-stats || true
         env:
           RUSTFLAGS: "-C codegen-units=16"
 
@@ -181,6 +195,8 @@ jobs:
           cp target/x86_64-unknown-linux-musl/release/imitatort dist/
           cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/
           ls -la dist/
+          echo "=== SCCache Stats after final build ==="
+          sccache --show-stats || true
         env:
           RUSTFLAGS: "-C codegen-units=16"  # 更多 codegen units = 更多并行
 
