@@ -8,8 +8,9 @@ use imitatort_stateless_company::{VirtualCompany, AppBuilder, AgentConfig};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 1. 创建虚拟公司实例
-    let company = AppBuilder::new("http://localhost:8080")
-        .bind("0.0.0.0:8080".parse()?)
+    let company = AppBuilder::new()
+        .with_endpoint("http://localhost:8080")
+        .with_server("0.0.0.0:8080".parse()?)
         .build().await?;
 
     // 2. 创建 Agent
@@ -131,14 +132,17 @@ Node A (Alice)          Node B (Bob)
 
 ```rust
 // 节点 A（种子节点）
-let company_a = AppBuilder::new("http://node-a:8080")
-    .bind("0.0.0.0:8080".parse()?)
+let company_a = AppBuilder::new()
+    .with_endpoint("http://node-a:8080")
+    .with_server("0.0.0.0:8080".parse()?)
     .build().await?;
 
 // 节点 B（连接到 A）
-let company_b = AppBuilder::new("http://node-b:8081")
-    .bind("0.0.0.0:8081".parse()?)
-    .seed("http://node-a:8080")
+let company_b = AppBuilder::new()
+    .with_endpoint("http://node-b:8081")
+    .with_server("0.0.0.0:8081".parse()?);
+// 注册远程 Agent
+company_b.register_remote_agent("seed-agent", "http://node-a:8080");
     .build().await?;
 ```
 
