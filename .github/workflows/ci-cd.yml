@@ -90,70 +90,16 @@ jobs:
               - '.github/workflows/ci-cd*.yml'
 
   # =============================================================================
-  # 阶段 2: 工具链准备 (Toolchain Setup)
-  # =============================================================================
-  job-setup-toolchain:
-    name: ⚙️ Setup Toolchain
-    runs-on: ubuntu-latest
-    needs: job-detect-changes
-    if: |
-      needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
-      needs.job-detect-changes.outputs.docker-config-changed == 'true' ||
-      github.event_name == 'workflow_dispatch'
-    outputs:
-      musl-cache-hit: ${{ steps.musl-cache.outputs.cache-hit }}
-    steps:
-      - name: Cache musl toolchain
-        id: musl-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            /usr/bin/x86_64-linux-musl-*
-            /usr/bin/musl-*
-            /usr/lib/x86_64-linux-musl
-            /usr/include/x86_64-linux-musl
-          key: ${{ runner.os }}-musl-toolchain-v1
-          restore-keys: |
-            ${{ runner.os }}-musl-toolchain-
-
-      - name: Install musl toolchain
-        if: steps.musl-cache.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools musl-dev binutils lld
-
-      - name: Verify musl installation
-        run: |
-          x86_64-linux-musl-gcc --version
-          musl-gcc --version || true
-
-      - name: Configure Cargo for musl
-        run: |
-          mkdir -p ~/.cargo
-          cat > ~/.cargo/config.toml << 'EOF'
-          [target.x86_64-unknown-linux-musl]
-          linker = "rust-lld"
-          rustflags = ["-C", "target-feature=+crt-static"]
-          
-          [profile.release]
-          lto = true
-          strip = true
-          codegen-units = 16
-          panic = "abort"
-          EOF
-          cat ~/.cargo/config.toml
-
-  # =============================================================================
-  # 阶段 3: 代码质量检查 (Code Quality) - 并行执行
+  # 阶段 2: 代码质量检查 (Code Quality) - 并行执行
   # =============================================================================
   
   # ---------------------------------------------------------------------------
-  # 3.1: 格式检查 (Format Check)
+  # 2.1: 格式检查 (Format Check)
   # ---------------------------------------------------------------------------
   job-check-format:
     name: 🎨 Check Format
     runs-on: ubuntu-latest
-    needs: [job-detect-changes, job-setup-toolchain]
+    needs: job-detect-changes
     continue-on-error: true
     if: |
       needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
@@ -181,12 +127,12 @@ jobs:
           echo '\`\`\`' >> $GITHUB_STEP_SUMMARY
 
   # ---------------------------------------------------------------------------
-  # 3.2: Clippy 静态分析 (Clippy Lint)
+  # 2.2: Clippy 静态分析 (Clippy Lint)
   # ---------------------------------------------------------------------------
   job-check-clippy:
     name: 🔎 Clippy Analysis
     runs-on: ubuntu-latest
-    needs: [job-detect-changes, job-setup-toolchain]
+    needs: job-detect-changes
     if: |
       needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
       github.event_name == 'workflow_dispatch'
@@ -201,18 +147,20 @@ jobs:
           targets: x86_64-unknown-linux-musl
           components: clippy
 
-      - name: Restore musl toolchain
-        uses: actions/cache/restore@v4
+      - name: Cache apt packages
+        uses: actions/cache@v4
         with:
-          path: |
-            /usr/bin/x86_64-linux-musl-*
-            /usr/bin/musl-*
-            /usr/lib/x86_64-linux-musl
-            /usr/include/x86_64-linux-musl
-          key: ${{ runner.os }}-musl-toolchain-v1
-          fail-on-cache-miss: true
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-musl-v1
+          restore-keys: |
+            ${{ runner.os }}-apt-musl-
 
-      - name: Configure Cargo
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools musl-dev binutils lld
+
+      - name: Configure Cargo for musl
         run: |
           mkdir -p ~/.cargo
           cat > ~/.cargo/config.toml << 'EOF'
@@ -238,16 +186,16 @@ jobs:
           sccache --show-stats
 
   # =============================================================================
-  # 阶段 4: 测试矩阵 (Test Matrix) - 并行执行
+  # 阶段 3: 测试矩阵 (Test Matrix) - 并行执行
   # =============================================================================
   
   # ---------------------------------------------------------------------------
-  # 4.1: 默认特性测试 (Test Default Features)
+  # 3.1: 默认特性测试 (Test Default Features)
   # ---------------------------------------------------------------------------
   job-test-default:
     name: 🧪 Test (Default)
     runs-on: ubuntu-latest
-    needs: [job-detect-changes, job-setup-toolchain]
+    needs: job-detect-changes
     if: |
       (needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
        github.event_name == 'workflow_dispatch') &&
@@ -262,18 +210,20 @@ jobs:
           toolchain: ${{ env.RUST_MSRV }}
           targets: x86_64-unknown-linux-musl
 
-      - name: Restore musl toolchain
-        uses: actions/cache/restore@v4
+      - name: Cache apt packages
+        uses: actions/cache@v4
         with:
-          path: |
-            /usr/bin/x86_64-linux-musl-*
-            /usr/bin/musl-*
-            /usr/lib/x86_64-linux-musl
-            /usr/include/x86_64-linux-musl
-          key: ${{ runner.os }}-musl-toolchain-v1
-          fail-on-cache-miss: true
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-musl-v1
+          restore-keys: |
+            ${{ runner.os }}-apt-musl-
 
-      - name: Configure Cargo
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools musl-dev binutils lld
+
+      - name: Configure Cargo for musl
         run: |
           mkdir -p ~/.cargo
           cat > ~/.cargo/config.toml << 'EOF'
@@ -299,12 +249,12 @@ jobs:
           sccache --show-stats
 
   # ---------------------------------------------------------------------------
-  # 4.2: 持久化存储特性测试 (Test Persistent Store)
+  # 3.2: 持久化存储特性测试 (Test Persistent Store)
   # ---------------------------------------------------------------------------
   job-test-persistent:
     name: 🧪 Test (Persistent Store)
     runs-on: ubuntu-latest
-    needs: [job-detect-changes, job-setup-toolchain]
+    needs: job-detect-changes
     if: |
       (needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
        github.event_name == 'workflow_dispatch') &&
@@ -319,18 +269,20 @@ jobs:
           toolchain: ${{ env.RUST_MSRV }}
           targets: x86_64-unknown-linux-musl
 
-      - name: Restore musl toolchain
-        uses: actions/cache/restore@v4
+      - name: Cache apt packages
+        uses: actions/cache@v4
         with:
-          path: |
-            /usr/bin/x86_64-linux-musl-*
-            /usr/bin/musl-*
-            /usr/lib/x86_64-linux-musl
-            /usr/include/x86_64-linux-musl
-          key: ${{ runner.os }}-musl-toolchain-v1
-          fail-on-cache-miss: true
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-musl-v1
+          restore-keys: |
+            ${{ runner.os }}-apt-musl-
 
-      - name: Configure Cargo
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools musl-dev binutils lld
+
+      - name: Configure Cargo for musl
         run: |
           mkdir -p ~/.cargo
           cat > ~/.cargo/config.toml << 'EOF'
@@ -356,12 +308,12 @@ jobs:
           sccache --show-stats
 
   # =============================================================================
-  # 阶段 5: 构建产物 (Build Artifacts)
+  # 阶段 4: 构建产物 (Build Artifacts)
   # =============================================================================
   job-build-binaries:
     name: 🔨 Build Binaries
     runs-on: ubuntu-latest
-    needs: [job-detect-changes, job-setup-toolchain]
+    needs: job-detect-changes
     if: |
       needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
       needs.job-detect-changes.outputs.docker-config-changed == 'true' ||
@@ -378,18 +330,20 @@ jobs:
           toolchain: ${{ env.RUST_MSRV }}
           targets: x86_64-unknown-linux-musl
 
-      - name: Restore musl toolchain
-        uses: actions/cache/restore@v4
+      - name: Cache apt packages
+        uses: actions/cache@v4
         with:
-          path: |
-            /usr/bin/x86_64-linux-musl-*
-            /usr/bin/musl-*
-            /usr/lib/x86_64-linux-musl
-            /usr/include/x86_64-linux-musl
-          key: ${{ runner.os }}-musl-toolchain-v1
-          fail-on-cache-miss: true
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-musl-v1
+          restore-keys: |
+            ${{ runner.os }}-apt-musl-
 
-      - name: Configure Cargo
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools musl-dev binutils lld
+
+      - name: Configure Cargo for musl
         run: |
           mkdir -p ~/.cargo
           cat > ~/.cargo/config.toml << 'EOF'
@@ -453,7 +407,7 @@ jobs:
           if-no-files-found: error
 
   # =============================================================================
-  # 阶段 6: Docker 构建 (Docker Build)
+  # 阶段 5: Docker 构建 (Docker Build)
   # =============================================================================
   job-build-docker:
     name: 🐳 Build Docker Image
@@ -509,7 +463,7 @@ jobs:
           if-no-files-found: error
 
   # =============================================================================
-  # 阶段 7: 安全扫描 (Security Scan)
+  # 阶段 6: 安全扫描 (Security Scan)
   # =============================================================================
   job-scan-security:
     name: 🔒 Security Scan
@@ -551,7 +505,7 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 
   # =============================================================================
-  # 阶段 8: 推送镜像 (Push Image)
+  # 阶段 7: 推送镜像 (Push Image)
   # =============================================================================
   job-push-image:
     name: 📤 Push to Registry
@@ -633,7 +587,7 @@ jobs:
           provenance: false
 
   # =============================================================================
-  # 阶段 9: 质量门禁汇总 (Quality Gate)
+  # 阶段 8: 质量门禁汇总 (Quality Gate)
   # =============================================================================
   job-quality-gate:
     name: 🚦 Quality Gate
@@ -667,7 +621,6 @@ jobs:
           echo "## 🔨 编译与构建" >> $GITHUB_STEP_SUMMARY
           echo "| Job | 状态 | 说明 |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Setup Toolchain | ${{ needs.job-setup-toolchain.result }} | 工具链准备 |" >> $GITHUB_STEP_SUMMARY
           echo "| Clippy Analysis | ${{ needs.job-check-clippy.result }} | 静态代码分析 |" >> $GITHUB_STEP_SUMMARY
           echo "| Build Binaries | ${{ needs.job-build-binaries.result }} | 二进制构建 |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker Build | ${{ needs.job-build-docker.result }} | 镜像构建 |" >> $GITHUB_STEP_SUMMARY
