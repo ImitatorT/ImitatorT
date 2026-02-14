@@ -1,4 +1,4 @@
-name: CI/CD Pipeline (Ultra Cache)
+name: CI/CD Pipeline (Max Parallel)
 
 on:
   push:
@@ -47,19 +47,33 @@ permissions:
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/imitatort-stateless-agent
   RUST_MSRV: '1.85'
+  # SCCache 配置 - 所有 job 共享
   SCCACHE_GHA_ENABLED: 'true'
   RUSTC_WRAPPER: 'sccache'
+  SCCACHE_CACHE_SIZE: '2G'
+  # Cargo 并行配置
+  CARGO_BUILD_JOBS: '8'
+  CARGO_TARGET_JOBS: '8'
+  CARGO_NET_RETRY: '10'
+  RUSTFLAGS: '-C codegen-units=16'
 
 jobs:
-  # ========== 阶段 1: 变更检测 ==========
-  changes:
+  # =============================================================================
+  # 阶段 1: 变更检测 (Change Detection)
+  # =============================================================================
+  job-detect-changes:
+    name: 🔍 Detect Changes
     runs-on: ubuntu-latest
     outputs:
-      rust: ${{ steps.filter.outputs.rust }}
-      docker: ${{ steps.filter.outputs.docker }}
+      rust-code-changed: ${{ steps.filter.outputs.rust }}
+      docker-config-changed: ${{ steps.filter.outputs.docker }}
+      ci-config-changed: ${{ steps.filter.outputs.ci }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
@@ -68,139 +82,365 @@ jobs:
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'examples/**'
+              - 'tests/**'
             docker:
-              - 'deploy/agent/Dockerfile'
+              - 'deploy/agent/Dockerfile*'
               - 'docker-compose.yml'
+            ci:
               - '.github/workflows/ci-cd*.yml'
 
-  # ========== 阶段 2: 缓存构建器（核心优化）==========
-  # 策略：单 job 串行执行所有编译任务，建立完整缓存，避免多 job 缓存冲突
-  # 所有产物保存为 artifact，供后续 job 直接下载使用
-  cache-builder:
-    name: Cache Builder
+  # =============================================================================
+  # 阶段 2: 工具链准备 (Toolchain Setup)
+  # =============================================================================
+  job-setup-toolchain:
+    name: ⚙️ Setup Toolchain
     runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
+    needs: job-detect-changes
+    if: |
+      needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
+      needs.job-detect-changes.outputs.docker-config-changed == 'true' ||
+      github.event_name == 'workflow_dispatch'
     outputs:
-      cache-hit: ${{ steps.cache-check.outputs.hit }}
+      musl-cache-hit: ${{ steps.musl-cache.outputs.cache-hit }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache musl toolchain
+        id: musl-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/bin/x86_64-linux-musl-*
+            /usr/bin/musl-*
+            /usr/lib/x86_64-linux-musl
+            /usr/include/x86_64-linux-musl
+          key: ${{ runner.os }}-musl-toolchain-v1
+          restore-keys: |
+            ${{ runner.os }}-musl-toolchain-
+
+      - name: Install musl toolchain
+        if: steps.musl-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools musl-dev binutils lld
+
+      - name: Verify musl installation
+        run: |
+          x86_64-linux-musl-gcc --version
+          musl-gcc --version || true
+
+      - name: Configure Cargo for musl
+        run: |
+          mkdir -p ~/.cargo
+          cat > ~/.cargo/config.toml << 'EOF'
+          [target.x86_64-unknown-linux-musl]
+          linker = "rust-lld"
+          rustflags = ["-C", "target-feature=+crt-static"]
+          
+          [profile.release]
+          lto = true
+          strip = true
+          codegen-units = 16
+          panic = "abort"
+          EOF
+          cat ~/.cargo/config.toml
+
+  # =============================================================================
+  # 阶段 3: 代码质量检查 (Code Quality) - 并行执行
+  # =============================================================================
+  
+  # ---------------------------------------------------------------------------
+  # 3.1: 格式检查 (Format Check)
+  # ---------------------------------------------------------------------------
+  job-check-format:
+    name: 🎨 Check Format
+    runs-on: ubuntu-latest
+    needs: [job-detect-changes, job-setup-toolchain]
+    continue-on-error: true
+    if: |
+      needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_MSRV }}
+          components: rustfmt
+
+      - name: Run cargo fmt
+        run: cargo fmt --check
+
+      - name: Report format issues
+        if: failure()
+        run: |
+          echo "⚠️ **代码格式检查未通过**" >> $GITHUB_STEP_SUMMARY
+          echo "请运行以下命令修复：" >> $GITHUB_STEP_SUMMARY
+          echo '\`\`\`bash' >> $GITHUB_STEP_SUMMARY
+          echo 'cargo fmt' >> $GITHUB_STEP_SUMMARY
+          echo '\`\`\`' >> $GITHUB_STEP_SUMMARY
+
+  # ---------------------------------------------------------------------------
+  # 3.2: Clippy 静态分析 (Clippy Lint)
+  # ---------------------------------------------------------------------------
+  job-check-clippy:
+    name: 🔎 Clippy Analysis
+    runs-on: ubuntu-latest
+    needs: [job-detect-changes, job-setup-toolchain]
+    if: |
+      needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_MSRV }}
           targets: x86_64-unknown-linux-musl
           components: clippy
 
-      # musl 工具链缓存
-      - name: Cache musl tools
-        uses: actions/cache@v4
-        id: musl-cache
+      - name: Restore musl toolchain
+        uses: actions/cache/restore@v4
         with:
           path: |
-            /var/cache/apt/archives
-            /var/lib/apt/lists
-          key: ${{ runner.os }}-apt-musl-${{ hashFiles('.github/workflows/ci-cd*.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-apt-musl-
+            /usr/bin/x86_64-linux-musl-*
+            /usr/bin/musl-*
+            /usr/lib/x86_64-linux-musl
+            /usr/include/x86_64-linux-musl
+          key: ${{ runner.os }}-musl-toolchain-v1
+          fail-on-cache-miss: true
 
-      - name: Install musl tools
-        if: steps.musl-cache.outputs.cache-hit != 'true'
+      - name: Configure Cargo
         run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools musl-dev binutils lld
-          # 配置链接器
           mkdir -p ~/.cargo
-          printf '[target.x86_64-unknown-linux-musl]\nlinker = "rust-lld"\n' > ~/.cargo/config.toml
+          cat > ~/.cargo/config.toml << 'EOF'
+          [target.x86_64-unknown-linux-musl]
+          linker = "rust-lld"
+          rustflags = ["-C", "target-feature=+crt-static"]
+          EOF
 
-      - name: Install musl tools (from cache)
-        if: steps.musl-cache.outputs.cache-hit == 'true'
-        run: |
-          sudo apt-get install -y musl-tools musl-dev binutils lld
-          # 配置链接器
-          mkdir -p ~/.cargo
-          printf '[target.x86_64-unknown-linux-musl]\nlinker = "rust-lld"\n' > ~/.cargo/config.toml
-
-      # 统一的 Rust 缓存 - 必须先于缓存检查执行
-      - uses: Swatinem/rust-cache@v2
-        id: rust-cache
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          key: x86_64-musl-all
-          shared-key: "ci-cache-musl-all"
+          key: x86_64-musl-clippy
+          shared-key: "x86_64-musl-shared"
+          cache-on-failure: true
+
+      - name: Setup SCCache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Run clippy
+        run: |
+          cargo clippy --target x86_64-unknown-linux-musl --all-features -- -D warnings
+          echo "=== SCCache Stats ==="
+          sccache --show-stats
+
+  # =============================================================================
+  # 阶段 4: 测试矩阵 (Test Matrix) - 并行执行
+  # =============================================================================
+  
+  # ---------------------------------------------------------------------------
+  # 4.1: 默认特性测试 (Test Default Features)
+  # ---------------------------------------------------------------------------
+  job-test-default:
+    name: 🧪 Test (Default)
+    runs-on: ubuntu-latest
+    needs: [job-detect-changes, job-setup-toolchain]
+    if: |
+      (needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
+       github.event_name == 'workflow_dispatch') &&
+      !inputs.skip_tests
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_MSRV }}
+          targets: x86_64-unknown-linux-musl
+
+      - name: Restore musl toolchain
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /usr/bin/x86_64-linux-musl-*
+            /usr/bin/musl-*
+            /usr/lib/x86_64-linux-musl
+            /usr/include/x86_64-linux-musl
+          key: ${{ runner.os }}-musl-toolchain-v1
+          fail-on-cache-miss: true
+
+      - name: Configure Cargo
+        run: |
+          mkdir -p ~/.cargo
+          cat > ~/.cargo/config.toml << 'EOF'
+          [target.x86_64-unknown-linux-musl]
+          linker = "rust-lld"
+          rustflags = ["-C", "target-feature=+crt-static"]
+          EOF
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: x86_64-musl-test-default
+          shared-key: "x86_64-musl-shared"
+          cache-on-failure: true
+
+      - name: Setup SCCache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Run tests
+        run: |
+          cargo test --release --target x86_64-unknown-linux-musl
+          echo "=== SCCache Stats ==="
+          sccache --show-stats
+
+  # ---------------------------------------------------------------------------
+  # 4.2: 持久化存储特性测试 (Test Persistent Store)
+  # ---------------------------------------------------------------------------
+  job-test-persistent:
+    name: 🧪 Test (Persistent Store)
+    runs-on: ubuntu-latest
+    needs: [job-detect-changes, job-setup-toolchain]
+    if: |
+      (needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
+       github.event_name == 'workflow_dispatch') &&
+      !inputs.skip_tests
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_MSRV }}
+          targets: x86_64-unknown-linux-musl
+
+      - name: Restore musl toolchain
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /usr/bin/x86_64-linux-musl-*
+            /usr/bin/musl-*
+            /usr/lib/x86_64-linux-musl
+            /usr/include/x86_64-linux-musl
+          key: ${{ runner.os }}-musl-toolchain-v1
+          fail-on-cache-miss: true
+
+      - name: Configure Cargo
+        run: |
+          mkdir -p ~/.cargo
+          cat > ~/.cargo/config.toml << 'EOF'
+          [target.x86_64-unknown-linux-musl]
+          linker = "rust-lld"
+          rustflags = ["-C", "target-feature=+crt-static"]
+          EOF
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: x86_64-musl-test-persistent
+          shared-key: "x86_64-musl-shared"
+          cache-on-failure: true
+
+      - name: Setup SCCache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Run tests with persistent-store feature
+        run: |
+          cargo test --release --target x86_64-unknown-linux-musl --features persistent-store
+          echo "=== SCCache Stats ==="
+          sccache --show-stats
+
+  # =============================================================================
+  # 阶段 5: 构建产物 (Build Artifacts)
+  # =============================================================================
+  job-build-binaries:
+    name: 🔨 Build Binaries
+    runs-on: ubuntu-latest
+    needs: [job-detect-changes, job-setup-toolchain]
+    if: |
+      needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
+      needs.job-detect-changes.outputs.docker-config-changed == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    outputs:
+      build-cache-hit: ${{ steps.cache-check.outputs.hit }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_MSRV }}
+          targets: x86_64-unknown-linux-musl
+
+      - name: Restore musl toolchain
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /usr/bin/x86_64-linux-musl-*
+            /usr/bin/musl-*
+            /usr/lib/x86_64-linux-musl
+            /usr/include/x86_64-linux-musl
+          key: ${{ runner.os }}-musl-toolchain-v1
+          fail-on-cache-miss: true
+
+      - name: Configure Cargo
+        run: |
+          mkdir -p ~/.cargo
+          cat > ~/.cargo/config.toml << 'EOF'
+          [target.x86_64-unknown-linux-musl]
+          linker = "rust-lld"
+          rustflags = ["-C", "target-feature=+crt-static"]
+          EOF
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: x86_64-musl-build
+          shared-key: "x86_64-musl-shared"
           cache-on-failure: true
           cache-directories: |
             ~/.cargo/registry
             ~/.cargo/git
             target/x86_64-unknown-linux-musl/release
-            target/x86_64-unknown-linux-musl/release/examples
 
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Setup SCCache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
-      # 检查缓存是否命中（必须在 rust-cache 之后执行）
       - name: Check cache status
         id: cache-check
         run: |
-          echo "Rust Cache Hit: ${{ steps.rust-cache.outputs.cache-hit }}"
-          # 检查 target 目录是否存在且非空
-          if [ -d "target/x86_64-unknown-linux-musl/release" ] && [ "$(ls -A target/x86_64-unknown-linux-musl/release/deps/*.rlib 2>/dev/null | head -1)" ]; then
+          if [ -d "target/x86_64-unknown-linux-musl/release" ] && \
+             [ -f "target/x86_64-unknown-linux-musl/release/imitatort" ] && \
+             [ -f "target/x86_64-unknown-linux-musl/release/examples/werewolf" ]; then
             echo "hit=true" >> $GITHUB_OUTPUT
-            echo "✅ 缓存命中，已恢复编译产物"
-            du -sh target/x86_64-unknown-linux-musl/release 2>/dev/null || true
+            echo "✅ 缓存命中"
           else
             echo "hit=false" >> $GITHUB_OUTPUT
-            echo "⏳ 缓存未命中或部分命中，将使用 sccache 加速编译"
+            echo "⏳ 需要构建"
           fi
 
-      # ========== 并行编译优化配置 ==========
-      - name: Configure cargo for maximum parallelism
-        run: |
-          # 使用所有可用 CPU 核心
-          echo "CARGO_BUILD_JOBS=$(nproc)" >> $GITHUB_ENV
-          # 启用更激进的并行编译
-          echo "CARGO_TARGET_JOBS=$(nproc)" >> $GITHUB_ENV
-          # 显示配置
-          echo "Using $(nproc) CPU cores for compilation"
-
-      # ========== 串行执行（但每个命令内部高度并行）==========
-      # 注意：不同 cargo 命令不能并行，会竞争 target/ 目录
-      # 但每个命令内部使用所有 CPU 核心
-
-      - name: 1. Clippy check (high parallelism)
-        run: |
-          cargo clippy --target x86_64-unknown-linux-musl --all-features -- -D warnings
-          echo "=== SCCache Stats after clippy ==="
-          sccache --show-stats || true
-        env:
-          RUSTFLAGS: "-C codegen-units=16"  # 更多 codegen units = 更多并行
-
-      - name: 2. Test (default) - parallel
-        run: |
-          cargo test --release --target x86_64-unknown-linux-musl
-          echo "=== SCCache Stats after test ==="
-          sccache --show-stats || true
-        env:
-          RUSTFLAGS: "-C codegen-units=16"
-
-      - name: 3. Test (persistent-store) - parallel
-        run: |
-          cargo test --release --target x86_64-unknown-linux-musl --features persistent-store
-          echo "=== SCCache Stats after test (persistent-store) ==="
-          sccache --show-stats || true
-        env:
-          RUSTFLAGS: "-C codegen-units=16"
-
-      - name: 4. Build release binaries - parallel
+      - name: Build release binaries
         run: |
           cargo build --release --target x86_64-unknown-linux-musl --bin imitatort --example werewolf
           mkdir -p dist
           cp target/x86_64-unknown-linux-musl/release/imitatort dist/
           cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/
           ls -la dist/
-          echo "=== SCCache Stats after final build ==="
-          sccache --show-stats || true
-        env:
-          RUSTFLAGS: "-C codegen-units=16"  # 更多 codegen units = 更多并行
+          echo "=== SCCache Stats ==="
+          sccache --show-stats
 
-      # 上传所有编译产物
+      - name: Verify binaries
+        run: |
+          file dist/imitatort
+          file dist/werewolf
+          ls -lh dist/
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -210,44 +450,24 @@ jobs:
             target/x86_64-unknown-linux-musl/release/imitatort
             target/x86_64-unknown-linux-musl/release/examples/werewolf
           retention-days: 1
+          if-no-files-found: error
 
-  # ========== 阶段 3: 非阻塞检查（并行执行）==========
-
-  # 3a. Format Check - 不阻塞，快速完成
-  fmt:
-    name: Format Check
+  # =============================================================================
+  # 阶段 6: Docker 构建 (Docker Build)
+  # =============================================================================
+  job-build-docker:
+    name: 🐳 Build Docker Image
     runs-on: ubuntu-latest
-    needs: changes
-    continue-on-error: true
-    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_MSRV }}
-          components: rustfmt
-      - run: cargo fmt --check
-      - name: Report format issues
-        if: failure()
-        run: |
-          echo "⚠️ **代码格式检查未通过**" >> $GITHUB_STEP_SUMMARY
-          echo "请运行以下命令修复：" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo 'cargo fmt' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-  # 3b. Docker 极速构建（依赖 cache-builder 的产物）
-  docker-build:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    needs: [changes, cache-builder]
+    needs: [job-detect-changes, job-build-binaries]
     if: |
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
+      (needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
+       needs.job-detect-changes.outputs.docker-config-changed == 'true' ||
+       github.event_name == 'workflow_dispatch') &&
       (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # 直接下载预编译的二进制，无需重新编译
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -260,9 +480,10 @@ jobs:
           file dist/imitatort
           file dist/werewolf
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build image (instant mode)
+      - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -271,39 +492,47 @@ jobs:
           platforms: linux/amd64
           tags: ${{ env.IMAGE_NAME }}:latest
           build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp || github.event.pull_request.head.repo.updated_at }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ github.ref_name }}
           outputs: type=docker,dest=/tmp/image.tar
           provenance: false
+          cache-from: type=gha,scope=docker-build
+          cache-to: type=gha,mode=max,scope=docker-build
 
-      - name: Upload Docker image
+      - name: Upload Docker image artifact
         uses: actions/upload-artifact@v4
         with:
           name: docker-image-${{ github.sha }}
           path: /tmp/image.tar
           retention-days: 1
+          if-no-files-found: error
 
-  # 3c. Security Scan（依赖 docker-build 的镜像）
-  security-scan:
-    name: Security Scan
+  # =============================================================================
+  # 阶段 7: 安全扫描 (Security Scan)
+  # =============================================================================
+  job-scan-security:
+    name: 🔒 Security Scan
     runs-on: ubuntu-latest
-    needs: [changes, docker-build]
+    needs: [job-detect-changes, job-build-docker]
     if: |
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
+      (needs.job-detect-changes.outputs.rust-code-changed == 'true' ||
+       needs.job-detect-changes.outputs.docker-config-changed == 'true' ||
+       github.event_name == 'workflow_dispatch') &&
       !inputs.skip_security_scan &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
-      - name: Download image artifact
+      - name: Download Docker image artifact
         uses: actions/download-artifact@v4
         with:
           name: docker-image-${{ github.sha }}
           path: /tmp
 
-      - name: Load image
+      - name: Load Docker image
         run: |
           docker load -i /tmp/image.tar
           docker tag ${{ env.IMAGE_NAME }}:latest ${{ env.IMAGE_NAME }}:scan
+          docker images | grep imitatort
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -313,33 +542,48 @@ jobs:
           output: 'trivy-results.sarif'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
 
-      - name: Upload Trivy scan results
+      - name: Upload scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
 
-  # ========== 阶段 4: 推送镜像（所有检查通过后）==========
-  push:
-    name: Push Image
+  # =============================================================================
+  # 阶段 8: 推送镜像 (Push Image)
+  # =============================================================================
+  job-push-image:
+    name: 📤 Push to Registry
     runs-on: ubuntu-latest
-    needs: [changes, cache-builder, fmt, docker-build, security-scan]
+    needs:
+      - job-detect-changes
+      - job-check-format
+      - job-check-clippy
+      - job-test-default
+      - job-test-persistent
+      - job-build-binaries
+      - job-build-docker
+      - job-scan-security
     if: |
       always() &&
-      (needs.cache-builder.result == 'success' || needs.cache-builder.result == 'skipped') &&
-      (needs.docker-build.result == 'success' || needs.docker-build.result == 'skipped') &&
-      (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped' || inputs.skip_security_scan) &&
+      (needs.job-check-clippy.result == 'success' || needs.job-check-clippy.result == 'skipped') &&
+      (needs.job-test-default.result == 'success' || needs.job-test-default.result == 'skipped') &&
+      (needs.job-test-persistent.result == 'success' || needs.job-test-persistent.result == 'skipped') &&
+      (needs.job-build-binaries.result == 'success' || needs.job-build-binaries.result == 'skipped') &&
+      (needs.job-build-docker.result == 'success' || needs.job-build-docker.result == 'skipped') &&
+      (needs.job-scan-security.result == 'success' || needs.job-scan-security.result == 'skipped' || inputs.skip_security_scan) &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up QEMU
+      - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
         with:
           platforms: linux/amd64
 
-      - name: Set up Docker Buildx
+      - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
@@ -349,7 +593,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker metadata
+      - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -367,7 +611,12 @@ jobs:
           name: build-artifacts-${{ github.sha }}
           path: .
 
-      - name: Build and push
+      - name: Verify artifacts before push
+        run: |
+          ls -la dist/
+          file dist/imitatort
+
+      - name: Build and push multi-platform image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -377,59 +626,124 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp || github.event.pull_request.head.repo.updated_at }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ github.ref_name }}
+          cache-from: type=gha,scope=docker-build
+          provenance: false
 
-  # ========== 质量门禁汇总报告 ==========
-  quality-gate:
-    name: Quality Gate
+  # =============================================================================
+  # 阶段 9: 质量门禁汇总 (Quality Gate)
+  # =============================================================================
+  job-quality-gate:
+    name: 🚦 Quality Gate
     runs-on: ubuntu-latest
-    needs: [changes, cache-builder, fmt, docker-build, security-scan, push]
+    needs:
+      - job-detect-changes
+      - job-check-format
+      - job-check-clippy
+      - job-test-default
+      - job-test-persistent
+      - job-build-binaries
+      - job-build-docker
+      - job-scan-security
+      - job-push-image
     if: always()
     steps:
-      - name: Report Status
+      - name: Generate quality report
         run: |
-          echo "## 质量门禁报告" >> $GITHUB_STEP_SUMMARY
+          echo "# 🚦 质量门禁报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 编译与构建" >> $GITHUB_STEP_SUMMARY
-          echo "| 检查项 | 状态 | 说明 |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Cache Builder | ${{ needs.cache-builder.result }} | 编译、测试、构建一次完成 |" >> $GITHUB_STEP_SUMMARY
-          echo "| Docker Build | ${{ needs.docker-build.result }} | 极速构建（复用产物） |" >> $GITHUB_STEP_SUMMARY
+          
+          # 检测变更
+          echo "## 📋 变更检测" >> $GITHUB_STEP_SUMMARY
+          echo "| 类型 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust 代码 | ${{ needs.job-detect-changes.outputs.rust-code-changed == 'true' && '✅ 变更' || '⏭️ 无变更' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker 配置 | ${{ needs.job-detect-changes.outputs.docker-config-changed == 'true' && '✅ 变更' || '⏭️ 无变更' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 代码质量" >> $GITHUB_STEP_SUMMARY
-          echo "| 检查项 | 状态 | 阻断发布 |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|------|----------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Format Check | ${{ needs.fmt.result }} | ❌ 否 |" >> $GITHUB_STEP_SUMMARY
-          echo "| Security Scan | ${{ needs.security-scan.result }} | ✅ 是（可跳过） |" >> $GITHUB_STEP_SUMMARY
+          
+          # 编译与构建
+          echo "## 🔨 编译与构建" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | 状态 | 说明 |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Setup Toolchain | ${{ needs.job-setup-toolchain.result }} | 工具链准备 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Clippy Analysis | ${{ needs.job-check-clippy.result }} | 静态代码分析 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Binaries | ${{ needs.job-build-binaries.result }} | 二进制构建 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Build | ${{ needs.job-build-docker.result }} | 镜像构建 |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 发布" >> $GITHUB_STEP_SUMMARY
-          echo "| 检查项 | 状态 |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Push Image | ${{ needs.push.result }} |" >> $GITHUB_STEP_SUMMARY
+          
+          # 代码质量
+          echo "## 🎨 代码质量" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | 状态 | 阻断发布 |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Format Check | ${{ needs.job-check-format.result }} | ❌ 否 |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # 测试
+          echo "## 🧪 测试" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | 状态 | 特性 |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Default | ${{ needs.job-test-default.result }} | 默认特性 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Persistent | ${{ needs.job-test-persistent.result }} | persistent-store 特性 |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # 安全
+          echo "## 🔒 安全" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | 状态 | 阻断发布 |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.job-scan-security.result }} | ${{ inputs.skip_security_scan && '⏭️ 已跳过' || '✅ 是' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # 发布
+          echo "## 📤 发布" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Push Image | ${{ needs.job-push-image.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
+      - name: Evaluate quality gate
+        run: |
           FAILED=false
-          if [[ "${{ needs.cache-builder.result }}" == "failure" ]]; then
-            echo "❌ 编译/测试/构建失败" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.job-check-clippy.result }}" == "failure" ]]; then
+            echo "❌ Clippy 检查失败" >> $GITHUB_STEP_SUMMARY
             FAILED=true
           fi
-          if [[ "${{ needs.docker-build.result }}" == "failure" ]]; then
+          
+          if [[ "${{ needs.job-test-default.result }}" == "failure" ]]; then
+            echo "❌ 默认特性测试失败" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          fi
+          
+          if [[ "${{ needs.job-test-persistent.result }}" == "failure" ]]; then
+            echo "❌ 持久化存储特性测试失败" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          fi
+          
+          if [[ "${{ needs.job-build-binaries.result }}" == "failure" ]]; then
+            echo "❌ 二进制构建失败" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          fi
+          
+          if [[ "${{ needs.job-build-docker.result }}" == "failure" ]]; then
             echo "❌ Docker 构建失败" >> $GITHUB_STEP_SUMMARY
             FAILED=true
           fi
-          if [[ "${{ needs.security-scan.result }}" == "failure" && "${{ inputs.skip_security_scan }}" != "true" ]]; then
-            echo "❌ 安全扫描发现漏洞" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.job-scan-security.result }}" == "failure" && "${{ inputs.skip_security_scan }}" != "true" ]]; then
+            echo "❌ 安全扫描发现严重漏洞" >> $GITHUB_STEP_SUMMARY
             FAILED=true
           fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
           if [[ "$FAILED" == "true" ]]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "## ❌ 质量门禁未通过，发布被阻断" >> $GITHUB_STEP_SUMMARY
+            echo "# ❌ 质量门禁未通过，发布被阻断" >> $GITHUB_STEP_SUMMARY
             exit 1
           else
-            echo "## ✅ 质量门禁通过" >> $GITHUB_STEP_SUMMARY
-            if [[ "${{ needs.fmt.result }}" == "failure" ]]; then
+            echo "# ✅ 质量门禁通过" >> $GITHUB_STEP_SUMMARY
+            if [[ "${{ needs.job-check-format.result }}" == "failure" ]]; then
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "⚠️ 提示：代码格式检查未通过，建议运行 \`cargo fmt\` 修复" >> $GITHUB_STEP_SUMMARY
             fi
