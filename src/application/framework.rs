@@ -43,8 +43,8 @@ impl VirtualCompany {
     /// 创建并注册一个新 Agent
     pub async fn create_agent(&self, config: AgentConfig) -> Result<Arc<Agent>> {
         let agent = self.agent_manager.register(config).await?;
-        // 注册到消息总线
-        self.message_bus.register_agent(agent.id());
+        // 连接消息总线（保存接收器到 Agent 中）
+        agent.connect_messaging(self.message_bus.clone()).await;
         // 注册到路由器
         self.router.register_local_agent(agent.id());
         Ok(agent)

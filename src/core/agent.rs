@@ -13,6 +13,7 @@ use std::sync::Arc;
 use swarms_rs::{
     agent::SwarmsAgent, llm::provider::openai::OpenAI, structs::agent::Agent as AgentTrait,
 };
+use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 use crate::application::tool::ToolRegistry;
@@ -45,9 +46,9 @@ pub struct Agent {
     #[allow(dead_code)]
     tool_registry: ToolRegistry,
     /// Agent 的消息接收器（由外部注入）
-    message_receiver: Option<AgentMessageReceiver>,
+    message_receiver: RwLock<Option<AgentMessageReceiver>>,
     /// 消息总线引用（用于发送消息）
-    message_bus: Option<Arc<MessageBus>>,
+    message_bus: RwLock<Option<Arc<MessageBus>>>,
 }
 
 impl Agent {
@@ -72,8 +73,8 @@ impl Agent {
             config,
             inner,
             tool_registry,
-            message_receiver: None,
-            message_bus: None,
+            message_receiver: RwLock::new(None),
+            message_bus: RwLock::new(None),
         })
     }
 
@@ -100,20 +101,25 @@ impl Agent {
     /// 连接消息总线
     ///
     /// 注册 Agent 到消息系统，获得收发消息的能力
-    pub fn connect_messaging(&mut self, bus: Arc<MessageBus>) {
+    pub async fn connect_messaging(&self, bus: Arc<MessageBus>) {
         let receiver = bus.register_agent(&self.config.id);
-        self.message_receiver = Some(receiver);
-        self.message_bus = Some(bus);
+        let mut msg_rx = self.message_receiver.write().await;
+        let mut msg_bus = self.message_bus.write().await;
+        *msg_rx = Some(receiver);
+        *msg_bus = Some(bus);
         info!("Agent {} connected to messaging bus", self.config.id);
     }
 
     /// 断开消息总线
-    pub fn disconnect_messaging(&mut self) {
-        if let Some(ref bus) = self.message_bus {
+    pub async fn disconnect_messaging(&self) {
+        let bus = self.message_bus.read().await.clone();
+        if let Some(ref bus) = bus {
             bus.unregister_agent(&self.config.id);
         }
-        self.message_receiver = None;
-        self.message_bus = None;
+        let mut msg_rx = self.message_receiver.write().await;
+        let mut msg_bus = self.message_bus.write().await;
+        *msg_rx = None;
+        *msg_bus = None;
         info!("Agent {} disconnected from messaging bus", self.config.id);
     }
 
@@ -121,15 +127,18 @@ impl Agent {
     ///
     /// Agent 自主决定创建群聊，邀请其他成员
     pub async fn create_group(
-        &mut self,
+        &self,
         group_id: &str,
         name: &str,
         members: Vec<String>,
     ) -> Result<String> {
         let bus = self
             .message_bus
+            .read()
+            .await
             .as_ref()
-            .context("Agent not connected to messaging bus")?;
+            .context("Agent not connected to messaging bus")?
+            .clone();
 
         // 自动包含创建者
         let mut all_members = members;
@@ -142,8 +151,9 @@ impl Agent {
             .await?;
 
         // 自动订阅群聊消息
-        if let Some(ref mut receiver) = self.message_receiver {
-            receiver.join_group(&group_id, bus)?;
+        let mut receiver = self.message_receiver.write().await;
+        if let Some(ref mut rx) = receiver.as_mut() {
+            rx.join_group(&group_id, &bus)?;
         }
 
         Ok(group_id)
@@ -153,25 +163,32 @@ impl Agent {
     pub async fn invite_to_group(&self, group_id: &str, invitee: &str) -> Result<()> {
         let bus = self
             .message_bus
+            .read()
+            .await
             .as_ref()
-            .context("Agent not connected to messaging bus")?;
+            .context("Agent not connected to messaging bus")?
+            .clone();
 
         bus.invite_to_group(group_id, &self.config.id, invitee)
             .await
     }
 
     /// 退出群聊
-    pub async fn leave_group(&mut self, group_id: &str) -> Result<()> {
+    pub async fn leave_group(&self, group_id: &str) -> Result<()> {
         let bus = self
             .message_bus
+            .read()
+            .await
             .as_ref()
-            .context("Agent not connected to messaging bus")?;
+            .context("Agent not connected to messaging bus")?
+            .clone();
 
         bus.leave_group(group_id, &self.config.id).await?;
 
         // 取消订阅群聊消息
-        if let Some(ref mut receiver) = self.message_receiver {
-            receiver.leave_group(group_id);
+        let mut receiver = self.message_receiver.write().await;
+        if let Some(ref mut rx) = receiver.as_mut() {
+            rx.leave_group(group_id);
         }
 
         Ok(())
@@ -181,8 +198,11 @@ impl Agent {
     pub async fn send_private(&self, to: &str, content: &str) -> Result<()> {
         let bus = self
             .message_bus
+            .read()
+            .await
             .as_ref()
-            .context("Agent not connected to messaging bus")?;
+            .context("Agent not connected to messaging bus")?
+            .clone();
 
         let msg = Message::private(&self.config.id, to, content);
         bus.send_private(msg).await
@@ -192,19 +212,25 @@ impl Agent {
     pub async fn send_group(&self, group_id: &str, content: &str) -> Result<()> {
         let bus = self
             .message_bus
+            .read()
+            .await
             .as_ref()
-            .context("Agent not connected to messaging bus")?;
+            .context("Agent not connected to messaging bus")?
+            .clone();
 
         let msg = Message::group(&self.config.id, group_id, content);
         bus.send_group(msg).await
     }
 
     /// 发送广播消息（公司全员群）
-    pub fn send_broadcast(&self, content: &str) -> Result<usize> {
+    pub async fn send_broadcast(&self, content: &str) -> Result<usize> {
         let bus = self
             .message_bus
+            .read()
+            .await
             .as_ref()
-            .context("Agent not connected to messaging bus")?;
+            .context("Agent not connected to messaging bus")?
+            .clone();
 
         let msg = Message::broadcast(&self.config.id, content);
         bus.broadcast(msg)
@@ -213,18 +239,20 @@ impl Agent {
     /// 接收消息
     ///
     /// 阻塞等待，直到收到消息
-    pub async fn receive_message(&mut self) -> Option<Message> {
-        if let Some(ref mut receiver) = self.message_receiver {
-            receiver.recv().await
+    pub async fn receive_message(&self) -> Option<Message> {
+        let mut receiver = self.message_receiver.write().await;
+        if let Some(ref mut rx) = receiver.as_mut() {
+            rx.recv().await
         } else {
             None
         }
     }
 
     /// 尝试接收消息（非阻塞）
-    pub fn try_receive_message(&mut self) -> Option<Message> {
-        if let Some(ref mut receiver) = self.message_receiver {
-            receiver.try_recv()
+    pub async fn try_receive_message(&self) -> Option<Message> {
+        let mut receiver = self.message_receiver.write().await;
+        if let Some(ref mut rx) = receiver.as_mut() {
+            rx.try_recv()
         } else {
             None
         }
