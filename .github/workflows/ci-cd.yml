@@ -47,6 +47,10 @@ permissions:
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/imitatort-stateless-agent
   RUST_MSRV: '1.85'
+  # SCCache 配置 - 启用 GHA 缓存后端
+  SCCACHE_GHA_ENABLED: 'true'
+  RUSTC_WRAPPER: 'sccache'
+  SCCACHE_CACHE_SIZE: '2G'
   # Cargo 并行配置
   CARGO_BUILD_JOBS: '8'
   CARGO_TARGET_JOBS: '8'
@@ -171,13 +175,18 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          # 使用固定 key 以复用缓存，Swatinem/rust-cache 会自动处理并发写入
+          # 只缓存 cargo 依赖，不缓存 target/（sccache 负责编译产物）
           key: x86_64-musl-clippy
-          shared-key: "x86_64-musl-shared"
           cache-on-failure: true
 
+      - name: Setup SCCache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Run clippy
-        run: cargo clippy --target x86_64-unknown-linux-musl --all-features
+        run: |
+          cargo clippy --target x86_64-unknown-linux-musl --all-features
+          echo "=== SCCache Stats ==="
+          sccache --show-stats
 
   # =============================================================================
   # 阶段 3: 测试矩阵 (Test Matrix) - 并行执行
@@ -232,13 +241,18 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          # 使用固定 key 以复用缓存
+          # 只缓存 cargo 依赖，不缓存 target/（sccache 负责编译产物）
           key: x86_64-musl-test-default
-          shared-key: "x86_64-musl-shared"
           cache-on-failure: true
 
+      - name: Setup SCCache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Run tests
-        run: cargo test --release --target x86_64-unknown-linux-musl
+        run: |
+          cargo test --release --target x86_64-unknown-linux-musl
+          echo "=== SCCache Stats ==="
+          sccache --show-stats
 
   # ---------------------------------------------------------------------------
   # 3.2: 持久化存储特性测试 (Test Persistent Store)
@@ -289,13 +303,18 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          # 使用固定 key 以复用缓存
+          # 只缓存 cargo 依赖，不缓存 target/（sccache 负责编译产物）
           key: x86_64-musl-test-persistent
-          shared-key: "x86_64-musl-shared"
           cache-on-failure: true
 
+      - name: Setup SCCache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Run tests with persistent-store feature
-        run: cargo test --release --target x86_64-unknown-linux-musl --features persistent-store
+        run: |
+          cargo test --release --target x86_64-unknown-linux-musl --features persistent-store
+          echo "=== SCCache Stats ==="
+          sccache --show-stats
 
   # =============================================================================
   # 阶段 4: 构建产物 (Build Artifacts)
@@ -348,14 +367,12 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          # 主构建 job 使用不带 run_id 的 key，作为共享缓存的源
+          # 只缓存 cargo 依赖，不缓存 target/（sccache 负责编译产物）
           key: x86_64-musl-build
-          shared-key: "x86_64-musl-shared"
           cache-on-failure: true
-          cache-directories: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/x86_64-unknown-linux-musl/release
+
+      - name: Setup SCCache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Check cache status
         id: cache-check
@@ -377,6 +394,8 @@ jobs:
           cp target/x86_64-unknown-linux-musl/release/imitatort dist/
           cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/
           ls -la dist/
+          echo "=== SCCache Stats ==="
+          sccache --show-stats
 
       - name: Verify binaries
         run: |
