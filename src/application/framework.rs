@@ -5,6 +5,7 @@
 use anyhow::Result;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::task::JoinHandle;
 use tracing::info;
 
 use crate::core::agent::{Agent, AgentConfig, AgentManager};
@@ -58,13 +59,13 @@ impl VirtualCompany {
         self.agent_manager.list()
     }
 
-    /// 启动 A2A HTTP 服务
-    pub async fn start_server(&mut self, bind_addr: SocketAddr) -> Result<()> {
+    /// 启动 A2A HTTP 服务（后台运行）
+    pub async fn start_server(&mut self, bind_addr: SocketAddr) -> Result<JoinHandle<()>> {
         let server = A2AServer::new(self.message_bus.clone(), bind_addr);
-        server.start().await?;
-        self.server = Some(server);
-        info!("A2A server started on {}", bind_addr);
-        Ok(())
+        let handle = server.spawn();
+        // server 被移动到后台任务中，不再存储
+        info!("A2A server started on {} (background)", bind_addr);
+        Ok(handle)
     }
 
     /// 注册远程 Agent
@@ -149,7 +150,8 @@ impl AppBuilder {
     pub async fn build(self) -> Result<VirtualCompany> {
         let mut company = VirtualCompany::new(self.local_endpoint);
         if let Some(bind_addr) = self.bind_addr {
-            company.start_server(bind_addr).await?;
+            // 服务器在后台运行，不阻塞主流程
+            let _handle = company.start_server(bind_addr).await?;
         }
         Ok(company)
     }
