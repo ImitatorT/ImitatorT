@@ -26,17 +26,21 @@ pub struct VirtualCompany {
     server: Option<A2AServer>,
     /// 消息路由器
     router: MessageRouter,
+    /// 本地端点
+    local_endpoint: String,
 }
 
 impl VirtualCompany {
     /// 创建一个新的虚拟公司实例
     pub fn new(local_endpoint: impl Into<String>) -> Self {
+        let local_endpoint = local_endpoint.into();
         let message_bus = Arc::new(MessageBus::new());
         Self {
             agent_manager: AgentManager::new(),
             message_bus: message_bus.clone(),
             server: None,
-            router: MessageRouter::new(message_bus, local_endpoint),
+            router: MessageRouter::new(message_bus, local_endpoint.clone()),
+            local_endpoint,
         }
     }
 
@@ -109,6 +113,11 @@ impl VirtualCompany {
     /// 获取消息路由器
     pub fn router(&self) -> &MessageRouter {
         &self.router
+    }
+
+    /// 获取本地端点
+    pub fn local_endpoint(&self) -> &str {
+        &self.local_endpoint
     }
 }
 
