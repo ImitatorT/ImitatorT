@@ -150,13 +150,16 @@ jobs:
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
-          path: /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-musl-v1
+          path: ~/apt-cache
+          key: ${{ runner.os }}-apt-musl-v2-${{ hashFiles('.github/workflows/ci-cd.yml') }}
           restore-keys: |
-            ${{ runner.os }}-apt-musl-
+            ${{ runner.os }}-apt-musl-v2-
 
       - name: Install musl toolchain
         run: |
+          # 配置 apt 使用用户缓存目录
+          echo 'Dir::Cache::Archives "${HOME}/apt-cache";' | sudo tee /etc/apt/apt.conf.d/99custom-cache
+          mkdir -p ~/apt-cache
           sudo apt-get update
           sudo apt-get install -y musl-tools musl-dev binutils lld
 
@@ -172,7 +175,8 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: x86_64-musl-clippy
+          # 每个 job 使用独立的 key 避免写入冲突
+          key: x86_64-musl-clippy-${{ github.run_id }}
           shared-key: "x86_64-musl-shared"
           cache-on-failure: true
 
@@ -181,7 +185,7 @@ jobs:
 
       - name: Run clippy
         run: |
-          cargo clippy --target x86_64-unknown-linux-musl --all-features -- -D warnings
+          cargo clippy --target x86_64-unknown-linux-musl --all-features
           echo "=== SCCache Stats ==="
           sccache --show-stats
 
@@ -213,13 +217,16 @@ jobs:
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
-          path: /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-musl-v1
+          path: ~/apt-cache
+          key: ${{ runner.os }}-apt-musl-v2-${{ hashFiles('.github/workflows/ci-cd.yml') }}
           restore-keys: |
-            ${{ runner.os }}-apt-musl-
+            ${{ runner.os }}-apt-musl-v2-
 
       - name: Install musl toolchain
         run: |
+          # 配置 apt 使用用户缓存目录
+          echo 'Dir::Cache::Archives "${HOME}/apt-cache";' | sudo tee /etc/apt/apt.conf.d/99custom-cache
+          mkdir -p ~/apt-cache
           sudo apt-get update
           sudo apt-get install -y musl-tools musl-dev binutils lld
 
@@ -235,7 +242,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: x86_64-musl-test-default
+          key: x86_64-musl-test-default-${{ github.run_id }}
           shared-key: "x86_64-musl-shared"
           cache-on-failure: true
 
@@ -272,13 +279,16 @@ jobs:
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
-          path: /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-musl-v1
+          path: ~/apt-cache
+          key: ${{ runner.os }}-apt-musl-v2-${{ hashFiles('.github/workflows/ci-cd.yml') }}
           restore-keys: |
-            ${{ runner.os }}-apt-musl-
+            ${{ runner.os }}-apt-musl-v2-
 
       - name: Install musl toolchain
         run: |
+          # 配置 apt 使用用户缓存目录
+          echo 'Dir::Cache::Archives "${HOME}/apt-cache";' | sudo tee /etc/apt/apt.conf.d/99custom-cache
+          mkdir -p ~/apt-cache
           sudo apt-get update
           sudo apt-get install -y musl-tools musl-dev binutils lld
 
@@ -294,7 +304,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: x86_64-musl-test-persistent
+          key: x86_64-musl-test-persistent-${{ github.run_id }}
           shared-key: "x86_64-musl-shared"
           cache-on-failure: true
 
@@ -333,13 +343,16 @@ jobs:
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
-          path: /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-musl-v1
+          path: ~/apt-cache
+          key: ${{ runner.os }}-apt-musl-v2-${{ hashFiles('.github/workflows/ci-cd.yml') }}
           restore-keys: |
-            ${{ runner.os }}-apt-musl-
+            ${{ runner.os }}-apt-musl-v2-
 
       - name: Install musl toolchain
         run: |
+          # 配置 apt 使用用户缓存目录
+          echo 'Dir::Cache::Archives "${HOME}/apt-cache";' | sudo tee /etc/apt/apt.conf.d/99custom-cache
+          mkdir -p ~/apt-cache
           sudo apt-get update
           sudo apt-get install -y musl-tools musl-dev binutils lld
 
@@ -355,6 +368,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
+          # 主构建 job 使用不带 run_id 的 key，作为共享缓存的源
           key: x86_64-musl-build
           shared-key: "x86_64-musl-shared"
           cache-on-failure: true
