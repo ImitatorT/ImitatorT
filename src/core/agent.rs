@@ -293,8 +293,11 @@ impl Agent {
     pub async fn list_my_groups(&self) -> Result<Vec<crate::core::messaging::GroupInfo>> {
         let bus = self
             .message_bus
+            .read()
+            .await
             .as_ref()
-            .context("Agent not connected to messaging bus")?;
+            .context("Agent not connected to messaging bus")?
+            .clone();
 
         Ok(bus.list_agent_groups(&self.config.id).await)
     }
