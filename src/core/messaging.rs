@@ -142,6 +142,9 @@ impl GroupInfo {
 pub struct MessageBus {
     /// 广播通道（用于广播消息和公司全员群）
     broadcast_tx: broadcast::Sender<Message>,
+    /// 广播通道 holder，防止 channel 被关闭
+    #[allow(dead_code)]
+    broadcast_rx_holder: broadcast::Receiver<Message>,
     /// 私聊通道映射
     private_txs: dashmap::DashMap<String, mpsc::Sender<Message>>,
     /// 群聊信息映射
@@ -155,10 +158,11 @@ impl MessageBus {
     ///
     /// 初始化时只创建公司全员群（广播通道）
     pub fn new() -> Self {
-        let (broadcast_tx, _) = broadcast::channel(1000);
+        let (broadcast_tx, broadcast_rx) = broadcast::channel(1000);
 
         Self {
             broadcast_tx,
+            broadcast_rx_holder: broadcast_rx,
             private_txs: dashmap::DashMap::new(),
             groups: Arc::new(RwLock::new(std::collections::HashMap::new())),
             group_txs: dashmap::DashMap::new(),
