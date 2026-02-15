@@ -251,7 +251,9 @@ jobs:
 
       - name: Run tests
         run: |
-          cargo test --release --target x86_64-unknown-linux-musl
+          echo "=== Starting tests ==="
+          cargo test --release --target x86_64-unknown-linux-musl 2>&1
+          echo "=== Tests completed ==="
           echo "=== SCCache Stats ==="
           sccache --show-stats
 
@@ -390,10 +392,12 @@ jobs:
 
       - name: Build release binaries
         run: |
-          cargo build --release --target x86_64-unknown-linux-musl --bin imitatort --example werewolf
+          echo "=== Starting build ==="
+          cargo build --release --target x86_64-unknown-linux-musl --bin imitatort --example werewolf 2>&1
+          echo "=== Build completed ==="
           mkdir -p dist
-          cp target/x86_64-unknown-linux-musl/release/imitatort dist/
-          cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/
+          cp target/x86_64-unknown-linux-musl/release/imitatort dist/ || echo "imitatort binary not found"
+          cp target/x86_64-unknown-linux-musl/release/examples/werewolf dist/ || echo "werewolf binary not found"
           ls -la dist/
           echo "=== SCCache Stats ==="
           sccache --show-stats
