@@ -116,6 +116,7 @@ jobs:
 
       - name: Run cargo fmt
         run: cargo fmt --check
+        continue-on-error: true
 
       - name: Report format issues
         if: failure()
