@@ -17,11 +17,11 @@ fn test_agent_network_creation() {
 #[test]
 fn test_agent_network_empty() {
     let network = AgentNetwork::new("http://localhost:8080");
-    
+
     // Initially empty
     let agents = network.list_agents();
     assert!(agents.is_empty());
-    
+
     // Getting non-existent agent returns None
     assert!(network.get_agent("non-existent").is_none());
 }
@@ -37,9 +37,9 @@ fn test_a2a_client_clone() {
 #[test]
 fn test_agent_network_get_set_agent() {
     use imitatort_stateless_company::protocol::server::AgentInfo;
-    
+
     let network = AgentNetwork::new("http://localhost:8080");
-    
+
     let agent_info = AgentInfo {
         id: "test-agent".to_string(),
         name: "Test Agent".to_string(),
@@ -47,7 +47,7 @@ fn test_agent_network_get_set_agent() {
         capabilities: vec!["chat".to_string()],
         metadata: None,
     };
-    
+
     // Note: AgentNetwork doesn't expose insert method publicly
     // This test documents the expected behavior
     let agents = network.list_agents();

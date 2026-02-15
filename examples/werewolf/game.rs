@@ -110,7 +110,7 @@ impl WerewolfGame {
         info!("🎮 ║    神职: {} 人                                          ║", self.state.alive_players.len() - werewolves.len() - 4); // 4个村民
         info!("🎮 ║    村民: 4 人                                           ║");
         info!("🎮 ╚══════════════════════════════════════════════════════════╝");
-        
+
         // 显示所有玩家
         info!("👥 玩家列表:");
         for (i, player) in self.state.alive_players.iter().enumerate() {
@@ -129,7 +129,7 @@ impl WerewolfGame {
             };
             info!("   {}. {} {}", i + 1, player, role);
         }
-        
+
         Ok(())
     }
 
@@ -214,7 +214,7 @@ impl WerewolfGame {
 
         // 女巫行动
         self.witch_phase().await?;
-        
+
         info!("🌙 ╔══════════════════════════════════════════════════════════╗");
         info!("🌙 ║              第 {} 天 - 夜晚结束                       ║", self.state.day);
         info!("🌙 ╚══════════════════════════════════════════════════════════╝");
@@ -235,10 +235,10 @@ impl WerewolfGame {
                     self.state.alive_players
                 );
 
-                info!("🎤 [{}/{}] {} ({}) 开始发言...", 
-                    idx + 1, 
+                info!("🎤 [{}/{}] {} ({}) 开始发言...",
+                    idx + 1,
                     self.state.alive_players.len(),
-                    agent.name(), 
+                    agent.name(),
                     player_id
                 );
 
@@ -293,7 +293,7 @@ impl WerewolfGame {
                 match agent.run(&prompt).await {
                     Ok(vote_result) => {
                         info!("🗳️ [{}] 投票回复: {}", agent.name(), vote_result);
-                        
+
                         let voted_for = self.parse_vote(&vote_result);
 
                         if let Some(target) = voted_for {
@@ -342,7 +342,7 @@ impl WerewolfGame {
                 return Some(player_id.clone());
             }
         }
-        
+
         // 尝试匹配常见的ID格式（如 villager-001, werewolf-001, seer-001 等）
         let id_patterns = [
             r"(villager-\d+)",
@@ -352,7 +352,7 @@ impl WerewolfGame {
             r"(hunter-\d+)",
             r"(host-\d+)",
         ];
-        
+
         for pattern in &id_patterns {
             if let Ok(regex) = regex::Regex::new(pattern) {
                 if let Some(caps) = regex.captures(response) {
@@ -366,7 +366,7 @@ impl WerewolfGame {
                 }
             }
         }
-        
+
         None
     }
 
@@ -377,15 +377,15 @@ impl WerewolfGame {
         for target in self.state.votes.values() {
             *vote_count.entry(target.clone()).or_insert(0) += 1;
         }
-        
+
         info!("📊 ╔══════════════════════════════════════════════════════════╗");
         info!("📊 ║                    投票统计结果                        ║");
         info!("📊 ╠══════════════════════════════════════════════════════════╣");
-        
+
         // 显示票数统计
         let mut vote_vec: Vec<_> = vote_count.iter().collect();
         vote_vec.sort_by(|a, b| b.1.cmp(a.1)); // 按票数降序
-        
+
         for (player, count) in &vote_vec {
             info!("📊 ║  {}: {} 票", player, count);
         }
@@ -445,11 +445,11 @@ impl WerewolfGame {
             );
 
             info!("🐺 [{}] 正在选择杀害目标...", agent.name());
-            
+
             match agent.run(&prompt).await {
                 Ok(target_result) => {
                     info!("🐺 [{}] 的决策: {}", agent.name(), target_result);
-                    
+
                     if let Some(target) = self.parse_vote(&target_result) {
                         if self.state.is_alive(&target) {
                             self.state.kill_player(&target);
@@ -492,7 +492,7 @@ impl WerewolfGame {
             match agent.run(&prompt).await {
                 Ok(check_result) => {
                     info!("🔮 [预言家] 查验回复: {}", check_result);
-                    
+
                     if let Some(target) = self.parse_vote(&check_result) {
                         // 判断目标是否是狼人
                         let is_werewolf = target.contains("werewolf");

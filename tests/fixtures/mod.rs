@@ -8,7 +8,7 @@ use std::collections::HashMap;
 pub fn test_agent_config(id: &str, name: &str) -> imitatort_stateless_company::core::agent::AgentConfig {
     let mut metadata = serde_json::Map::new();
     metadata.insert("test".to_string(), serde_json::json!(true));
-    
+
     imitatort_stateless_company::core::agent::AgentConfig {
         id: id.to_string(),
         name: name.to_string(),

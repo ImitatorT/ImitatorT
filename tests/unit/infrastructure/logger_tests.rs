@@ -7,11 +7,11 @@ fn test_log_format_parse() {
     assert_eq!("pretty".parse::<LogFormat>().unwrap(), LogFormat::Pretty);
     assert_eq!("compact".parse::<LogFormat>().unwrap(), LogFormat::Compact);
     assert_eq!("json".parse::<LogFormat>().unwrap(), LogFormat::Json);
-    
+
     // 大小写不敏感
     assert_eq!("PRETTY".parse::<LogFormat>().unwrap(), LogFormat::Pretty);
     assert_eq!("Compact".parse::<LogFormat>().unwrap(), LogFormat::Compact);
-    
+
     // 无效值
     assert!("invalid".parse::<LogFormat>().is_err());
     assert!("".parse::<LogFormat>().is_err());

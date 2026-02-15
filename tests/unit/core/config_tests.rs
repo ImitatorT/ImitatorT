@@ -8,11 +8,11 @@ fn test_output_mode_parse() {
     assert_eq!("cli".parse::<OutputMode>().unwrap(), OutputMode::Cli);
     assert_eq!("a2a".parse::<OutputMode>().unwrap(), OutputMode::A2A);
     assert_eq!("hybrid".parse::<OutputMode>().unwrap(), OutputMode::Hybrid);
-    
+
     // 测试大小写不敏感
     assert_eq!("MATRIX".parse::<OutputMode>().unwrap(), OutputMode::Matrix);
     assert_eq!("Cli".parse::<OutputMode>().unwrap(), OutputMode::Cli);
-    
+
     // 测试无效值
     assert!("unknown".parse::<OutputMode>().is_err());
     assert!("".parse::<OutputMode>().is_err());
@@ -29,11 +29,11 @@ fn test_output_mode_display() {
 #[test]
 fn test_store_type_parse() {
     assert_eq!("memory".parse::<StoreType>().unwrap(), StoreType::Memory);
-    
+
     // 测试大小写不敏感
     assert_eq!("MEMORY".parse::<StoreType>().unwrap(), StoreType::Memory);
     assert_eq!("Memory".parse::<StoreType>().unwrap(), StoreType::Memory);
-    
+
     // 测试无效值
     assert!("unknown".parse::<StoreType>().is_err());
     assert!("disk".parse::<StoreType>().is_err());

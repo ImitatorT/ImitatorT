@@ -56,7 +56,7 @@ fn test_app_builder_multiple_seeds() {
 #[test]
 fn test_virtual_company_get_nonexistent_agent() {
     let company = VirtualCompany::new("http://localhost:8080");
-    
+
     // Getting non-existent agent returns None
     let agent = company.get_agent("non-existent");
     assert!(agent.is_none());
@@ -65,7 +65,7 @@ fn test_virtual_company_get_nonexistent_agent() {
 #[test]
 fn test_virtual_company_list_agents_empty() {
     let company = VirtualCompany::new("http://localhost:8080");
-    
+
     let agents = company.list_agents();
     assert!(agents.is_empty());
 }
@@ -73,7 +73,7 @@ fn test_virtual_company_list_agents_empty() {
 #[test]
 fn test_virtual_company_message_bus() {
     let company = VirtualCompany::new("http://localhost:8080");
-    
+
     // Message bus can be accessed
     let _bus = company.message_bus();
 }
@@ -81,7 +81,7 @@ fn test_virtual_company_message_bus() {
 #[test]
 fn test_virtual_company_router() {
     let company = VirtualCompany::new("http://localhost:8080");
-    
+
     // Router can be accessed
     let _router = company.router();
 }

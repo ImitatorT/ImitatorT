@@ -61,7 +61,7 @@ fn test_api_response_error_from_string() {
 fn test_api_response_serialization() {
     let resp: ApiResponse<String> = ApiResponse::success("data".to_string());
     let json = serde_json::to_string(&resp).unwrap();
-    
+
     assert!(json.contains("\"success\":true"));
     assert!(json.contains("data"));
 }
@@ -70,7 +70,7 @@ fn test_api_response_serialization() {
 fn test_api_response_deserialization() {
     let json = r#"{"success":true,"data":"test","error":null}"#;
     let resp: ApiResponse<String> = serde_json::from_str(json).unwrap();
-    
+
     assert!(resp.success);
     assert_eq!(resp.data, Some("test".to_string()));
     assert!(resp.error.is_none());
@@ -80,7 +80,7 @@ fn test_api_response_deserialization() {
 fn test_api_response_error_deserialization() {
     let json = r#"{"success":false,"data":null,"error":"failed"}"#;
     let resp: ApiResponse<String> = serde_json::from_str(json).unwrap();
-    
+
     assert!(!resp.success);
     assert!(resp.data.is_none());
     assert_eq!(resp.error, Some("failed".to_string()));
@@ -171,7 +171,7 @@ fn test_agent_info_debug() {
 fn test_api_response_clone() {
     let resp: ApiResponse<String> = ApiResponse::success("data".to_string());
     let cloned = resp.clone();
-    
+
     assert_eq!(resp.success, cloned.success);
     assert_eq!(resp.data, cloned.data);
     assert_eq!(resp.error, cloned.error);

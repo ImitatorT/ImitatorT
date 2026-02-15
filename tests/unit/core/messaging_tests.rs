@@ -124,20 +124,20 @@ fn test_message_type_debug() {
 async fn test_message_bus_register_agent() {
     let bus = MessageBus::new();
     let receiver = bus.register_agent("test-agent");
-    
+
     assert_eq!(receiver.agent_id(), "test-agent");
 }
 
 #[tokio::test]
 async fn test_message_bus_create_group() {
     let bus = MessageBus::new();
-    
+
     // 注册创建者
     let _receiver = bus.register_agent("creator");
     let _member_rx = bus.register_agent("member1");
-    
+
     let result = bus.create_group("test-group", "Test Group", "creator", vec!["member1".to_string()]).await;
-    
+
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), "test-group");
 }
@@ -145,24 +145,24 @@ async fn test_message_bus_create_group() {
 #[tokio::test]
 async fn test_message_bus_create_group_unregistered_creator() {
     let bus = MessageBus::new();
-    
+
     // 不注册创建者，直接创建群聊
     let result = bus.create_group("test-group", "Test Group", "creator", vec![]).await;
-    
+
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn test_message_bus_invite_to_group() {
     let bus = MessageBus::new();
-    
+
     let _creator_rx = bus.register_agent("creator");
     let _member_rx = bus.register_agent("member1");
     let _invitee_rx = bus.register_agent("invitee");
-    
+
     // 创建群聊
     bus.create_group("test-group", "Test Group", "creator", vec!["member1".to_string()]).await.unwrap();
-    
+
     // 邀请成员
     let result = bus.invite_to_group("test-group", "creator", "invitee").await;
     assert!(result.is_ok());
@@ -171,11 +171,11 @@ async fn test_message_bus_invite_to_group() {
 #[tokio::test]
 async fn test_message_bus_invite_unregistered() {
     let bus = MessageBus::new();
-    
+
     let _creator_rx = bus.register_agent("creator");
-    
+
     bus.create_group("test-group", "Test Group", "creator", vec![]).await.unwrap();
-    
+
     // 邀请未注册的成员
     let result = bus.invite_to_group("test-group", "creator", "unregistered").await;
     assert!(result.is_err());
@@ -184,14 +184,14 @@ async fn test_message_bus_invite_unregistered() {
 #[tokio::test]
 async fn test_message_bus_get_group() {
     let bus = MessageBus::new();
-    
+
     let _creator_rx = bus.register_agent("creator");
     bus.create_group("test-group", "Test Group", "creator", vec![]).await.unwrap();
-    
+
     let group = bus.get_group("test-group").await;
     assert!(group.is_some());
     assert_eq!(group.unwrap().name, "Test Group");
-    
+
     // 获取不存在的群聊
     let not_found = bus.get_group("non-existent").await;
     assert!(not_found.is_none());
@@ -200,15 +200,15 @@ async fn test_message_bus_get_group() {
 #[tokio::test]
 async fn test_message_bus_leave_group() {
     let bus = MessageBus::new();
-    
+
     let _creator_rx = bus.register_agent("creator");
     let _member_rx = bus.register_agent("member1");
-    
+
     bus.create_group("test-group", "Test Group", "creator", vec!["member1".to_string()]).await.unwrap();
-    
+
     let result = bus.leave_group("test-group", "member1").await;
     assert!(result.is_ok());
-    
+
     // 验证成员已离开
     let group = bus.get_group("test-group").await.unwrap();
     assert!(!group.has_member("member1"));
@@ -217,14 +217,14 @@ async fn test_message_bus_leave_group() {
 #[tokio::test]
 async fn test_message_bus_delete_group() {
     let bus = MessageBus::new();
-    
+
     let _creator_rx = bus.register_agent("creator");
     bus.create_group("test-group", "Test Group", "creator", vec![]).await.unwrap();
-    
+
     // 只有创建者可以删除
     let result = bus.delete_group("test-group", "creator").await;
     assert!(result.is_ok());
-    
+
     // 验证群聊已删除
     let group = bus.get_group("test-group").await;
     assert!(group.is_none());
@@ -233,11 +233,11 @@ async fn test_message_bus_delete_group() {
 #[tokio::test]
 async fn test_message_bus_delete_group_not_creator() {
     let bus = MessageBus::new();
-    
+
     let _creator_rx = bus.register_agent("creator");
     let _other_rx = bus.register_agent("other");
     bus.create_group("test-group", "Test Group", "creator", vec!["other".to_string()]).await.unwrap();
-    
+
     // 非创建者不能删除
     let result = bus.delete_group("test-group", "other").await;
     assert!(result.is_err());
@@ -246,13 +246,13 @@ async fn test_message_bus_delete_group_not_creator() {
 #[tokio::test]
 async fn test_message_bus_list_agent_groups() {
     let bus = MessageBus::new();
-    
+
     let _creator_rx = bus.register_agent("creator");
     let _member_rx = bus.register_agent("member1");
-    
+
     bus.create_group("group-1", "Group 1", "creator", vec!["member1".to_string()]).await.unwrap();
     bus.create_group("group-2", "Group 2", "creator", vec!["member1".to_string()]).await.unwrap();
-    
+
     let groups = bus.list_agent_groups("member1").await;
     assert_eq!(groups.len(), 2);
 }

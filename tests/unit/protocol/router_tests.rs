@@ -187,7 +187,7 @@ async fn test_invite_to_group() {
 fn test_route_target_clone() {
     let target = RouteTarget::Remote("http://example.com".to_string());
     let cloned = target.clone();
-    
+
     match cloned {
         RouteTarget::Remote(endpoint) => assert_eq!(endpoint, "http://example.com"),
         _ => panic!("Expected remote route"),
