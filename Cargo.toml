@@ -28,6 +28,7 @@ axum = "0.7"
 tower = "0.5"
 # 配置解析
 serde_yaml = "0.9"
+regex = "1"
 
 [dev-dependencies]
 # 测试依赖与主依赖共享

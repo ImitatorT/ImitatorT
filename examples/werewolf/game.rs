@@ -98,7 +98,7 @@ impl WerewolfGame {
 
         if !werewolves.is_empty() {
             self.company
-                .create_group("werewolf", "狼人密谋室", "werewolf-001", werewolves)
+                .create_group("werewolf", "狼人密谋室", "werewolf-001", werewolves.clone())
                 .await?;
             info!("🐺 创建狼人密谋室（成员: {:?}）", werewolves);
         }
