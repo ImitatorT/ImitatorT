@@ -36,6 +36,6 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         with:
           personal_token: ${{ secrets.PAT }}
-          external_repository: zhengui666/zhengui666.github.io
+          external_repository: ImitatorT/ImitatorT.github.io
           publish_branch: main
           publish_dir: ./frontend/dist
