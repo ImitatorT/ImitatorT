@@ -1,0 +1,15 @@
+[package]
+name = "simple_company"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "simple_company"
+path = "src/main.rs"
+
+[dependencies]
+imitatort_stateless_company = { path = "../.." }
+tokio = { version = "1", features = ["full"] }
+serde_yaml = "0.9"
+anyhow = "1"
+tracing-subscriber = "0.3"

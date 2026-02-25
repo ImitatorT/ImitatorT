@@ -1,0 +1,40 @@
+[package]
+name = "imitatort_stateless_company"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.85"
+description = "轻量级多Agent公司模拟框架"
+
+[dependencies]
+anyhow = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+chrono = { version = "0.4", features = ["clock"], default-features = false }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+dashmap = "6"
+swarms-rs = "0.1"
+reqwest = { version = "0.12", features = ["json"] }
+async-trait = "0.1"
+async-openai = { version = "0.33", features = ["chat-completion"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+name = "imitatort_stateless_company"
+path = "src/lib.rs"
+
+[[bin]]
+name = "imitatort"
+path = "src/main.rs"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

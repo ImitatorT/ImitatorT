@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Telegram Color Variables */
+:root {
+  /* Light Theme */
+  --tg-bg-color: #ffffff;
+  --tg-secondary-bg-color: #f5f5f5;
+  --tg-text-color: #000000;
+  --tg-hint-color: #707579;
+  --tg-link-color: #3390ec;
+  --tg-button-color: #3390ec;
+  --tg-button-text-color: #ffffff;
+  --tg-header-bg-color: #ffffff;
+  --tg-accent-text-color: #3390ec;
+  --tg-section-bg-color: #f5f5f5;
+  --tg-section-header-text-color: #707579;
+  --tg-subtitle-text-color: #707579;
+  --tg-destructive-text-color: #ff595a;
+  --tg-chat-bg-color: #e6ebee;
+  --tg-message-in-bg-color: #ffffff;
+  --tg-message-out-bg-color: #effdde;
+}
+
+.dark {
+  /* Dark Theme */
+  --tg-bg-color: #17212b;
+  --tg-secondary-bg-color: #242f3d;
+  --tg-text-color: #ffffff;
+  --tg-hint-color: #7d8b99;
+  --tg-link-color: #64b5ef;
+  --tg-button-color: #2b5278;
+  --tg-button-text-color: #ffffff;
+  --tg-header-bg-color: #17212b;
+  --tg-accent-text-color: #64b5ef;
+  --tg-section-bg-color: #242f3d;
+  --tg-section-header-text-color: #7d8b99;
+  --tg-subtitle-text-color: #7d8b99;
+  --tg-destructive-text-color: #ff595a;
+  --tg-chat-bg-color: #0e1621;
+  --tg-message-in-bg-color: #182533;
+  --tg-message-out-bg-color: #2b5278;
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--tg-bg-color);
+  color: var(--tg-text-color);
+}
+
+/* Custom scrollbar - Telegram style */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Telegram-style animations */
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-message-in {
+  animation: messageSlideIn 0.2s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Message bubble styles */
+.message-bubble {
+  position: relative;
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  word-wrap: break-word;
+}
+
+.message-bubble-in {
+  background-color: var(--tg-message-in-bg-color);
+  color: var(--tg-text-color);
+  border-bottom-left-radius: 4px;
+}
+
+.message-bubble-out {
+  background-color: var(--tg-message-out-bg-color);
+  color: var(--tg-text-color);
+  border-bottom-right-radius: 4px;
+}
+
+/* Chat background pattern */
+.chat-background {
+  background-color: var(--tg-chat-bg-color);
+  background-image: url("data:image/svg+xml,%3Csvg width='400' height='400' viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%239C92AC' fill-opacity='0.03' fill-rule='evenodd'%3E%3Cpath d='M0 0h400v400H0V0zm20 20v360h360V20H20z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.dark .chat-background {
+  background-image: none;
+}
+
+/* Selection */
+::selection {
+  background: rgba(51, 144, 236, 0.3);
+}
+
+/* Focus styles */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--tg-link-color);
+  outline-offset: 2px;
+}
+
+/* Status indicators */
+.status-online {
+  background-color: #4ac959;
+}
+
+.status-recently {
+  background-color: #4ac959;
+}
+
+.status-away {
+  background-color: #faa419;
+}
+
+.status-busy {
+  background-color: #ff595a;
+}
+
+.status-offline {
+  background-color: #9e9e9e;
+}
+
+/* Ripple effect for buttons */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.3s, height 0.3s;
+}
+
+.ripple:active::after {
+  width: 200%;
+  height: 200%;
+}
