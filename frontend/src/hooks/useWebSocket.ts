@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useChatStore } from '../stores/appStore';
+import { useBackendStore } from '../stores/backendStore';
 import type { CompanyEvent, Message } from '../types';
 
 export function useWebSocket() {
@@ -14,8 +15,10 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
 
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
-    
+    // Get WebSocket URL from backend store
+    const { getWsUrl } = useBackendStore.getState();
+    const wsUrl = getWsUrl();
+
     try {
       ws.current = new WebSocket(wsUrl);
 
