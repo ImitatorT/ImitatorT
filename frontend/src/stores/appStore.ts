@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { 
-  AppState, 
-  BoardState, 
-  ChatSession, 
+import { getApiUrl } from './backendStore';
+import type {
+  AppState,
+  BoardState,
+  ChatSession,
   Message,
   AgentInfo,
   Department,
@@ -59,7 +60,7 @@ export const useBoardStore = create<ExtendedBoardState>()(
 
       login: async (username, password) => {
         try {
-          const res = await fetch('/api/board/login', {
+          const res = await fetch(getApiUrl('/api/board/login'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
@@ -102,7 +103,7 @@ export const useBoardStore = create<ExtendedBoardState>()(
       fetchMembers: async () => {
         try {
           const { token } = get();
-          const res = await fetch('/api/board/members', {
+          const res = await fetch(getApiUrl('/api/board/members'), {
             headers: token ? { 'Authorization': `Bearer ${token}` } : {},
           });
           const data = await res.json();
@@ -118,7 +119,7 @@ export const useBoardStore = create<ExtendedBoardState>()(
       addMember: async (member) => {
         try {
           const { token } = get();
-          const res = await fetch('/api/board/members', {
+          const res = await fetch(getApiUrl('/api/board/members'), {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
@@ -142,7 +143,7 @@ export const useBoardStore = create<ExtendedBoardState>()(
       deleteMember: async (memberId) => {
         try {
           const { token } = get();
-          const res = await fetch(`/api/board/members/${memberId}`, {
+          const res = await fetch(getApiUrl(`/api/board/members/${memberId}`), {
             method: 'DELETE',
             headers: { 
               'Authorization': `Bearer ${token}` 
@@ -205,7 +206,7 @@ export const useChatStore = create<ExtendedChatStore>()((set) => ({
   fetchSessions: async () => {
     set({ isLoading: true });
     try {
-      const res = await fetch('/api/chat/list');
+      const res = await fetch(getApiUrl('/api/chat/list'));
       const data = await res.json();
       if (data.success) {
         set({ sessions: data.data });
@@ -224,7 +225,7 @@ export const useChatStore = create<ExtendedChatStore>()((set) => ({
 
   fetchMessages: async (sessionId) => {
     try {
-      const res = await fetch(`/api/chat/${sessionId}/messages`);
+      const res = await fetch(getApiUrl(`/api/chat/${sessionId}/messages`));
       const data = await res.json();
       if (data.success) {
         set((state) => ({
@@ -241,7 +242,7 @@ export const useChatStore = create<ExtendedChatStore>()((set) => ({
 
   fetchAgents: async () => {
     try {
-      const res = await fetch('/api/agents');
+      const res = await fetch(getApiUrl('/api/agents'));
       const data = await res.json();
       if (data.success) {
         set({ agents: data.data });
@@ -253,7 +254,7 @@ export const useChatStore = create<ExtendedChatStore>()((set) => ({
 
   fetchDepartments: async () => {
     try {
-      const res = await fetch('/api/org/tree');
+      const res = await fetch(getApiUrl('/api/org/tree'));
       const data = await res.json();
       if (data.success) {
         set({ departments: data.data });

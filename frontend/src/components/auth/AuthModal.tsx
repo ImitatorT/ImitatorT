@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../stores/authStore';
+import { useBackendStore, validateBackendUrl } from '../../stores/backendStore';
 import { Modal, Button, Input } from '../ui';
 import { UserPlus, LogIn, Eye, EyeOff, Check, X } from 'lucide-react';
 import { cn } from '../../utils/helpers';
@@ -13,12 +14,25 @@ interface AuthModalProps {
 export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: AuthModalProps) {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>(defaultTab);
   const { login, register, checkUsername } = useAuthStore();
+  const { backendUrl, setBackendUrl } = useBackendStore();
+
+  // Backend URL state
+  const [backendUrlInput, setBackendUrlInput] = useState(backendUrl);
+  const [backendUrlError, setBackendUrlError] = useState('');
 
   // Login form state
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+
+  // Sync backendUrl from store when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setBackendUrlInput(backendUrl);
+      setBackendUrlError('');
+    }
+  }, [isOpen, backendUrl]);
 
   // Register form state
   const [regUsername, setRegUsername] = useState('');
@@ -32,6 +46,14 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
   const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
+    // Validate backend URL first
+    const validation = setBackendUrl(backendUrlInput);
+    if (!validation.valid) {
+      setBackendUrlError(validation.error || '后端地址格式不正确');
+      return;
+    }
+    setBackendUrlError('');
+
     if (!loginUsername || !loginPassword) {
       setLoginError('请输入用户名和密码');
       return;
@@ -41,7 +63,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
     setLoginError('');
 
     const success = await login(loginUsername, loginPassword);
-    
+
     setLoginLoading(false);
 
     if (success) {
@@ -51,11 +73,19 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
       // 登录成功后跳转到聊天页面
       window.location.hash = '#chat';
     } else {
-      setLoginError('用户名或密码错误');
+      setLoginError('用户名或密码错误，或无法连接到后端服务器');
     }
   };
 
   const handleRegister = async () => {
+    // Validate backend URL first
+    const validation = setBackendUrl(backendUrlInput);
+    if (!validation.valid) {
+      setBackendUrlError(validation.error || '后端地址格式不正确');
+      return;
+    }
+    setBackendUrlError('');
+
     // Validation
     if (!regUsername || !regPassword || !regName) {
       setRegError('请填写所有必填项');
@@ -160,6 +190,31 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
 
         {activeTab === 'login' ? (
           <div className="space-y-4">
+            {/* Backend URL Input */}
+            <Input
+              label="后端服务器地址"
+              placeholder="http://localhost:8080"
+              value={backendUrlInput}
+              onChange={(e) => {
+                setBackendUrlInput(e.target.value);
+                setBackendUrlError('');
+              }}
+              onBlur={() => {
+                const result = validateBackendUrl(backendUrlInput);
+                if (!result.valid) {
+                  setBackendUrlError(result.error || '地址格式不正确');
+                } else {
+                  setBackendUrlError('');
+                }
+              }}
+            />
+            {backendUrlError && (
+              <p className="text-xs text-red-500 -mt-2">{backendUrlError}</p>
+            )}
+            <p className="text-xs text-[var(--tg-hint-color)] -mt-2">
+              支持 localhost, 127.0.0.1, 内网IP 和外网地址
+            </p>
+
             <Input
               label="用户名"
               placeholder="请输入用户名"
@@ -204,6 +259,31 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Backend URL Input */}
+            <Input
+              label="后端服务器地址"
+              placeholder="http://localhost:8080"
+              value={backendUrlInput}
+              onChange={(e) => {
+                setBackendUrlInput(e.target.value);
+                setBackendUrlError('');
+              }}
+              onBlur={() => {
+                const result = validateBackendUrl(backendUrlInput);
+                if (!result.valid) {
+                  setBackendUrlError(result.error || '地址格式不正确');
+                } else {
+                  setBackendUrlError('');
+                }
+              }}
+            />
+            {backendUrlError && (
+              <p className="text-xs text-red-500 -mt-2">{backendUrlError}</p>
+            )}
+            <p className="text-xs text-[var(--tg-hint-color)] -mt-2">
+              支持 localhost, 127.0.0.1, 内网IP 和外网地址
+            </p>
+
             <div className="relative">
               <Input
                 label="用户名 *"

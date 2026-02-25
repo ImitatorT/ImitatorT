@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { getApiUrl } from './backendStore';
 import type { AuthUserInfo } from '../types/index';
 
 // ==================== 存储配置 ====================
@@ -72,7 +73,7 @@ export const useAuthStore = create<AuthState>()(
         console.log('[Auth] Login attempt:', username);
         
         try {
-          const res = await fetch('/api/auth/login', {
+          const res = await fetch(getApiUrl('/api/auth/login'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
@@ -114,7 +115,7 @@ export const useAuthStore = create<AuthState>()(
         console.log('[Auth] Register attempt:', username);
         
         try {
-          const res = await fetch('/api/auth/register', {
+          const res = await fetch(getApiUrl('/api/auth/register'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password, name, email }),
@@ -191,9 +192,9 @@ export const useAuthStore = create<AuthState>()(
         
         try {
           // 验证 token 是否有效
-          const res = await fetch('/api/auth/current', {
-            headers: { 
-              'Authorization': `Bearer ${token}` 
+          const res = await fetch(getApiUrl('/api/auth/current'), {
+            headers: {
+              'Authorization': `Bearer ${token}`
             },
           });
           
@@ -231,7 +232,7 @@ export const useAuthStore = create<AuthState>()(
       // 检查用户名
       checkUsername: async (username: string) => {
         try {
-          const res = await fetch('/api/auth/check-username', {
+          const res = await fetch(getApiUrl('/api/auth/check-username'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username }),
