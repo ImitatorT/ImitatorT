@@ -14,9 +14,11 @@ use crate::core::config::CompanyConfig;
 use crate::core::messaging::MessageBus;
 use crate::core::store::Store;
 use crate::core::tool::ToolRegistry;
+use crate::core::capability::CapabilityRegistry;
 use crate::domain::{Message, Organization};
 use crate::infrastructure::store::SqliteStore;
 use crate::infrastructure::tool::{FrameworkToolExecutor, ToolEnvironment};
+use crate::infrastructure::capability::{McpServer, McpProtocolHandler};
 
 use super::autonomous::AutonomousAgent;
 
@@ -34,6 +36,7 @@ pub struct VirtualCompany {
     message_tx: broadcast::Sender<Message>,
     store: Arc<dyn Store>,
     tool_registry: Arc<ToolRegistry>,
+    capability_registry: Arc<CapabilityRegistry>,
 }
 
 impl VirtualCompany {
@@ -50,9 +53,10 @@ impl VirtualCompany {
 
     /// 从配置创建虚拟公司，使用指定的存储
     pub fn with_store(config: CompanyConfig, store: Arc<dyn Store>) -> Self {
-        let message_bus = Arc::new(MessageBus::new());
+        let message_bus = Arc::new(MessageBus::with_store(store.clone()));
         let (message_tx, _) = broadcast::channel(1000);
         let tool_registry = Arc::new(ToolRegistry::new());
+        let capability_registry = Arc::new(CapabilityRegistry::new());
 
         Self {
             organization: Arc::new(RwLock::new(config.organization.clone())),
@@ -62,6 +66,7 @@ impl VirtualCompany {
             message_tx,
             store,
             tool_registry,
+            capability_registry,
         }
     }
 
@@ -171,6 +176,11 @@ impl VirtualCompany {
         &self.store
     }
 
+    /// 获取公司名称
+    pub fn name(&self) -> &str {
+        &self.config.name
+    }
+
     /// 获取所有 Agent 列表（用于 Web API）
     pub async fn get_agents(&self) -> Result<Vec<crate::domain::Agent>> {
         let org = self.organization.read().await;
@@ -196,6 +206,7 @@ impl VirtualCompany {
             self.message_bus.clone(),
             self.organization.clone(),
             self.tool_registry.clone(),
+            self.store.clone(),
         )
     }
 
@@ -203,6 +214,29 @@ impl VirtualCompany {
     pub fn get_framework_tool_executor(&self) -> FrameworkToolExecutor {
         let env = self.create_tool_environment();
         FrameworkToolExecutor::new(env)
+    }
+
+    /// 获取 CapabilityRegistry 引用
+    pub fn capability_registry(&self) -> Arc<CapabilityRegistry> {
+        self.capability_registry.clone()
+    }
+
+    /// 注册应用自定义功能
+    pub async fn register_app_capability(&self, capability: crate::domain::capability::Capability) -> Result<()> {
+        let cap_id = capability.id.clone();
+        self.capability_registry.register(capability).await?;
+        info!("Registered app capability: {}", cap_id);
+        Ok(())
+    }
+
+    /// 创建 MCP 服务器
+    pub fn create_mcp_server(&self, bind_addr: String) -> McpServer {
+        McpServer::new(bind_addr, self.capability_registry.clone())
+    }
+
+    /// 获取 MCP 协议处理器
+    pub fn get_mcp_protocol_handler(&self) -> McpProtocolHandler {
+        McpProtocolHandler::new(self.capability_registry.clone())
     }
 }
 

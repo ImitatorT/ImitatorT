@@ -216,12 +216,14 @@ impl ObjectSchemaBuilder {
         // 先检查是否必填，再移动 builder
         let is_required = builder.required;
 
-        let properties = self.schema["properties"].as_object_mut().unwrap();
+        let properties = self.schema["properties"].as_object_mut()
+            .expect("Expected 'properties' to be an object in schema");
         properties.insert(name.to_string(), builder.build());
 
         // 如果属性是必填的，添加到 required 数组
         if is_required {
-            let required = self.schema["required"].as_array_mut().unwrap();
+            let required = self.schema["required"].as_array_mut()
+                .expect("Expected 'required' to be an array in schema");
             required.push(json!(name));
         }
 
@@ -230,11 +232,13 @@ impl ObjectSchemaBuilder {
 
     /// 直接添加原始 JSON Schema 属性
     pub fn raw_property(mut self, name: &str, schema: Value, is_required: bool) -> Self {
-        let properties = self.schema["properties"].as_object_mut().unwrap();
+        let properties = self.schema["properties"].as_object_mut()
+            .expect("Expected 'properties' to be an object in schema");
         properties.insert(name.to_string(), schema);
 
         if is_required {
-            let required = self.schema["required"].as_array_mut().unwrap();
+            let required = self.schema["required"].as_array_mut()
+                .expect("Expected 'required' to be an array in schema");
             required.push(json!(name));
         }
 

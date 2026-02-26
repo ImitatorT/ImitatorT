@@ -100,15 +100,18 @@ pub trait Store: Send + Sync {
 
     /// 加载与指定Agent相关的消息
     async fn load_messages_by_agent(&self, agent_id: &str, limit: usize) -> Result<Vec<Message>> {
-        let filter = MessageFilter::new()
+        // 查询从指定Agent发送的消息
+        let from_filter = MessageFilter::new()
             .limit(limit)
             .from(agent_id);
-        let from_msgs = self.load_messages(filter).await?;
+        let from_msgs = self.load_messages(from_filter).await?;
 
-        let filter = MessageFilter::new()
+        // 查询发送给指定Agent的私聊消息
+        let to_filter = MessageFilter::new()
             .limit(limit)
-            .to(agent_id);
-        let to_msgs = self.load_messages(filter).await?;
+            .to(agent_id)
+            .target_type("direct"); // 只查询私聊消息
+        let to_msgs = self.load_messages(to_filter).await?;
 
         // 合并并去重
         let mut all_msgs = from_msgs;
@@ -132,6 +135,24 @@ pub trait Store: Send + Sync {
             .target_type("group")
             .limit(limit);
         self.load_messages(filter).await
+    }
+
+    /// 保存用户
+    async fn save_user(&self, _user: &crate::domain::user::User) -> Result<()> {
+        // 默认实现，子类可以重写
+        Ok(())
+    }
+
+    /// 根据用户名加载用户
+    async fn load_user_by_username(&self, _username: &str) -> Result<Option<crate::domain::user::User>> {
+        // 默认实现，子类可以重写
+        Ok(None)
+    }
+
+    /// 加载所有用户
+    async fn load_users(&self) -> Result<Vec<crate::domain::user::User>> {
+        // 默认实现，子类可以重写
+        Ok(vec![])
     }
 }
 

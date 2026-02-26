@@ -17,6 +17,7 @@ use crate::domain::{Agent, Message, MessageTarget};
 #[derive(Clone)]
 pub struct AutonomousAgent {
     runtime: Arc<AgentRuntime>,
+    message_bus: Arc<MessageBus>,
     message_rx: Arc<RwLock<MessageReceiver>>,
     message_tx: broadcast::Sender<Message>,
     pending_task: Arc<RwLock<Option<String>>>,
@@ -42,6 +43,7 @@ impl AutonomousAgent {
 
         Ok(Self {
             runtime,
+            message_bus,
             message_rx,
             message_tx,
             pending_task: Arc::new(RwLock::new(None)),
@@ -125,9 +127,30 @@ impl AutonomousAgent {
                 let _ = self.message_tx.send(msg.clone());
                 info!("Agent {} sent message: {:?}", self.id(), msg);
             }
-            Decision::CreateGroup { name, members: _ } => {
-                info!("Agent {} wants to create group: {}", self.id(), name);
-                // TODO: 实现群聊创建
+            Decision::CreateGroup { name, members } => {
+                info!("Agent {} wants to create group: {} with members: {:?}", self.id(), name, members);
+                // 使用当前时间戳作为群组ID的一部分，确保唯一性
+                let group_id = format!("group_{}_{}", name.replace(" ", "_"), chrono::Utc::now().timestamp());
+
+                // 将发起创建的Agent也加入群组
+                let mut all_members = members;
+                if !all_members.contains(&self.id().to_string()) {
+                    all_members.push(self.id().to_string());
+                }
+
+                match self.message_bus.create_group(
+                    &group_id,
+                    &name,
+                    self.id(),
+                    all_members
+                ).await {
+                    Ok(()) => {
+                        info!("Agent {} successfully created group: {}", self.id(), group_id);
+                    }
+                    Err(e) => {
+                        error!("Agent {} failed to create group {}: {}", self.id(), group_id, e);
+                    }
+                }
             }
             Decision::ExecuteTask { task } => {
                 info!("Agent {} executing task: {}", self.id(), task);

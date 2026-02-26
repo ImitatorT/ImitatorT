@@ -92,7 +92,7 @@ impl Message {
 }
 
 /// 消息目标
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MessageTarget {
     /// 私聊给指定Agent

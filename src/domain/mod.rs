@@ -7,9 +7,14 @@ pub mod message;
 pub mod org;
 pub mod skill;
 pub mod tool;
+pub mod capability;
+pub mod user;
 
 pub use agent::*;
 pub use message::*;
 pub use org::*;
 pub use skill::*;
-pub use tool::*;
+
+// Selective exports to avoid conflicts
+pub use tool::{Tool, CategoryPath, ReturnType, ToolProvider, MatchType, CategoryNodeInfo, ToolCallContext, JsonSchema, ObjectSchemaBuilder, TypeBuilder};
+pub use capability::{Capability, CapabilityPath, CapabilityCallContext, CapabilityProvider, CapabilityAccessType, SkillCapabilityBinding, BindingType};

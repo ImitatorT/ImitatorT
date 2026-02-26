@@ -8,9 +8,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::core::messaging::MessageBus;
+use crate::core::store::{MessageFilter, Store};
 use crate::core::tool::ToolRegistry;
 use crate::core::tool_provider::{CompositeToolProvider, FrameworkToolProvider};
-use crate::domain::{Message, Organization};
+use crate::domain::{Message, MessageTarget, Organization};
 use crate::domain::tool::{MatchType, ToolCallContext, ToolProvider};
 use crate::infrastructure::tool::ToolResult;
 
@@ -27,6 +28,8 @@ pub struct ToolEnvironment {
     pub tool_registry: Arc<ToolRegistry>,
     /// 工具提供者（用于查询）
     pub tool_provider: Arc<CompositeToolProvider>,
+    /// 消息存储
+    pub message_store: Arc<dyn Store>,
 }
 
 impl ToolEnvironment {
@@ -35,6 +38,7 @@ impl ToolEnvironment {
         message_bus: Arc<MessageBus>,
         organization: Arc<RwLock<Organization>>,
         tool_registry: Arc<ToolRegistry>,
+        message_store: Arc<dyn Store>,
     ) -> Self {
         // 创建组合提供者，包含框架工具和应用工具
         let tool_provider = CompositeToolProvider::new()
@@ -46,6 +50,7 @@ impl ToolEnvironment {
             organization,
             tool_registry,
             tool_provider: Arc::new(tool_provider),
+            message_store,
         }
     }
 }
@@ -292,41 +297,60 @@ impl FrameworkToolExecutor {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("content is required"))?;
 
-        // 查找原消息以确定发送目标
-        let _org = self.env.organization.read().await;
+        // 从消息存储中查找原消息
+        let original_messages = self.env.message_store.load_messages(
+            MessageFilter::new().limit(1).to(message_id)
+        ).await?;
 
-        // 构造回复消息
-        // 注意：这里简化处理，实际应该根据原消息的 to 字段确定回复目标
-        // 由于消息存储中可能找不到原消息，这里假设回复给原消息的发送者
+        let reply_message = if let Some(orig_msg) = original_messages.first() {
+            // 如果找到了原始消息，则根据原始消息的目标创建回复
+            let reply_content = format!("[回复消息 {}] {}", message_id, content);
+            let mut message = match &orig_msg.to {
+                MessageTarget::Direct(sender_id) => {
+                    // 如果原始消息是私聊，回复给对方
+                    if *sender_id == context.caller_id {
+                        // 如果原始消息发送者就是当前调用者，回复给原消息的发送者
+                        Message::private(&context.caller_id, &orig_msg.from, reply_content)
+                    } else {
+                        // 否则回复给原始消息发送者
+                        Message::private(&context.caller_id, sender_id, reply_content)
+                    }
+                },
+                MessageTarget::Group(group_id) => {
+                    // 如果原始消息是群聊，回复到同一群组
+                    Message::group(&context.caller_id, group_id, reply_content)
+                }
+            };
 
-        let reply_content = format!("[回复消息 {}] {}", message_id, content);
+            // 设置回复关系
+            message = message.with_reply_to(message_id);
 
-        let mut message = Message::private(
-            &context.caller_id,
-            // 这里简化处理，实际应该从消息存储中获取原消息的发送者
-            "*", // 通配符，表示需要上层处理
-            reply_content
-        );
-
-        message = message.with_reply_to(message_id);
-
-        // 处理 @ 列表
-        if let Some(mentions) = params["mention_agent_ids"].as_array() {
-            for mention in mentions {
-                if let Some(id) = mention.as_str() {
-                    message = message.with_mention(id);
+            // 处理 @ 列表
+            if let Some(mentions) = params["mention_agent_ids"].as_array() {
+                for mention in mentions {
+                    if let Some(id) = mention.as_str() {
+                        message = message.with_mention(id);
+                    }
                 }
             }
-        }
 
-        // 由于我们无法确定回复目标，这里返回错误提示
-        // 实际实现需要消息存储支持
-        Ok(ToolResult::success(json!({
-            "sent": false,
-            "note": "Reply feature requires message store integration. Use message.send_direct or message.send_group with reply_to parameter instead.",
-            "message_id": message_id,
-            "content_preview": content.chars().take(50).collect::<String>(),
-        })))
+            let message_id_clone = message.id.clone();
+            let target_clone = format!("{:?}", message.to);
+
+            // 发送消息
+            self.env.message_bus.send(message).await?;
+            Ok(ToolResult::success(json!({
+                "sent": true,
+                "message_id": message_id_clone,
+                "reply_to": message_id,
+                "target": target_clone,
+            })))
+        } else {
+            // 如果没有找到原始消息，返回错误
+            Ok(ToolResult::error(format!("Original message not found: {}", message_id)))
+        };
+
+        reply_message
     }
 
     // ==================== 时间类 ====================

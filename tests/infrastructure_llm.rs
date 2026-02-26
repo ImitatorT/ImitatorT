@@ -18,6 +18,8 @@ fn test_message_creation() {
     let msg = Message {
         role: "user".to_string(),
         content: "Hello".to_string(),
+        tool_calls: None,
+        tool_call_id: None,
     };
 
     assert_eq!(msg.role, "user");

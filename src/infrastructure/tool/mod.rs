@@ -94,7 +94,7 @@ impl ToolExecutorRegistry {
 
     /// 创建注册表（使用默认技能管理器）
     pub fn with_default_skill_manager(tool_registry: Arc<ToolRegistry>) -> Self {
-        let skill_manager = Arc::new(SkillManager::new(tool_registry));
+        let skill_manager = Arc::new(SkillManager::new_with_tool_registry(tool_registry));
         Self::new(skill_manager)
     }
 

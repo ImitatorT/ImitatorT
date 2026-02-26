@@ -12,11 +12,13 @@ fn create_test_environment() -> ToolEnvironment {
     let message_bus = Arc::new(MessageBus::new());
     let organization = Arc::new(RwLock::new(Organization::new()));
     let tool_registry = Arc::new(ToolRegistry::new());
+    let store = Arc::new(imitatort_stateless_company::core::store::MemoryStore::new());
 
     ToolEnvironment::new(
         message_bus,
         organization,
         tool_registry,
+        store,
     )
 }
 

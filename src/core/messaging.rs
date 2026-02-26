@@ -19,6 +19,8 @@ pub struct MessageBus {
     groups: Arc<RwLock<std::collections::HashMap<String, Group>>>,
     /// 群聊通道映射
     group_txs: dashmap::DashMap<String, broadcast::Sender<Message>>,
+    /// 消息存储（可选）
+    store: Option<Arc<dyn crate::core::store::Store>>,
 }
 
 impl MessageBus {
@@ -28,6 +30,17 @@ impl MessageBus {
             private_txs: dashmap::DashMap::new(),
             groups: Arc::new(RwLock::new(std::collections::HashMap::new())),
             group_txs: dashmap::DashMap::new(),
+            store: None,
+        }
+    }
+
+    /// 创建带有存储的新消息总线
+    pub fn with_store(store: Arc<dyn crate::core::store::Store>) -> Self {
+        Self {
+            private_txs: dashmap::DashMap::new(),
+            groups: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            group_txs: dashmap::DashMap::new(),
+            store: Some(store),
         }
     }
 
@@ -75,6 +88,13 @@ impl MessageBus {
 
     /// 发送消息（自动路由）
     pub async fn send(&self, message: Message) -> Result<()> {
+        // 先保存消息到存储
+        if let Some(ref store) = self.store {
+            if let Err(e) = store.save_message(&message).await {
+                warn!("Failed to save message to store: {}", e);
+            }
+        }
+
         let target = message.to.clone();
         match target {
             MessageTarget::Direct(agent_id) => self.send_private(message, &agent_id).await,
@@ -127,6 +147,36 @@ impl MessageBus {
             .filter(|g| g.has_member(agent_id))
             .cloned()
             .collect()
+    }
+
+    /// 获取消息历史记录
+    pub async fn get_message_history(&self, filter: crate::core::store::MessageFilter) -> Result<Vec<Message>> {
+        if let Some(ref store) = self.store {
+            store.load_messages(filter).await
+        } else {
+            // 如果没有配置存储，则返回空列表
+            Ok(Vec::new())
+        }
+    }
+
+    /// 获取特定Agent的消息历史记录
+    pub async fn get_agent_message_history(&self, agent_id: &str, limit: usize) -> Result<Vec<Message>> {
+        if let Some(ref store) = self.store {
+            store.load_messages_by_agent(agent_id, limit).await
+        } else {
+            // 如果没有配置存储，则返回空列表
+            Ok(Vec::new())
+        }
+    }
+
+    /// 获取特定群组的消息历史记录
+    pub async fn get_group_message_history(&self, group_id: &str, limit: usize) -> Result<Vec<Message>> {
+        if let Some(ref store) = self.store {
+            store.load_messages_by_group(group_id, limit).await
+        } else {
+            // 如果没有配置存储，则返回空列表
+            Ok(Vec::new())
+        }
     }
 }
 

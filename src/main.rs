@@ -93,7 +93,7 @@ async fn run_web_mode(company: VirtualCompany, bind_addr: &str) -> Result<()> {
     // 创建消息广播通道
     let (message_tx, _) = broadcast::channel::<imitatort_stateless_company::Message>(1000);
 
-    // 启动 Agent 任务循环（在后台运行）
+    // 创建公司实例的共享引用
     let company_arc = Arc::new(company);
     let company_for_agents = company_arc.clone();
     let message_tx_for_agents = message_tx.clone();
@@ -105,7 +105,7 @@ async fn run_web_mode(company: VirtualCompany, bind_addr: &str) -> Result<()> {
     });
 
     // 启动 Web 服务器
-    start_web_server(bind_addr, agents, message_tx).await?;
+    start_web_server(bind_addr, agents, message_tx, company_arc.store().clone()).await?;
 
     Ok(())
 }

@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
 description = "轻量级多Agent公司模拟框架"
-repository = "https://github.com/ImitatorAGI/ImitatorAGI.github.io"
+repository = "https://github.com/ImitatorT/ImitatorT"
 
 [dependencies]
 anyhow = "1"
@@ -25,6 +25,14 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 tower = "0.5"
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+url = "2"
+eventsource-stream = "0.2"
+sha2 = "0.10"
+rand = "0.8"
+jsonwebtoken = "9"
+bcrypt = "0.15"
 
 [dev-dependencies]
 tempfile = "3"

@@ -11,6 +11,7 @@ use rusqlite::Connection;
 
 use crate::core::store::{MessageFilter, Store};
 use crate::domain::{Agent, Department, Group, LLMConfig, Message, MessageTarget, Organization, Role};
+use crate::domain::user::User;
 
 /// SQLite 存储
 pub struct SqliteStore {
@@ -42,7 +43,8 @@ impl SqliteStore {
 
     /// 初始化数据库表结构
     fn init_schema(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire database lock: {}", e))?;
 
         conn.execute_batch(
             "
@@ -90,6 +92,17 @@ impl SqliteStore {
                 mentions TEXT
             );
 
+            -- 用户表
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                email TEXT,
+                password_hash TEXT NOT NULL,
+                is_director BOOLEAN NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            );
+
             -- 创建索引
             CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_agent);
             CREATE INDEX IF NOT EXISTS idx_messages_target ON messages(target_type, target_id);
@@ -98,6 +111,9 @@ impl SqliteStore {
             -- 创建部门索引
             CREATE INDEX IF NOT EXISTS idx_departments_parent ON departments(parent_id);
             CREATE INDEX IF NOT EXISTS idx_agents_department ON agents(department_id);
+
+            -- 创建用户索引
+            CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
             PRAGMA foreign_keys = ON;
             "
@@ -114,7 +130,8 @@ impl SqliteStore {
     {
         let conn = self.conn.clone();
         tokio::task::spawn_blocking(move || {
-            let mut conn = conn.lock().unwrap();
+            let mut conn = conn.lock()
+                .map_err(|e| anyhow::anyhow!("Failed to acquire database lock: {}", e))?;
             f(&mut conn)
         })
         .await
@@ -455,6 +472,80 @@ impl Store for SqliteStore {
             }
 
             Ok(messages)
+        }).await
+    }
+
+    async fn save_user(&self, user: &User) -> Result<()> {
+        let user = user.clone();
+        self.execute(move |conn| {
+            conn.execute(
+                "INSERT OR REPLACE INTO users (id, username, name, email, password_hash, is_director, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    &user.id,
+                    &user.username,
+                    &user.name,
+                    user.email.as_deref(),
+                    &user.password_hash,
+                    &user.is_director,
+                    &user.created_at,
+                ],
+            )?;
+            Ok(())
+        }).await
+    }
+
+    async fn load_user_by_username(&self, username: &str) -> Result<Option<User>> {
+        let username = username.to_string();
+        self.execute(move |conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, username, name, email, password_hash, is_director, created_at FROM users WHERE username = ?1"
+            )?;
+
+            let user_result = stmt.query_row([username], |row| {
+                Ok(User {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    name: row.get(2)?,
+                    email: row.get(3)?,
+                    password_hash: row.get(4)?,
+                    is_director: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            });
+
+            match user_result {
+                Ok(user) => Ok(Some(user)),
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                Err(e) => Err(anyhow::anyhow!(e)),
+            }
+        }).await
+    }
+
+    async fn load_users(&self) -> Result<Vec<User>> {
+        self.execute(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, username, name, email, password_hash, is_director, created_at FROM users"
+            )?;
+
+            let user_iter = stmt.query_map([], |row| {
+                Ok(User {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    name: row.get(2)?,
+                    email: row.get(3)?,
+                    password_hash: row.get(4)?,
+                    is_director: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            })?;
+
+            let mut users = Vec::new();
+            for user in user_iter {
+                users.push(user?);
+            }
+
+            Ok(users)
         }).await
     }
 }

@@ -6,6 +6,7 @@ pub mod agent;
 pub mod config;
 pub mod messaging;
 pub mod skill;
+pub mod state;
 pub mod store;
 pub mod tool;
 pub mod tool_provider;
