@@ -19,12 +19,21 @@ impl CompanyConfig {
         // 添加部门
         org.add_department(Department::top_level("tech", "技术部"));
 
+        // 从环境变量获取配置
+        let api_key = std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| "test-key".to_string());
+        let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "qwen3-coder-plus".to_string());
+        let base_url = std::env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "http://107.173.156.228:8317/v1".to_string());
+
         // 添加Agent
         let agent1 = Agent::new(
             "ceo",
             "CEO",
             Role::simple("CEO", "你是公司的CEO，负责决策和管理。"),
-            LLMConfig::openai("test-key"),
+            LLMConfig {
+                api_key,
+                model,
+                base_url,
+            },
         );
 
         org.add_agent(agent1);

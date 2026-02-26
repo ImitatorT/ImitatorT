@@ -11,8 +11,14 @@ use imitatort_stateless_company::{
 use tokio::sync::broadcast;
 use tracing::{error, info};
 
+// 加载环境变量
+use dotenv::dotenv;
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // 加载 .env 文件
+    dotenv().ok();
+
     // 初始化日志
     tracing_subscriber::fmt::init();
 
@@ -85,6 +91,9 @@ async fn run_cli_mode(company: VirtualCompany) -> Result<()> {
 
 /// 运行 Web 模式
 async fn run_web_mode(company: VirtualCompany, bind_addr: &str) -> Result<()> {
+    // 加载应用程序配置以检查是否运行Agent循环
+    let app_config = AppConfig::from_env();
+
     // 从公司获取 Agent 列表
     let agents: Vec<Agent> = company.get_agents().await?;
     info!("Loaded {} agents for Web API", agents.len());
@@ -94,14 +103,20 @@ async fn run_web_mode(company: VirtualCompany, bind_addr: &str) -> Result<()> {
 
     // 创建公司实例的共享引用
     let company_arc = Arc::new(company);
-    let company_for_agents = company_arc.clone();
-    let message_tx_for_agents = message_tx.clone();
 
-    tokio::spawn(async move {
-        if let Err(e) = run_agent_loops(company_for_agents, message_tx_for_agents).await {
-            error!("Agent loops error: {}", e);
-        }
-    });
+    // 如果配置允许运行Agent循环，则启动它们
+    if app_config.run_agent_loops {
+        let company_for_agents = company_arc.clone();
+        let message_tx_for_agents = message_tx.clone();
+
+        tokio::spawn(async move {
+            if let Err(e) = run_agent_loops(company_for_agents, message_tx_for_agents).await {
+                error!("Agent loops error: {}", e);
+            }
+        });
+    } else {
+        info!("Agent loops disabled by configuration");
+    }
 
     // 启动 Web 服务器
     start_web_server(bind_addr, agents, message_tx, company_arc.store().clone()).await?;

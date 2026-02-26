@@ -1093,6 +1093,7 @@ dependencies = [
  "bcrypt",
  "chrono",
  "dashmap",
+ "dotenv",
  "eventsource-stream",
  "futures-util",
  "jsonwebtoken",

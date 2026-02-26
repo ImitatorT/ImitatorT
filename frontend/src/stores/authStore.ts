@@ -239,10 +239,9 @@ export const useAuthStore = create<AuthState>()(
       // 检查用户名
       checkUsername: async (username: string) => {
         try {
-          const res = await fetch(getApiUrl('/api/auth/check-username'), {
-            method: 'POST',
+          const res = await fetch(getApiUrl(`/api/auth/check-username?username=${encodeURIComponent(username)}`), {
+            method: 'GET',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username }),
           });
           const data = await res.json();
           return data.success && data.data?.available;
