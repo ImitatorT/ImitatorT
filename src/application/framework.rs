@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{error, info};
+use tracing::info;
 
 use crate::core::config::CompanyConfig;
 use crate::core::messaging::MessageBus;

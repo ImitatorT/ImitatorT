@@ -5,7 +5,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use crate::domain::{Group, Organization, Agent, Role, LLMConfig, MessageTarget};
+use crate::domain::{Group, Organization};
 use crate::core::store::Store;
 use crate::domain::user::{User, Position};
 
@@ -27,7 +27,7 @@ impl OrganizationManager {
     /// - 管理层直接加入思过崖线
     /// - 创建"思过崖线"群聊
     /// - 自动将用户自定义架构的最高级成员加入群聊
-    pub async fn initialize_guilty_cliff_line(&self, org: &mut Organization, users: &[User]) -> Result<()> {
+    pub async fn initialize_guilty_cliff_line(&self, _org: &mut Organization, users: &[User]) -> Result<()> {
         // 创建思过崖线群聊
         let guilty_cliff_group = Group {
             id: "guilty-cliff-line".to_string(),

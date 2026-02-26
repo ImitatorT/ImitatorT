@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { Button, Input, Modal } from '../ui';
-import { Key, Plus, Copy, Trash2, Calendar, Users, CheckCircle, User, Building2, Briefcase } from 'lucide-react';
-import { cn } from '../../utils/helpers';
+import { Key, Plus, Copy, Trash2, Calendar, Users, User, Building2, Briefcase } from 'lucide-react';
 
 interface InviteCode {
   id: string;

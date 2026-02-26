@@ -28,6 +28,9 @@ pub struct AppConfig {
 
     /// 日志级别
     pub log_level: String,
+
+    /// 是否运行 Agent 自主循环 (web 模式下)
+    pub run_agent_loops: bool,
 }
 
 impl Default for AppConfig {
@@ -40,6 +43,7 @@ impl Default for AppConfig {
             default_api_base_url: get_env_or_default("DEFAULT_API_BASE_URL", "https://api.openai.com/v1".to_string()),
             default_model: get_env_or_default("DEFAULT_MODEL", "gpt-4o-mini".to_string()),
             log_level: get_env_or_default("LOG_LEVEL", "info".to_string()),
+            run_agent_loops: get_env_or_default("RUN_AGENT_LOOPS", true), // 默认运行Agent循环，保持向后兼容
         }
     }
 }
