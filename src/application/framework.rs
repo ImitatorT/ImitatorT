@@ -6,43 +6,39 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
-use dashmap::DashMap;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{error, info};
 
 use crate::core::config::CompanyConfig;
 use crate::core::messaging::MessageBus;
 use crate::core::store::Store;
-use crate::core::tool::ToolRegistry;
-use crate::core::capability::CapabilityRegistry;
 use crate::domain::{Message, Organization};
 use crate::infrastructure::store::SqliteStore;
-use crate::infrastructure::tool::{FrameworkToolExecutor, ToolEnvironment};
-use crate::infrastructure::capability::{McpServer, McpProtocolHandler};
 
-use super::autonomous::AutonomousAgent;
+use super::company_runtime::{OrganizationManager, AgentManager, ToolCapabilityManager};
 
-/// 默认数据库路径
-pub const DEFAULT_DB_PATH: &str = "imitatort.db";
+// 导入缺失的类型
+use crate::{ToolRegistry, ToolEnvironment, FrameworkToolExecutor, CapabilityRegistry, McpServer, McpProtocolHandler};
+
+// 默认数据库路径现在由 AppConfig 管理
+// pub const DEFAULT_DB_PATH: &str = "imitatort.db"; // 已移除硬编码
 
 /// 虚拟公司框架
 ///
 /// 封装所有框架能力，提供简洁的 API
 pub struct VirtualCompany {
-    config: CompanyConfig,
-    organization: Arc<RwLock<Organization>>,
-    agents: DashMap<String, AutonomousAgent>,
+    organization_manager: OrganizationManager,
+    agent_manager: AgentManager,
+    tool_capability_manager: ToolCapabilityManager,
     message_bus: Arc<MessageBus>,
     message_tx: broadcast::Sender<Message>,
     store: Arc<dyn Store>,
-    tool_registry: Arc<ToolRegistry>,
-    capability_registry: Arc<CapabilityRegistry>,
 }
 
 impl VirtualCompany {
     /// 从配置创建虚拟公司，使用默认SQLite存储
     pub fn from_config(config: CompanyConfig) -> Result<Self> {
-        Self::with_sqlite(config, DEFAULT_DB_PATH)
+        Self::with_sqlite(config, &std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string()))
     }
 
     /// 从配置创建虚拟公司，使用指定路径的SQLite存储
@@ -55,18 +51,18 @@ impl VirtualCompany {
     pub fn with_store(config: CompanyConfig, store: Arc<dyn Store>) -> Self {
         let message_bus = Arc::new(MessageBus::with_store(store.clone()));
         let (message_tx, _) = broadcast::channel(1000);
-        let tool_registry = Arc::new(ToolRegistry::new());
-        let capability_registry = Arc::new(CapabilityRegistry::new());
+
+        let organization_manager = OrganizationManager::new(config);
+        let tool_capability_manager = ToolCapabilityManager::new();
+        let agent_manager = AgentManager::new(message_bus.clone());
 
         Self {
-            organization: Arc::new(RwLock::new(config.organization.clone())),
-            config,
-            agents: DashMap::new(),
+            organization_manager,
+            agent_manager,
+            tool_capability_manager,
             message_bus,
             message_tx,
             store,
-            tool_registry,
-            capability_registry,
         }
     }
 
@@ -98,7 +94,7 @@ impl VirtualCompany {
     /// 保存当前状态到存储
     pub async fn save(&self) -> Result<()> {
         info!("Saving company state to storage...");
-        let org = self.organization.read().await;
+        let org = self.organization_manager.organization().await;
         self.store.save_organization(&*org).await?;
         info!("Company state saved successfully");
         Ok(())
@@ -106,35 +102,17 @@ impl VirtualCompany {
 
     /// 初始化并启动公司
     pub async fn run(&self) -> Result<()> {
-        info!("Starting virtual company: {}", self.config.name);
+        info!("Starting virtual company: {}", self.organization_manager.config().name);
 
-        // 1. 创建所有Agent
-        let org = self.organization.read().await;
-        let agents_to_create: Vec<_> = org.agents.clone();
+        // 1. 初始化所有Agent
+        let org = self.organization_manager.organization().await;
+        self.agent_manager.initialize_agents(&*org).await?;
         drop(org); // 释放读锁
 
-        for agent in agents_to_create {
-            let agent = AutonomousAgent::new(agent, self.message_bus.clone()).await?;
-
-            let agent_id = agent.id().to_string();
-            self.agents.insert(agent_id.clone(), agent);
-            info!("Created agent: {}", agent_id);
-        }
-
-        info!("All {} agents initialized", self.agents.len());
+        info!("All {} agents initialized", self.agent_manager.get_agents().await?.len());
 
         // 2. 启动所有Agent的自主循环
-        let mut handles = vec![];
-
-        for agent_ref in self.agents.iter() {
-            let agent = agent_ref.value().clone();
-            let handle = tokio::spawn(async move {
-                if let Err(e) = agent.run_loop().await {
-                    error!("Agent {} error: {}", agent.id(), e);
-                }
-            });
-            handles.push(handle);
-        }
+        let handles = self.agent_manager.start_agent_loops().await?;
 
         info!("All agents started, company is running...");
 
@@ -153,22 +131,17 @@ impl VirtualCompany {
 
     /// 手动触发任务给指定Agent
     pub fn assign_task(&self, agent_id: &str, task: impl Into<String>) -> Result<()> {
-        if let Some(agent) = self.agents.get(agent_id) {
-            agent.assign_task(task)?;
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Agent not found: {}", agent_id))
-        }
+        self.agent_manager.assign_task(agent_id, task)
     }
 
     /// 获取组织架构（异步读取）
     pub async fn organization(&self) -> tokio::sync::RwLockReadGuard<'_, Organization> {
-        self.organization.read().await
+        self.organization_manager.organization().await
     }
 
     /// 获取组织架构引用（同步，仅用于需要 &Organization 的场景）
     pub fn organization_arc(&self) -> Arc<RwLock<Organization>> {
-        self.organization.clone()
+        self.organization_manager.organization_arc()
     }
 
     /// 获取存储引用
@@ -178,65 +151,61 @@ impl VirtualCompany {
 
     /// 获取公司名称
     pub fn name(&self) -> &str {
-        &self.config.name
+        &self.organization_manager.config().name
     }
 
     /// 获取所有 Agent 列表（用于 Web API）
     pub async fn get_agents(&self) -> Result<Vec<crate::domain::Agent>> {
-        let org = self.organization.read().await;
+        let org = self.organization_manager.organization().await;
         Ok(org.agents.clone())
     }
 
     /// 获取 ToolRegistry 引用
     pub fn tool_registry(&self) -> Arc<ToolRegistry> {
-        self.tool_registry.clone()
+        self.tool_capability_manager.tool_registry()
     }
 
     /// 注册应用自定义工具
     pub async fn register_app_tool(&self, tool: crate::domain::tool::Tool) -> Result<()> {
-        let tool_id = tool.id.clone();
-        self.tool_registry.register(tool).await?;
-        info!("Registered app tool: {}", tool_id);
-        Ok(())
+        self.tool_capability_manager.register_app_tool(tool).await
     }
 
     /// 创建工具执行环境
     pub fn create_tool_environment(&self) -> ToolEnvironment {
-        ToolEnvironment::new(
+        self.tool_capability_manager.create_tool_environment(
             self.message_bus.clone(),
-            self.organization.clone(),
-            self.tool_registry.clone(),
+            self.organization_manager.organization_arc(),
             self.store.clone(),
         )
     }
 
     /// 获取框架工具执行器
     pub fn get_framework_tool_executor(&self) -> FrameworkToolExecutor {
-        let env = self.create_tool_environment();
-        FrameworkToolExecutor::new(env)
+        self.tool_capability_manager.get_framework_tool_executor(
+            self.message_bus.clone(),
+            self.organization_manager.organization_arc(),
+            self.store.clone(),
+        )
     }
 
     /// 获取 CapabilityRegistry 引用
     pub fn capability_registry(&self) -> Arc<CapabilityRegistry> {
-        self.capability_registry.clone()
+        self.tool_capability_manager.capability_registry()
     }
 
     /// 注册应用自定义功能
     pub async fn register_app_capability(&self, capability: crate::domain::capability::Capability) -> Result<()> {
-        let cap_id = capability.id.clone();
-        self.capability_registry.register(capability).await?;
-        info!("Registered app capability: {}", cap_id);
-        Ok(())
+        self.tool_capability_manager.register_app_capability(capability).await
     }
 
     /// 创建 MCP 服务器
     pub fn create_mcp_server(&self, bind_addr: String) -> McpServer {
-        McpServer::new(bind_addr, self.capability_registry.clone())
+        self.tool_capability_manager.create_mcp_server(bind_addr)
     }
 
     /// 获取 MCP 协议处理器
     pub fn get_mcp_protocol_handler(&self) -> McpProtocolHandler {
-        McpProtocolHandler::new(self.capability_registry.clone())
+        self.tool_capability_manager.get_mcp_protocol_handler()
     }
 }
 
@@ -249,12 +218,13 @@ pub struct CompanyBuilder {
 impl CompanyBuilder {
     /// 创建新的构建器，使用默认SQLite路径
     pub fn new() -> Result<Self> {
-        Self::with_sqlite(DEFAULT_DB_PATH)
+        Self::with_sqlite(&std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string()))
     }
 
     /// 从配置创建，使用默认SQLite路径
     pub fn from_config(config: CompanyConfig) -> Result<Self> {
-        let mut builder = Self::with_sqlite(DEFAULT_DB_PATH)?;
+        let db_path = std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string());
+        let mut builder = Self::with_sqlite(&db_path)?;
         builder.config = Some(config);
         Ok(builder)
     }

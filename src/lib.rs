@@ -2,6 +2,12 @@
 //!
 //! 基于Rust的轻量级框架，让多个AI Agent像真人一样在公司中协作。
 
+// 应用程序配置管理 (AppConfig) - 管理运行时设置如数据库路径、网络绑定等
+pub mod config;
+
+// 跨层错误类型定义 - 提供统一的错误处理机制
+pub mod errors;
+
 // 领域层
 pub mod domain;
 
@@ -21,7 +27,9 @@ pub mod core {
 // 应用层
 pub mod application {
     pub mod autonomous;
+    pub mod company_runtime;
     pub mod framework;
+    pub mod organization;
 }
 
 // 基础设施层
@@ -36,7 +44,7 @@ pub mod infrastructure {
 }
 
 // 重新导出主要类型
-pub use application::framework::{CompanyBuilder, VirtualCompany, DEFAULT_DB_PATH};
+pub use application::framework::{CompanyBuilder, VirtualCompany};
 pub use core::config::CompanyConfig;
 pub use core::skill::SkillManager;
 pub use domain::skill::{Skill, SkillToolBinding, BindingType, ToolAccessType};
@@ -54,3 +62,9 @@ pub use infrastructure::tool::{ToolExecutor, ToolResult, ToolExecutorRegistry, F
 pub use infrastructure::capability::{CapabilityExecutor, CapabilityResult, CapabilityExecutorRegistry, McpServer, McpClient, McpProtocolHandler};
 pub use core::tool_provider::{CompositeToolProvider, FrameworkToolProvider, RegistryToolProvider};
 pub use core::capability_provider::{CompositeCapabilityProvider, FrameworkCapabilityProvider, RegistryCapabilityProvider};
+pub use config::AppConfig;
+pub use errors::{ImitatorError, Result as ImitatorResult};
+
+/// 测试工具 - 仅在测试环境下可用
+#[cfg(test)]
+pub use test_utils::TestHelper;

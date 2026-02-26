@@ -6,6 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::domain::{Group, Message, Organization};
+use crate::domain::invitation_code::InvitationCode;
 
 /// 消息查询过滤器
 #[derive(Debug, Clone, Default)]
@@ -151,6 +152,36 @@ pub trait Store: Send + Sync {
 
     /// 加载所有用户
     async fn load_users(&self) -> Result<Vec<crate::domain::user::User>> {
+        // 默认实现，子类可以重写
+        Ok(vec![])
+    }
+
+    /// 保存邀请码
+    async fn save_invitation_code(&self, _code: &InvitationCode) -> Result<()> {
+        // 默认实现，子类可以重写
+        Ok(())
+    }
+
+    /// 根据邀请码字符串查找邀请码
+    async fn load_invitation_code_by_code(&self, _code: &str) -> Result<Option<InvitationCode>> {
+        // 默认实现，子类可以重写
+        Ok(None)
+    }
+
+    /// 加载所有邀请码
+    async fn load_invitation_codes(&self) -> Result<Vec<InvitationCode>> {
+        // 默认实现，子类可以重写
+        Ok(vec![])
+    }
+
+    /// 更新邀请码（主要用于标记为已使用）
+    async fn update_invitation_code(&self, _code: &InvitationCode) -> Result<()> {
+        // 默认实现，子类可以重写
+        Ok(())
+    }
+
+    /// 根据创建者ID查找邀请码
+    async fn load_invitation_codes_by_creator(&self, _creator_id: &str) -> Result<Vec<InvitationCode>> {
         // 默认实现，子类可以重写
         Ok(vec![])
     }

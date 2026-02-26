@@ -9,6 +9,7 @@ pub mod skill;
 pub mod tool;
 pub mod capability;
 pub mod user;
+pub mod invitation_code;
 
 pub use agent::*;
 pub use message::*;

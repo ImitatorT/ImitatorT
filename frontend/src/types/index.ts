@@ -22,6 +22,9 @@ export interface AuthUserInfo {
   avatar?: string;
   created_at?: number;
   is_director: boolean;
+  employee_id?: string;
+  position?: string;
+  department?: string;
 }
 
 // ==================== Agent 类型 ====================

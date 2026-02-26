@@ -13,6 +13,9 @@ pub struct Claims {
     pub name: String,
     pub email: Option<String>,
     pub is_director: bool,
+    pub employee_id: String,
+    pub position: String,
+    pub department: String,
     pub exp: usize,
 }
 
@@ -30,6 +33,9 @@ pub struct UserInfo {
     pub name: String,
     pub email: Option<String>,
     pub is_director: bool,
+    pub employee_id: String,
+    pub position: String,
+    pub department: String,
 }
 
 impl JwtService {
@@ -54,6 +60,9 @@ impl JwtService {
             name: user_info.name.clone(),
             email: user_info.email.clone(),
             is_director: user_info.is_director,
+            employee_id: user_info.employee_id.clone(),
+            position: user_info.position.clone(),
+            department: user_info.department.clone(),
             exp: expiration,
         };
 
@@ -74,6 +83,9 @@ impl JwtService {
             name: claims.name,
             email: claims.email,
             is_director: claims.is_director,
+            employee_id: claims.employee_id,
+            position: claims.position,
+            department: claims.department,
         })
     }
 }

@@ -40,6 +40,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
+  const [regInviteCode, setRegInviteCode] = useState(''); // 邀请码
   const [regLoading, setRegLoading] = useState(false);
   const [regError, setRegError] = useState('');
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
@@ -115,7 +116,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
     setRegLoading(true);
     setRegError('');
 
-    const success = await register(regUsername, regPassword, regName, regEmail || undefined);
+    const success = await register(regUsername, regPassword, regName, regEmail || undefined, regInviteCode || undefined);
     
     setRegLoading(false);
 
@@ -349,6 +350,19 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
               value={regEmail}
               onChange={(e) => setRegEmail(e.target.value)}
             />
+
+            {/* 邀请码输入框 - 非首位注册时需要 */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">邀请码 *</label>
+              <p className="text-xs text-[var(--tg-hint-color)]">
+                请联系集团主席获取邀请码（首位注册用户自动成为集团主席）
+              </p>
+              <Input
+                placeholder="请输入邀请码"
+                value={regInviteCode}
+                onChange={(e) => setRegInviteCode(e.target.value)}
+              />
+            </div>
 
             {regError && (
               <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">

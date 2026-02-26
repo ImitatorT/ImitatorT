@@ -12,6 +12,7 @@ use rusqlite::Connection;
 use crate::core::store::{MessageFilter, Store};
 use crate::domain::{Agent, Department, Group, LLMConfig, Message, MessageTarget, Organization, Role};
 use crate::domain::user::User;
+use crate::domain::invitation_code::InvitationCode;
 
 /// SQLite 存储
 pub struct SqliteStore {
@@ -99,7 +100,21 @@ impl SqliteStore {
                 name TEXT NOT NULL,
                 email TEXT,
                 password_hash TEXT NOT NULL,
-                is_director BOOLEAN NOT NULL DEFAULT 0,
+                employee_id TEXT UNIQUE NOT NULL,
+                position TEXT NOT NULL DEFAULT 'Employee',
+                department TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL
+            );
+
+            -- 邀请码表
+            CREATE TABLE IF NOT EXISTS invitation_codes (
+                id TEXT PRIMARY KEY,
+                code TEXT UNIQUE NOT NULL,
+                created_by TEXT NOT NULL,
+                expiry_time INTEGER NOT NULL,
+                is_used BOOLEAN NOT NULL DEFAULT 0,
+                max_usage INTEGER NOT NULL DEFAULT 1,
+                current_usage INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL
             );
 
@@ -478,16 +493,24 @@ impl Store for SqliteStore {
     async fn save_user(&self, user: &User) -> Result<()> {
         let user = user.clone();
         self.execute(move |conn| {
+            let position_str = match user.position {
+                crate::domain::user::Position::Chairman => "Chairman",
+                crate::domain::user::Position::Management => "Management",
+                crate::domain::user::Position::Employee => "Employee",
+            };
+
             conn.execute(
-                "INSERT OR REPLACE INTO users (id, username, name, email, password_hash, is_director, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT OR REPLACE INTO users (id, username, name, email, password_hash, employee_id, position, department, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 rusqlite::params![
                     &user.id,
                     &user.username,
                     &user.name,
                     user.email.as_deref(),
                     &user.password_hash,
-                    &user.is_director,
+                    &user.employee_id,
+                    position_str,
+                    &user.department,
                     &user.created_at,
                 ],
             )?;
@@ -499,18 +522,27 @@ impl Store for SqliteStore {
         let username = username.to_string();
         self.execute(move |conn| {
             let mut stmt = conn.prepare(
-                "SELECT id, username, name, email, password_hash, is_director, created_at FROM users WHERE username = ?1"
+                "SELECT id, username, name, email, password_hash, employee_id, position, department, created_at FROM users WHERE username = ?1"
             )?;
 
             let user_result = stmt.query_row([username], |row| {
+                let position_str: String = row.get(6)?;
+                let position = match position_str.as_str() {
+                    "Chairman" => crate::domain::user::Position::Chairman,
+                    "Management" => crate::domain::user::Position::Management,
+                    _ => crate::domain::user::Position::Employee,
+                };
+
                 Ok(User {
                     id: row.get(0)?,
                     username: row.get(1)?,
                     name: row.get(2)?,
                     email: row.get(3)?,
                     password_hash: row.get(4)?,
-                    is_director: row.get(5)?,
-                    created_at: row.get(6)?,
+                    employee_id: row.get(5)?,
+                    position,
+                    department: row.get(7)?,
+                    created_at: row.get(8)?,
                 })
             });
 
@@ -525,18 +557,27 @@ impl Store for SqliteStore {
     async fn load_users(&self) -> Result<Vec<User>> {
         self.execute(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT id, username, name, email, password_hash, is_director, created_at FROM users"
+                "SELECT id, username, name, email, password_hash, employee_id, position, department, created_at FROM users"
             )?;
 
             let user_iter = stmt.query_map([], |row| {
+                let position_str: String = row.get(6)?;
+                let position = match position_str.as_str() {
+                    "Chairman" => crate::domain::user::Position::Chairman,
+                    "Management" => crate::domain::user::Position::Management,
+                    _ => crate::domain::user::Position::Employee,
+                };
+
                 Ok(User {
                     id: row.get(0)?,
                     username: row.get(1)?,
                     name: row.get(2)?,
                     email: row.get(3)?,
                     password_hash: row.get(4)?,
-                    is_director: row.get(5)?,
-                    created_at: row.get(6)?,
+                    employee_id: row.get(5)?,
+                    position,
+                    department: row.get(7)?,
+                    created_at: row.get(8)?,
                 })
             })?;
 
@@ -546,6 +587,123 @@ impl Store for SqliteStore {
             }
 
             Ok(users)
+        }).await
+    }
+
+    async fn save_invitation_code(&self, code: &InvitationCode) -> Result<()> {
+        let code_clone = code.clone();
+        self.execute(move |conn| {
+            conn.execute(
+                "INSERT OR REPLACE INTO invitation_codes (id, code, created_by, expiry_time, is_used, max_usage, current_usage, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                rusqlite::params![
+                    &code_clone.id,
+                    &code_clone.code,
+                    &code_clone.created_by,
+                    &code_clone.expiry_time,
+                    &code_clone.is_used,
+                    &code_clone.max_usage,
+                    &code_clone.current_usage,
+                    &code_clone.created_at,
+                ],
+            )?;
+            Ok(())
+        }).await
+    }
+
+    async fn load_invitation_code_by_code(&self, code: &str) -> Result<Option<InvitationCode>> {
+        let code_str = code.to_string();
+        self.execute(move |conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, code, created_by, expiry_time, is_used, max_usage, current_usage, created_at FROM invitation_codes WHERE code = ?1"
+            )?;
+
+            let code_result = stmt.query_row([code_str], |row| {
+                Ok(InvitationCode {
+                    id: row.get(0)?,
+                    code: row.get(1)?,
+                    created_by: row.get(2)?,
+                    expiry_time: row.get(3)?,
+                    is_used: row.get(4)?,
+                    max_usage: row.get(5)?,
+                    current_usage: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            });
+
+            match code_result {
+                Ok(inv_code) => Ok(Some(inv_code)),
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                Err(e) => Err(anyhow::anyhow!(e)),
+            }
+        }).await
+    }
+
+    async fn load_invitation_codes(&self) -> Result<Vec<InvitationCode>> {
+        self.execute(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, code, created_by, expiry_time, is_used, max_usage, current_usage, created_at FROM invitation_codes"
+            )?;
+
+            let code_iter = stmt.query_map([], |row| {
+                Ok(InvitationCode {
+                    id: row.get(0)?,
+                    code: row.get(1)?,
+                    created_by: row.get(2)?,
+                    expiry_time: row.get(3)?,
+                    is_used: row.get(4)?,
+                    max_usage: row.get(5)?,
+                    current_usage: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            })?;
+
+            let mut codes = Vec::new();
+            for code in code_iter {
+                codes.push(code?);
+            }
+
+            Ok(codes)
+        }).await
+    }
+
+    async fn update_invitation_code(&self, code: &InvitationCode) -> Result<()> {
+        let code_clone = code.clone();
+        self.execute(move |conn| {
+            conn.execute(
+                "UPDATE invitation_codes SET is_used = ?1, current_usage = ?2 WHERE id = ?3",
+                rusqlite::params![&code_clone.is_used, &code_clone.current_usage, &code_clone.id],
+            )?;
+            Ok(())
+        }).await
+    }
+
+    async fn load_invitation_codes_by_creator(&self, creator_id: &str) -> Result<Vec<InvitationCode>> {
+        let creator_id_str = creator_id.to_string();
+        self.execute(move |conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, code, created_by, expiry_time, is_used, max_usage, current_usage, created_at FROM invitation_codes WHERE created_by = ?1"
+            )?;
+
+            let code_iter = stmt.query_map([creator_id_str], |row| {
+                Ok(InvitationCode {
+                    id: row.get(0)?,
+                    code: row.get(1)?,
+                    created_by: row.get(2)?,
+                    expiry_time: row.get(3)?,
+                    is_used: row.get(4)?,
+                    max_usage: row.get(5)?,
+                    current_usage: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            })?;
+
+            let mut codes = Vec::new();
+            for code in code_iter {
+                codes.push(code?);
+            }
+
+            Ok(codes)
         }).await
     }
 }

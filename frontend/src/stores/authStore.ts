@@ -51,7 +51,7 @@ interface AuthState {
   
   // Actions
   login: (username: string, password: string) => Promise<boolean>;
-  register: (username: string, password: string, name: string, email?: string) => Promise<boolean>;
+  register: (username: string, password: string, name: string, email?: string, inviteCode?: string) => Promise<boolean>;
   logout: () => void;
   restoreSession: () => Promise<boolean>;
   checkUsername: (username: string) => Promise<boolean>;
@@ -111,38 +111,45 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // 注册
-      register: async (username: string, password: string, name: string, email?: string) => {
+      register: async (username: string, password: string, name: string, email?: string, inviteCode?: string) => {
         console.log('[Auth] Register attempt:', username);
-        
+
         try {
+          const body: any = { username, password, name, email };
+
+          // 如果提供了邀请码，则添加到请求体
+          if (inviteCode) {
+            body.invite_code = inviteCode;
+          }
+
           const res = await fetch(getApiUrl('/api/auth/register'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password, name, email }),
+            body: JSON.stringify(body),
           });
-          
+
           const data = await res.json();
-          
+
           if (data.success && data.data?.token && data.data?.user) {
             console.log('[Auth] Register successful:', data.data.user.username);
-            
-            set({ 
-              isLoggedIn: true, 
+
+            set({
+              isLoggedIn: true,
               token: data.data.token,
               user: data.data.user,
               lastChecked: Date.now(),
             });
-            
+
             // 同时写入 Cookie
             setCookie('auth_token_backup', data.data.token, 365);
             setCookie('auth_user_backup', JSON.stringify(data.data.user), 365);
-            
+
             // 广播登录事件
             broadcastAuthChange('login', { token: data.data.token, user: data.data.user });
-            
+
             return true;
           }
-          
+
           console.log('[Auth] Register failed:', data.error);
           return false;
         } catch (error) {

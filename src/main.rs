@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use imitatort_stateless_company::{
-    Agent, CompanyBuilder, CompanyConfig, VirtualCompany, start_web_server,
+    Agent, AppConfig, CompanyBuilder, CompanyConfig, VirtualCompany, start_web_server,
 };
 use tokio::sync::broadcast;
 use tracing::{error, info};
@@ -18,17 +18,16 @@ async fn main() -> Result<()> {
 
     info!("Starting ImitatorT...");
 
-    // 读取环境变量
-    let output_mode = std::env::var("OUTPUT_MODE").unwrap_or_else(|_| "cli".to_string());
-    let web_bind = std::env::var("WEB_BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+    // 加载应用程序配置
+    let app_config = AppConfig::from_env();
 
     // 加载或创建公司
-    let company = load_or_create_company().await?;
+    let company = load_or_create_company(&app_config).await?;
 
-    match output_mode.as_str() {
+    match app_config.output_mode.as_str() {
         "web" => {
-            info!("Running in Web mode on {}", web_bind);
-            run_web_mode(company, &web_bind).await?;
+            info!("Running in Web mode on {}", app_config.web_bind);
+            run_web_mode(company, &app_config.web_bind).await?;
         }
         _ => {
             info!("Running in CLI mode");
@@ -40,7 +39,7 @@ async fn main() -> Result<()> {
 }
 
 /// 加载或创建公司
-async fn load_or_create_company() -> Result<VirtualCompany> {
+async fn load_or_create_company(app_config: &AppConfig) -> Result<VirtualCompany> {
     // 尝试从配置文件加载新配置
     if let Ok(config) = load_config() {
         info!("Loaded config from company_config.yaml");
@@ -52,9 +51,9 @@ async fn load_or_create_company() -> Result<VirtualCompany> {
 
     // 尝试从已有的SQLite数据库加载
     info!("No config file found, trying to load from SQLite...");
-    match VirtualCompany::from_sqlite("imitatort.db").await {
+    match VirtualCompany::from_sqlite(&app_config.db_path).await {
         Ok(company) => {
-            info!("Loaded company from SQLite database");
+            info!("Loaded company from SQLite database: {}", app_config.db_path);
             Ok(company)
         }
         Err(_) => {

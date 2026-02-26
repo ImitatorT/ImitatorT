@@ -82,16 +82,28 @@ export default function UserProfile() {
             <p className="text-[var(--tg-hint-color)]">@{user.username}</p>
             
             {/* Role Badge */}
-            <div className="mt-3 flex justify-center gap-2">
-              {user.is_director ? (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-sm">
+            <div className="mt-3 flex justify-center gap-2 flex-wrap">
+              {user.position === 'Chairman' ? (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-full text-sm">
                   <Crown className="w-4 h-4" />
-                  董事
+                  集团主席
+                </span>
+              ) : user.position === 'Management' ? (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-sm">
+                  <Shield className="w-4 h-4" />
+                  管理层
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400 rounded-full text-sm">
                   <User className="w-4 h-4" />
-                  普通用户
+                  普通员工
+                </span>
+              )}
+
+              {user.employee_id && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-sm">
+                  <span>ID:</span>
+                  {user.employee_id}
                 </span>
               )}
             </div>
@@ -126,6 +138,54 @@ export default function UserProfile() {
                 </div>
               </div>
             </div>
+
+            {/* Employee ID */}
+            {user.employee_id && (
+              <div className="p-4 bg-[var(--tg-secondary-bg-color)] rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[var(--tg-button-color)]/10 flex items-center justify-center">
+                    <User className="w-5 h-5 text-[var(--tg-button-color)]" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-[var(--tg-hint-color)]">工号</p>
+                    <p className="font-medium text-[var(--tg-text-color)]">{user.employee_id}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Department */}
+            {user.department && (
+              <div className="p-4 bg-[var(--tg-secondary-bg-color)] rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[var(--tg-button-color)]/10 flex items-center justify-center">
+                    <Shield className="w-5 h-5 text-[var(--tg-button-color)]" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-[var(--tg-hint-color)]">部门</p>
+                    <p className="font-medium text-[var(--tg-text-color)]">{user.department}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Position */}
+            {user.position && (
+              <div className="p-4 bg-[var(--tg-secondary-bg-color)] rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[var(--tg-button-color)]/10 flex items-center justify-center">
+                    <Crown className="w-5 h-5 text-[var(--tg-button-color)]" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-[var(--tg-hint-color)]">职位</p>
+                    <p className="font-medium text-[var(--tg-text-color)]">
+                      {user.position === 'Chairman' ? '集团主席' :
+                       user.position === 'Management' ? '管理层' : '普通员工'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Join Date */}
             <div className="p-4 bg-[var(--tg-secondary-bg-color)] rounded-xl">

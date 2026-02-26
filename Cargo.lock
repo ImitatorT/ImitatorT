@@ -1105,6 +1105,7 @@ dependencies = [
  "sha2",
  "swarms-rs",
  "tempfile",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-tungstenite 0.24.0",
  "tower",
