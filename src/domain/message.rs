@@ -15,6 +15,10 @@ pub struct Message {
     pub to: MessageTarget,
     pub content: String,
     pub timestamp: i64,
+    /// 引用的消息ID（回复功能）
+    pub reply_to: Option<String>,
+    /// @的用户列表
+    pub mentions: Vec<String>,
 }
 
 impl Message {
@@ -26,6 +30,8 @@ impl Message {
             to: MessageTarget::Direct(to.into()),
             content: content.into(),
             timestamp: chrono::Utc::now().timestamp(),
+            reply_to: None,
+            mentions: Vec::new(),
         }
     }
 
@@ -37,18 +43,35 @@ impl Message {
             to: MessageTarget::Group(group_id.into()),
             content: content.into(),
             timestamp: chrono::Utc::now().timestamp(),
+            reply_to: None,
+            mentions: Vec::new(),
         }
     }
 
-    /// 创建广播消息
-    pub fn broadcast(from: impl Into<String>, content: impl Into<String>) -> Self {
-        Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            from: from.into(),
-            to: MessageTarget::Broadcast,
-            content: content.into(),
-            timestamp: chrono::Utc::now().timestamp(),
+    /// 设置回复的消息ID
+    pub fn with_reply_to(mut self, message_id: impl Into<String>) -> Self {
+        self.reply_to = Some(message_id.into());
+        self
+    }
+
+    /// 添加@用户
+    pub fn with_mention(mut self, agent_id: impl Into<String>) -> Self {
+        let id = agent_id.into();
+        if !self.mentions.contains(&id) {
+            self.mentions.push(id);
         }
+        self
+    }
+
+    /// 批量添加@用户
+    pub fn with_mentions(mut self, agent_ids: Vec<impl Into<String>>) -> Self {
+        for id in agent_ids {
+            let id = id.into();
+            if !self.mentions.contains(&id) {
+                self.mentions.push(id);
+            }
+        }
+        self
     }
 
     /// 获取目标Agent（如果是私聊）
@@ -66,11 +89,6 @@ impl Message {
             _ => None,
         }
     }
-
-    /// 是否是广播消息
-    pub fn is_broadcast(&self) -> bool {
-        matches!(self.to, MessageTarget::Broadcast)
-    }
 }
 
 /// 消息目标
@@ -81,8 +99,6 @@ pub enum MessageTarget {
     Direct(String),
     /// 群聊
     Group(String),
-    /// 广播给所有人
-    Broadcast,
 }
 
 /// 群组定义
@@ -128,51 +144,5 @@ impl Group {
     /// 检查是否是成员
     pub fn has_member(&self, agent_id: &str) -> bool {
         self.members.contains(&agent_id.to_string())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_private_message() {
-        let msg = Message::private("agent-a", "agent-b", "Hello!");
-
-        assert_eq!(msg.from, "agent-a");
-        assert_eq!(msg.target_agent(), Some("agent-b"));
-        assert!(!msg.is_broadcast());
-    }
-
-    #[test]
-    fn test_group_message() {
-        let msg = Message::group("agent-a", "group-1", "大家好！");
-
-        assert_eq!(msg.target_group(), Some("group-1"));
-        assert!(!msg.is_broadcast());
-    }
-
-    #[test]
-    fn test_broadcast_message() {
-        let msg = Message::broadcast("agent-a", "通知所有人");
-
-        assert!(msg.is_broadcast());
-        assert_eq!(msg.target_agent(), None);
-        assert_eq!(msg.target_group(), None);
-    }
-
-    #[test]
-    fn test_group_management() {
-        let mut group = Group::new("g1", "测试群", "agent-a", vec!["agent-a".to_string()]);
-
-        group.add_member("agent-b");
-        assert!(group.has_member("agent-b"));
-        assert_eq!(group.members.len(), 2);
-
-        group.add_member("agent-b"); // 重复添加
-        assert_eq!(group.members.len(), 2); // 不重复
-
-        group.remove_member("agent-a");
-        assert!(!group.has_member("agent-a"));
     }
 }

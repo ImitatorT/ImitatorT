@@ -13,8 +13,6 @@ use crate::domain::{Group, Message, MessageTarget};
 ///
 /// 负责消息的路由和分发，纯内存实现
 pub struct MessageBus {
-    /// 广播通道
-    broadcast_tx: broadcast::Sender<Message>,
     /// 私聊通道映射
     private_txs: dashmap::DashMap<String, mpsc::Sender<Message>>,
     /// 群聊信息映射
@@ -26,10 +24,7 @@ pub struct MessageBus {
 impl MessageBus {
     /// 创建新的消息总线
     pub fn new() -> Self {
-        let (broadcast_tx, _) = broadcast::channel(1000);
-
         Self {
-            broadcast_tx,
             private_txs: dashmap::DashMap::new(),
             groups: Arc::new(RwLock::new(std::collections::HashMap::new())),
             group_txs: dashmap::DashMap::new(),
@@ -84,7 +79,6 @@ impl MessageBus {
         match target {
             MessageTarget::Direct(agent_id) => self.send_private(message, &agent_id).await,
             MessageTarget::Group(group_id) => self.send_group(message, &group_id).await,
-            MessageTarget::Broadcast => self.broadcast(message),
         }
     }
 
@@ -112,18 +106,6 @@ impl MessageBus {
             warn!("Group not found: {}", group_id);
             Err(anyhow::anyhow!("Group not found: {}", group_id))
         }
-    }
-
-    /// 发送广播消息
-    fn broadcast(&self, message: Message) -> Result<()> {
-        let count = self.broadcast_tx.send(message)?;
-        debug!("Broadcasted message to {} receivers", count);
-        Ok(())
-    }
-
-    /// 订阅广播消息
-    pub fn subscribe_broadcast(&self) -> broadcast::Receiver<Message> {
-        self.broadcast_tx.subscribe()
     }
 
     /// 订阅群聊消息
@@ -156,25 +138,19 @@ impl Default for MessageBus {
 
 /// 消息接收器
 ///
-/// 聚合所有消息源
+/// 聚合私聊和群聊消息源
 pub struct MessageReceiver {
     agent_id: String,
     private_rx: mpsc::Receiver<Message>,
-    broadcast_rx: broadcast::Receiver<Message>,
     group_rxs: Vec<(String, broadcast::Receiver<Message>)>,
 }
 
 impl MessageReceiver {
     /// 创建新的消息接收器
-    pub fn new(
-        agent_id: String,
-        private_rx: mpsc::Receiver<Message>,
-        broadcast_rx: broadcast::Receiver<Message>,
-    ) -> Self {
+    pub fn new(agent_id: String, private_rx: mpsc::Receiver<Message>) -> Self {
         Self {
             agent_id,
             private_rx,
-            broadcast_rx,
             group_rxs: Vec::new(),
         }
     }
@@ -210,13 +186,6 @@ impl MessageReceiver {
             }
         }
 
-        // 检查广播
-        if let Ok(msg) = self.broadcast_rx.try_recv() {
-            if msg.from != self.agent_id {
-                return Some(msg);
-            }
-        }
-
         // 等待私聊
         self.private_rx.recv().await
     }
@@ -235,62 +204,6 @@ impl MessageReceiver {
             }
         }
 
-        if let Ok(msg) = self.broadcast_rx.try_recv() {
-            if msg.from != self.agent_id {
-                return Some(msg);
-            }
-        }
-
         None
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_message_bus_creation() {
-        let bus = MessageBus::new();
-        assert!(bus.private_txs.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_agent_registration() {
-        let bus = MessageBus::new();
-        let rx = bus.register("agent-1");
-        assert_eq!(rx.len(), 0);
-
-        bus.unregister("agent-1");
-    }
-
-    #[tokio::test]
-    async fn test_private_messaging() {
-        let bus = MessageBus::new();
-        let mut rx = bus.register("agent-2");
-
-        let msg = Message::private("agent-1", "agent-2", "Hello!");
-        bus.send(msg.clone()).await.unwrap();
-
-        let received = rx.recv().await;
-        assert!(received.is_some());
-        assert_eq!(received.unwrap().content, "Hello!");
-    }
-
-    #[tokio::test]
-    async fn test_group_messaging() {
-        let bus = MessageBus::new();
-        bus.register("agent-1");
-        bus.register("agent-2");
-
-        bus.create_group("g1", "测试群", "agent-1", vec!["agent-1".to_string(), "agent-2".to_string()])
-            .await
-            .unwrap();
-
-        let broadcast_rx = bus.subscribe_broadcast();
-        let msg = Message::broadcast("agent-1", "大家好！");
-        bus.send(msg).await.unwrap();
-
-        assert_eq!(broadcast_rx.len(), 1);
     }
 }

@@ -126,17 +126,6 @@ impl Store for MemoryStore {
                             }
                         }
                     }
-                    MessageTarget::Broadcast => {
-                        if let Some(ref target_type) = filter.target_type {
-                            if target_type != "broadcast" {
-                                return false;
-                            }
-                        }
-                        // 广播消息不接受to过滤
-                        if filter.to.is_some() {
-                            return false;
-                        }
-                    }
                 }
 
                 true

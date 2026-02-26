@@ -10,7 +10,10 @@ pub mod core {
     pub mod agent;
     pub mod config;
     pub mod messaging;
+    pub mod skill;
     pub mod store;
+    pub mod tool;
+    pub mod tool_provider;
 }
 
 // 应用层
@@ -24,11 +27,21 @@ pub mod infrastructure {
     pub mod llm;
     pub mod logger;
     pub mod store;
+    pub mod web;
+    pub mod tool;
 }
 
 // 重新导出主要类型
 pub use application::framework::{CompanyBuilder, VirtualCompany, DEFAULT_DB_PATH};
 pub use core::config::CompanyConfig;
+pub use core::skill::SkillManager;
+pub use domain::skill::{Skill, SkillToolBinding, BindingType, ToolAccessType};
 pub use core::store::{MessageFilter, Store};
-pub use domain::{Agent, Department, Group, LLMConfig, Message, MessageTarget, Organization, Role};
+pub use core::tool::ToolRegistry;
+pub use domain::{Agent, AgentId, Department, Group, LLMConfig, Message, MessageTarget, Organization, Role};
+pub use domain::skill::{Skill as DomainSkill, SkillToolBinding as DomainSkillToolBinding, BindingType as DomainBindingType, ToolAccessType as DomainToolAccessType};
+pub use domain::tool::{Tool, CategoryPath, ReturnType, ToolProvider, MatchType, CategoryNodeInfo, ToolCallContext, JsonSchema};
 pub use infrastructure::store::SqliteStore;
+pub use infrastructure::web::start_web_server;
+pub use infrastructure::tool::{ToolExecutor, ToolResult, ToolExecutorRegistry, FrameworkToolExecutor, ToolEnvironment};
+pub use core::tool_provider::{CompositeToolProvider, FrameworkToolProvider, RegistryToolProvider};

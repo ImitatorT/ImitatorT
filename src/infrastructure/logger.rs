@@ -14,11 +14,3 @@ pub fn init() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_logger_init() {
-        // 日志初始化测试
-    }
-}

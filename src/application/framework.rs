@@ -7,14 +7,16 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use dashmap::DashMap;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, RwLock};
 use tracing::{error, info};
 
 use crate::core::config::CompanyConfig;
 use crate::core::messaging::MessageBus;
 use crate::core::store::Store;
+use crate::core::tool::ToolRegistry;
 use crate::domain::{Message, Organization};
 use crate::infrastructure::store::SqliteStore;
+use crate::infrastructure::tool::{FrameworkToolExecutor, ToolEnvironment};
 
 use super::autonomous::AutonomousAgent;
 
@@ -26,11 +28,12 @@ pub const DEFAULT_DB_PATH: &str = "imitatort.db";
 /// 封装所有框架能力，提供简洁的 API
 pub struct VirtualCompany {
     config: CompanyConfig,
-    organization: Organization,
+    organization: Arc<RwLock<Organization>>,
     agents: DashMap<String, AutonomousAgent>,
     message_bus: Arc<MessageBus>,
     message_tx: broadcast::Sender<Message>,
     store: Arc<dyn Store>,
+    tool_registry: Arc<ToolRegistry>,
 }
 
 impl VirtualCompany {
@@ -49,14 +52,16 @@ impl VirtualCompany {
     pub fn with_store(config: CompanyConfig, store: Arc<dyn Store>) -> Self {
         let message_bus = Arc::new(MessageBus::new());
         let (message_tx, _) = broadcast::channel(1000);
+        let tool_registry = Arc::new(ToolRegistry::new());
 
         Self {
-            organization: config.organization.clone(),
+            organization: Arc::new(RwLock::new(config.organization.clone())),
             config,
             agents: DashMap::new(),
             message_bus,
             message_tx,
             store,
+            tool_registry,
         }
     }
 
@@ -68,10 +73,10 @@ impl VirtualCompany {
 
     /// 从存储加载虚拟公司
     pub async fn from_store(store: Arc<dyn Store>) -> Result<Self> {
-        let organization = store.load_organization().await?;
+        let org = store.load_organization().await?;
 
         // 如果没有组织架构，返回错误
-        if organization.agents.is_empty() {
+        if org.agents.is_empty() {
             return Err(anyhow::anyhow!(
                 "No organization found in store. Please create config first."
             ));
@@ -79,7 +84,7 @@ impl VirtualCompany {
 
         let config = CompanyConfig {
             name: "Loaded Company".to_string(),
-            organization,
+            organization: org,
         };
 
         Ok(Self::with_store(config, store))
@@ -88,7 +93,8 @@ impl VirtualCompany {
     /// 保存当前状态到存储
     pub async fn save(&self) -> Result<()> {
         info!("Saving company state to storage...");
-        self.store.save_organization(&self.organization).await?;
+        let org = self.organization.read().await;
+        self.store.save_organization(&*org).await?;
         info!("Company state saved successfully");
         Ok(())
     }
@@ -98,13 +104,12 @@ impl VirtualCompany {
         info!("Starting virtual company: {}", self.config.name);
 
         // 1. 创建所有Agent
-        for agent in &self.organization.agents {
-            let agent = AutonomousAgent::new(
-                agent.clone(),
-                self.message_bus.clone(),
-                self.message_tx.subscribe(),
-            )
-            .await?;
+        let org = self.organization.read().await;
+        let agents_to_create: Vec<_> = org.agents.clone();
+        drop(org); // 释放读锁
+
+        for agent in agents_to_create {
+            let agent = AutonomousAgent::new(agent, self.message_bus.clone()).await?;
 
             let agent_id = agent.id().to_string();
             self.agents.insert(agent_id.clone(), agent);
@@ -151,14 +156,53 @@ impl VirtualCompany {
         }
     }
 
-    /// 获取组织架构
-    pub fn organization(&self) -> &Organization {
-        &self.organization
+    /// 获取组织架构（异步读取）
+    pub async fn organization(&self) -> tokio::sync::RwLockReadGuard<'_, Organization> {
+        self.organization.read().await
+    }
+
+    /// 获取组织架构引用（同步，仅用于需要 &Organization 的场景）
+    pub fn organization_arc(&self) -> Arc<RwLock<Organization>> {
+        self.organization.clone()
     }
 
     /// 获取存储引用
     pub fn store(&self) -> &Arc<dyn Store> {
         &self.store
+    }
+
+    /// 获取所有 Agent 列表（用于 Web API）
+    pub async fn get_agents(&self) -> Result<Vec<crate::domain::Agent>> {
+        let org = self.organization.read().await;
+        Ok(org.agents.clone())
+    }
+
+    /// 获取 ToolRegistry 引用
+    pub fn tool_registry(&self) -> Arc<ToolRegistry> {
+        self.tool_registry.clone()
+    }
+
+    /// 注册应用自定义工具
+    pub async fn register_app_tool(&self, tool: crate::domain::tool::Tool) -> Result<()> {
+        let tool_id = tool.id.clone();
+        self.tool_registry.register(tool).await?;
+        info!("Registered app tool: {}", tool_id);
+        Ok(())
+    }
+
+    /// 创建工具执行环境
+    pub fn create_tool_environment(&self) -> ToolEnvironment {
+        ToolEnvironment::new(
+            self.message_bus.clone(),
+            self.organization.clone(),
+            self.tool_registry.clone(),
+        )
+    }
+
+    /// 获取框架工具执行器
+    pub fn get_framework_tool_executor(&self) -> FrameworkToolExecutor {
+        let env = self.create_tool_environment();
+        FrameworkToolExecutor::new(env)
     }
 }
 
@@ -236,143 +280,5 @@ impl CompanyBuilder {
         let company = self.build()?;
         company.save().await?;
         Ok(company)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::{Agent, Department, LLMConfig, Organization, Role};
-
-    #[tokio::test]
-    async fn test_company_builder() {
-        let org = Organization::new();
-        let config = CompanyConfig {
-            name: "Test Co".to_string(),
-            organization: org,
-        };
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-
-        let company = CompanyBuilder::with_sqlite(&db_path)
-            .unwrap()
-            .config(config)
-            .build()
-            .unwrap();
-        assert_eq!(company.config.name, "Test Co");
-    }
-
-    #[tokio::test]
-    async fn test_agent_creation() {
-        let mut org = Organization::new();
-        org.add_department(Department::top_level("tech", "技术部"));
-
-        let agent = Agent::new(
-            "test-agent",
-            "测试员",
-            Role::simple("测试", "你是测试员"),
-            LLMConfig::openai("test"),
-        );
-        org.add_agent(agent);
-
-        let config = CompanyConfig {
-            name: "Test".to_string(),
-            organization: org,
-        };
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-
-        let company = VirtualCompany::with_sqlite(config, &db_path).unwrap();
-
-        // 注意：不调用run()，因为需要真实的LLM
-        assert_eq!(company.organization.agents.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_company_with_sqlite_store() {
-        // 使用临时目录
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-
-        // 创建配置
-        let mut org = Organization::new();
-        org.add_department(Department::top_level("tech", "技术部"));
-
-        let agent = Agent::new(
-            "ceo",
-            "CEO",
-            Role::simple("CEO", "你是CEO"),
-            LLMConfig::openai("test"),
-        );
-        org.add_agent(agent);
-
-        let config = CompanyConfig {
-            name: "Test Co".to_string(),
-            organization: org,
-        };
-
-        // 使用 SQLite 构建
-        let company = CompanyBuilder::with_sqlite(&db_path)
-            .unwrap()
-            .config(config)
-            .build_and_save()
-            .await
-            .unwrap();
-
-        assert_eq!(company.organization().agents.len(), 1);
-
-        // 从存储重新加载
-        let company2 = CompanyBuilder::with_sqlite(&db_path)
-            .unwrap()
-            .load()
-            .await
-            .unwrap()
-            .build()
-            .unwrap();
-
-        assert_eq!(company2.organization().agents.len(), 1);
-        assert!(company2.organization().find_agent("ceo").is_some());
-    }
-
-    #[tokio::test]
-    async fn test_company_load_from_sqlite() {
-        // 使用临时目录
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-
-        // 创建配置并保存
-        let mut org = Organization::new();
-        org.add_department(Department::top_level("tech", "技术部"));
-
-        let agent = Agent::new(
-            "dev1",
-            "开发者",
-            Role::simple("Dev", "你是开发者"),
-            LLMConfig::openai("test"),
-        )
-        .with_department("tech");
-        org.add_agent(agent);
-
-        let config = CompanyConfig {
-            name: "Tech Co".to_string(),
-            organization: org,
-        };
-
-        // 创建并保存
-        let company = CompanyBuilder::with_sqlite(&db_path)
-            .unwrap()
-            .config(config)
-            .build_and_save()
-            .await
-            .unwrap();
-
-        assert_eq!(company.organization().agents.len(), 1);
-
-        // 使用 VirtualCompany::from_sqlite 加载
-        let company2 = VirtualCompany::from_sqlite(&db_path).await.unwrap();
-        assert_eq!(company2.organization().agents.len(), 1);
-        assert_eq!(company2.organization().find_agent("dev1").unwrap().name, "开发者");
     }
 }

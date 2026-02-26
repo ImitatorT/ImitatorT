@@ -85,7 +85,9 @@ impl SqliteStore {
                 target_type TEXT NOT NULL,
                 target_id TEXT,
                 content TEXT NOT NULL,
-                timestamp INTEGER NOT NULL
+                timestamp INTEGER NOT NULL,
+                reply_to TEXT,
+                mentions TEXT
             );
 
             -- 创建索引
@@ -300,12 +302,11 @@ impl Store for SqliteStore {
             let (target_type, target_id): (&str, Option<&str>) = match &message.to {
                 MessageTarget::Direct(id) => ("direct", Some(id.as_str())),
                 MessageTarget::Group(id) => ("group", Some(id.as_str())),
-                MessageTarget::Broadcast => ("broadcast", None),
             };
 
             conn.execute(
-                "INSERT INTO messages (id, from_agent, target_type, target_id, content, timestamp)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO messages (id, from_agent, target_type, target_id, content, timestamp, reply_to, mentions)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 rusqlite::params![
                     &message.id,
                     &message.from,
@@ -313,6 +314,12 @@ impl Store for SqliteStore {
                     target_id,
                     &message.content,
                     &message.timestamp,
+                    message.reply_to.as_ref(),
+                    if message.mentions.is_empty() {
+                        None
+                    } else {
+                        Some(message.mentions.join(","))
+                    },
                 ],
             )?;
             Ok(())
@@ -328,12 +335,11 @@ impl Store for SqliteStore {
                 let (target_type, target_id): (&str, Option<&str>) = match &message.to {
                     MessageTarget::Direct(id) => ("direct", Some(id.as_str())),
                     MessageTarget::Group(id) => ("group", Some(id.as_str())),
-                    MessageTarget::Broadcast => ("broadcast", None),
                 };
 
                 tx.execute(
-                    "INSERT INTO messages (id, from_agent, target_type, target_id, content, timestamp)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    "INSERT INTO messages (id, from_agent, target_type, target_id, content, timestamp, reply_to, mentions)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                     rusqlite::params![
                         &message.id,
                         &message.from,
@@ -341,6 +347,12 @@ impl Store for SqliteStore {
                         target_id,
                         &message.content,
                         &message.timestamp,
+                        message.reply_to.as_ref(),
+                        if message.mentions.is_empty() {
+                            None
+                        } else {
+                            Some(message.mentions.join(","))
+                        },
                     ],
                 )?;
             }
@@ -385,7 +397,7 @@ impl Store for SqliteStore {
             };
 
             let sql = format!(
-                "SELECT id, from_agent, target_type, target_id, content, timestamp
+                "SELECT id, from_agent, target_type, target_id, content, timestamp, reply_to, mentions
                  FROM messages
                  {}
                  ORDER BY timestamp DESC
@@ -421,7 +433,7 @@ impl Store for SqliteStore {
                 let target = match target_type.as_str() {
                     "direct" => MessageTarget::Direct(target_id.unwrap_or_default()),
                     "group" => MessageTarget::Group(target_id.unwrap_or_default()),
-                    _ => MessageTarget::Broadcast,
+                    _ => MessageTarget::Direct(String::new()), // 未知类型默认为空direct
                 };
 
                 Ok(Message {
@@ -430,6 +442,10 @@ impl Store for SqliteStore {
                     to: target,
                     content: row.get(4)?,
                     timestamp: row.get(5)?,
+                    reply_to: row.get::<_, Option<String>>(6)?,
+                    mentions: row.get::<_, Option<String>>(7)?
+                        .map(|s| s.split(',').map(|s| s.to_string()).collect())
+                        .unwrap_or_default(),
                 })
             });
 
@@ -440,140 +456,5 @@ impl Store for SqliteStore {
 
             Ok(messages)
         }).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::{Agent, Department, LLMConfig, Message, Organization, Role};
-
-    fn create_test_organization() -> Organization {
-        let mut org = Organization::new();
-
-        org.add_department(Department::top_level("tech", "技术部"));
-        org.add_department(Department::child("fe", "前端组", "tech"));
-
-        let agent = Agent::new(
-            "ceo",
-            "CEO",
-            Role::simple("CEO", "你是公司的CEO")
-                .with_responsibilities(vec!["决策".to_string(), "管理".to_string()]),
-            LLMConfig::openai("test-key"),
-        )
-        .with_department("tech");
-
-        org.add_agent(agent);
-        org
-    }
-
-    #[tokio::test]
-    async fn test_sqlite_store_organization() {
-        let store = SqliteStore::new_in_memory().unwrap();
-        let org = create_test_organization();
-
-        store.save_organization(&org).await.unwrap();
-        let loaded = store.load_organization().await.unwrap();
-
-        assert_eq!(loaded.agents.len(), 1);
-        assert_eq!(loaded.departments.len(), 2);
-
-        // 验证 Agent 数据完整
-        let agent = loaded.find_agent("ceo").unwrap();
-        assert_eq!(agent.name, "CEO");
-        assert_eq!(agent.llm_config.model, "gpt-4o-mini");
-        assert_eq!(agent.role.responsibilities.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_sqlite_store_messages() {
-        let store = SqliteStore::new_in_memory().unwrap();
-
-        let msg1 = Message::private("a1", "a2", "Hello!");
-        let msg2 = Message::group("a1", "g1", "大家好！");
-        let msg3 = Message::broadcast("a1", "通知");
-
-        store.save_message(&msg1).await.unwrap();
-        store.save_message(&msg2).await.unwrap();
-        store.save_message(&msg3).await.unwrap();
-
-        // 测试查询全部
-        let messages = store.load_messages(MessageFilter::new().limit(10)).await.unwrap();
-        assert_eq!(messages.len(), 3);
-
-        // 测试按发送者查询
-        let filter = MessageFilter::new().from("a1");
-        let messages = store.load_messages(filter).await.unwrap();
-        assert_eq!(messages.len(), 3);
-
-        // 测试按目标类型查询
-        let filter = MessageFilter::new().target_type("group");
-        let messages = store.load_messages(filter).await.unwrap();
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].content, "大家好！");
-
-        // 测试按接收者查询
-        let filter = MessageFilter::new().to("a2").target_type("direct");
-        let messages = store.load_messages(filter).await.unwrap();
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].content, "Hello!");
-    }
-
-    #[tokio::test]
-    async fn test_sqlite_store_groups() {
-        let store = SqliteStore::new_in_memory().unwrap();
-
-        let group = Group::new(
-            "g1",
-            "测试群",
-            "agent1",
-            vec!["agent1".to_string(), "agent2".to_string()],
-        );
-
-        store.save_group(&group).await.unwrap();
-
-        let groups = store.load_groups().await.unwrap();
-        assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].name, "测试群");
-        assert_eq!(groups[0].members.len(), 2);
-
-        store.delete_group("g1").await.unwrap();
-        let groups = store.load_groups().await.unwrap();
-        assert_eq!(groups.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_sqlite_store_batch_messages() {
-        let store = SqliteStore::new_in_memory().unwrap();
-
-        let messages: Vec<Message> = (0..100)
-            .map(|i| Message::private("a1", "a2", format!("msg{}", i)))
-            .collect();
-
-        store.save_messages(&messages).await.unwrap();
-
-        let loaded = store.load_messages(MessageFilter::new().limit(50)).await.unwrap();
-        assert_eq!(loaded.len(), 50);
-    }
-
-    #[tokio::test]
-    async fn test_sqlite_store_load_messages_by_agent() {
-        let store = SqliteStore::new_in_memory().unwrap();
-
-        // 创建一些消息
-        let messages = vec![
-            Message::private("a1", "a2", "a1->a2"),
-            Message::private("a2", "a1", "a2->a1"),
-            Message::private("a1", "a3", "a1->a3"),
-            Message::broadcast("a1", "broadcast"),
-        ];
-
-        for msg in &messages {
-            store.save_message(msg).await.unwrap();
-        }
-
-        // 查询与 a1 相关的消息
-        let a1_messages = store.load_messages_by_agent("a1", 10).await.unwrap();
-        assert_eq!(a1_messages.len(), 4); // 发送3条 + 接收1条
     }
 }

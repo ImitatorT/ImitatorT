@@ -27,7 +27,6 @@ impl AutonomousAgent {
     pub async fn new(
         agent: Agent,
         message_bus: Arc<MessageBus>,
-        broadcast_rx: broadcast::Receiver<Message>,
     ) -> Result<Self> {
         let runtime = Arc::new(AgentRuntime::new(agent).await?);
 
@@ -37,7 +36,6 @@ impl AutonomousAgent {
         let message_rx = Arc::new(RwLock::new(MessageReceiver::new(
             runtime.id().to_string(),
             private_rx,
-            broadcast_rx,
         )));
 
         let (message_tx, _) = broadcast::channel(100);
@@ -122,7 +120,6 @@ impl AutonomousAgent {
                     MessageTarget::Group(group_id) => {
                         Message::group(self.id(), group_id, content)
                     }
-                    MessageTarget::Broadcast => Message::broadcast(self.id(), content),
                 };
 
                 let _ = self.message_tx.send(msg.clone());
@@ -150,16 +147,5 @@ impl AutonomousAgent {
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::{LLMConfig, Role};
-
-    #[test]
-    fn test_autonomous_agent_creation() {
-        // 这只是编译时检查，需要真实LLM才能运行
     }
 }

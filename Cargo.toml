@@ -4,6 +4,7 @@ version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
 description = "轻量级多Agent公司模拟框架"
+repository = "https://github.com/ImitatorAGI/ImitatorAGI.github.io"
 
 [dependencies]
 anyhow = "1"
@@ -21,6 +22,9 @@ reqwest = { version = "0.12", features = ["json"] }
 async-trait = "0.1"
 async-openai = { version = "0.33", features = ["chat-completion"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["cors", "fs"] }
+tower = "0.5"
 
 [dev-dependencies]
 tempfile = "3"

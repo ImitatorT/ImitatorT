@@ -5,3 +5,5 @@
 pub mod llm;
 pub mod logger;
 pub mod store;
+pub mod tool;
+pub mod web;
