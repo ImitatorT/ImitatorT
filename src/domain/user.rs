@@ -1,15 +1,15 @@
-//! 用户认证相关模型
+//! User Authentication Related Models
 
 use serde::{Deserialize, Serialize};
 
-/// 用户职位枚举
+/// User Position Enum
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Position {
-    /// 集团主席
+    /// Group Chairman
     Chairman,
-    /// 管理层
+    /// Management
     Management,
-    /// 普通员工
+    /// Regular Employee
     Employee,
 }
 
@@ -19,7 +19,7 @@ impl Default for Position {
     }
 }
 
-/// 用户模型
+/// User Model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
@@ -27,9 +27,9 @@ pub struct User {
     pub name: String,
     pub email: Option<String>,
     pub password_hash: String,
-    pub employee_id: String,  // 工号
-    pub position: Position,   // 职位
-    pub department: String,   // 部门
+    pub employee_id: String,  // Employee ID
+    pub position: Position,   // Position
+    pub department: String,   // Department
     pub created_at: i64,
 }
 
@@ -41,9 +41,9 @@ impl User {
             name,
             email,
             password_hash,
-            employee_id: "00001".to_string(),  // 集团主席固定工号
+            employee_id: "00001".to_string(),  // Fixed employee ID for Group Chairman
             position: Position::Chairman,
-            department: "集团办公室".to_string(),
+            department: "Corporate Office".to_string(),
             created_at: chrono::Utc::now().timestamp(),
         }
     }
@@ -55,9 +55,9 @@ impl User {
             name,
             email,
             password_hash,
-            employee_id: format!("{:05}", employee_seq),  // 管理层工号从00002开始
+            employee_id: format!("{:05}", employee_seq),  // Management employee ID starts from 00002
             position: Position::Management,
-            department: "综合管理部".to_string(),
+            department: "General Management Department".to_string(),
             created_at: chrono::Utc::now().timestamp(),
         }
     }
@@ -69,7 +69,7 @@ impl User {
             name,
             email,
             password_hash,
-            employee_id: format!("1{:04}", employee_seq),  // 普通员工工号以1开头
+            employee_id: format!("1{:04}", employee_seq),  // Regular employee ID starts with 1
             position: Position::Employee,
             department,
             created_at: chrono::Utc::now().timestamp(),

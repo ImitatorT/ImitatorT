@@ -16,19 +16,22 @@ impl CompanyConfig {
     pub fn test_config() -> Self {
         let mut org = Organization::new();
 
-        // 添加部门
-        org.add_department(Department::top_level("tech", "技术部"));
+        // Add department
+        org.add_department(Department::top_level("tech", "Technology Department"));
 
-        // 从环境变量获取配置
-        let api_key = std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| "test-key".to_string());
-        let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "qwen3-coder-plus".to_string());
-        let base_url = std::env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "http://107.173.156.228:8317/v1".to_string());
+        // 从环境变量获取配置，提供更合理的默认值
+        let api_key = std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| {
+            eprintln!("警告: OPENAI_API_KEY 环境变量未设置，使用测试密钥");
+            "sk-your-api-key-here".to_string()
+        });
+        let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+        let base_url = std::env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
 
         // 添加Agent
         let agent1 = Agent::new(
             "ceo",
             "CEO",
-            Role::simple("CEO", "你是公司的CEO，负责决策和管理。"),
+            Role::simple("CEO", "You are the CEO of the company, responsible for decision-making and management."),
             LLMConfig {
                 api_key,
                 model,
@@ -39,7 +42,7 @@ impl CompanyConfig {
         org.add_agent(agent1);
 
         Self {
-            name: "测试公司".to_string(),
+            name: "Test Company".to_string(),
             organization: org,
         }
     }

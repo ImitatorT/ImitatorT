@@ -1,25 +1,25 @@
-//! Tool 领域实体
+//! Tool Domain Entity
 //!
-//! 工具系统的核心业务定义，支持多级分类
-//! 参数使用 JSON Schema 格式，直接兼容 OpenAI Tool Calling
+//! Core business definition for tool system, supporting multi-level classification
+//! Parameters use JSON Schema format, directly compatible with OpenAI Tool Calling
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// 工具实体 - 唯一真理来源
+/// Tool Entity - Single source of truth
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
     pub id: String,
     pub name: String,
     pub description: String,
     pub category: CategoryPath,
-    /// 参数 JSON Schema 定义
+    /// Parameter JSON Schema definition
     pub parameters: Value,
     pub returns: ReturnType,
 }
 
 impl Tool {
-    /// 创建新工具
+    /// Create new tool
     pub fn new(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -37,13 +37,13 @@ impl Tool {
         }
     }
 
-    /// 设置返回值
+    /// Set return type
     pub fn with_returns(mut self, returns: ReturnType) -> Self {
         self.returns = returns;
         self
     }
 
-    /// 获取必填参数字段列表
+    /// Get required parameter field list
     pub fn required_params(&self) -> Vec<String> {
         self.parameters
             .get("required")

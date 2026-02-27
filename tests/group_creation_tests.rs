@@ -9,21 +9,21 @@ async fn test_group_creation() {
     // 创建一个简单的测试配置
     let mut org = imitatort_stateless_company::Organization::new();
 
-    // 添加一个部门
-    org.add_department(imitatort_stateless_company::Department::top_level("tech", "技术部"));
+    // Add a department
+    org.add_department(imitatort_stateless_company::Department::top_level("tech", "Technology Department"));
 
     // 添加几个Agent
     let agent1 = Agent::new(
         "ceo",
         "CEO",
-        Role::simple("CEO", "你是公司的CEO，负责决策和管理。"),
+        Role::simple("CEO", "You are the CEO of the company, responsible for decision-making and management."),
         LLMConfig::openai("test-key"),
     );
 
     let agent2 = Agent::new(
         "developer",
-        "开发者",
-        Role::simple("Developer", "你是开发者，负责开发工作。"),
+        "Developer",
+        Role::simple("Developer", "You are a developer, responsible for development work."),
         LLMConfig::openai("test-key"),
     );
 
@@ -31,7 +31,7 @@ async fn test_group_creation() {
     org.add_agent(agent2);
 
     let config = CompanyConfig {
-        name: "测试公司".to_string(),
+        name: "Test Company".to_string(),
         organization: org,
     };
 

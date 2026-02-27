@@ -1,10 +1,10 @@
-//! Skill 领域实体
+//! Skill Domain Entity
 //!
-//! 技能系统的核心业务定义，支持技能与工具的多对多绑定
+//! Core business definition for skill system, supporting many-to-many binding between skills and tools
 
 use serde::{Deserialize, Serialize};
 
-/// 技能实体
+/// Skill Entity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
@@ -13,11 +13,11 @@ pub struct Skill {
     pub category: String,
     pub version: String,
     pub author: String,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>, // 扩展元数据
+    pub metadata: std::collections::HashMap<String, serde_json::Value>, // Extended metadata
 }
 
 impl Skill {
-    /// 创建新技能
+    /// Create new skill
     pub fn new(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -37,14 +37,14 @@ impl Skill {
         }
     }
 
-    /// 设置元数据
+    /// Set metadata
     pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.metadata.insert(key.into(), value);
         self
     }
 }
 
-/// 技能与工具的关系
+/// Relationship between Skill and Tool
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillToolBinding {
     pub skill_id: String,
@@ -54,7 +54,7 @@ pub struct SkillToolBinding {
 }
 
 impl SkillToolBinding {
-    /// 创建新的绑定
+    /// Create new binding
     pub fn new(
         skill_id: impl Into<String>,
         tool_id: impl Into<String>,
@@ -68,27 +68,27 @@ impl SkillToolBinding {
         }
     }
 
-    /// 设置绑定元数据
+    /// Set binding metadata
     pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.metadata.insert(key.into(), value);
         self
     }
 }
 
-/// 绑定类型
+/// Binding Type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BindingType {
-    /// 强绑定：技能必须有此工具才能正常工作
+    /// Required binding: Skill must have this tool to work properly
     Required,
-    /// 可选绑定：技能可以利用此工具增强功能
+    /// Optional binding: Skill can enhance functionality using this tool
     Optional,
 }
 
-/// 工具访问类型
+/// Tool Access Type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ToolAccessType {
-    /// 公共工具：任何人都可以调用
+    /// Public tool: Anyone can call
     Public,
-    /// 私有工具：需要特定技能才能调用
+    /// Private tool: Requires specific skill to call
     Private,
 }

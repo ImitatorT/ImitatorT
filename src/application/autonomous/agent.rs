@@ -5,7 +5,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::core::agent::{AgentRuntime, Context, Decision};
 use crate::core::messaging::{MessageBus, MessageReceiver};
@@ -100,7 +100,8 @@ impl AutonomousAgent {
 
                     // 5. 执行决策
                     if let Err(e) = self.execute_decision(decision).await {
-                        warn!("Agent {} failed to execute decision: {}", self.id(), e);
+                        error!("Agent {} failed to execute decision: {}", self.id(), e);
+                        // 在这里我们可以考虑实现重试逻辑或其他恢复机制
                     }
                 }
                 Err(e) => {

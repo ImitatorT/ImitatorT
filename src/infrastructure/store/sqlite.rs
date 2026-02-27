@@ -1,6 +1,6 @@
-//! SQLite 存储实现
+//! SQLite Storage Implementation
 //!
-//! 使用 SQLite 作为后端，适合需要持久化的场景
+//! Uses SQLite as backend, suitable for scenarios requiring persistence
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -10,19 +10,19 @@ use async_trait::async_trait;
 use rusqlite::Connection;
 
 use crate::core::store::{MessageFilter, Store};
-use crate::domain::{Agent, Department, Group, LLMConfig, Message, MessageTarget, Organization, Role};
+use crate::domain::{Agent, AgentMode, Department, Group, LLMConfig, Message, MessageTarget, Organization, Role};
 use crate::domain::user::User;
 use crate::domain::invitation_code::InvitationCode;
 
-/// SQLite 存储
+/// SQLite Storage
 pub struct SqliteStore {
     conn: Arc<Mutex<Connection>>,
 }
 
 impl SqliteStore {
-    /// 创建新的 SQLite 存储
+    /// Create new SQLite storage
     ///
-    /// 如果数据库文件不存在，会自动创建
+    /// If the database file doesn't exist, it will be created automatically
     pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self> {
         let conn = Connection::open(db_path)?;
         let store = Self {
@@ -32,7 +32,7 @@ impl SqliteStore {
         Ok(store)
     }
 
-    /// 创建内存数据库（用于测试）
+    /// Create in-memory database (for testing)
     pub fn new_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         let store = Self {
@@ -42,14 +42,14 @@ impl SqliteStore {
         Ok(store)
     }
 
-    /// 初始化数据库表结构
+    /// Initialize database table structure
     fn init_schema(&self) -> Result<()> {
         let conn = self.conn.lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire database lock: {}", e))?;
 
         conn.execute_batch(
             "
-            -- 部门表
+            -- Department table
             CREATE TABLE IF NOT EXISTS departments (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -57,7 +57,7 @@ impl SqliteStore {
                 leader_id TEXT
             );
 
-            -- Agent 表
+            -- Agent table
             CREATE TABLE IF NOT EXISTS agents (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -118,16 +118,16 @@ impl SqliteStore {
                 created_at INTEGER NOT NULL
             );
 
-            -- 创建索引
+            -- Create indexes
             CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_agent);
             CREATE INDEX IF NOT EXISTS idx_messages_target ON messages(target_type, target_id);
             CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 
-            -- 创建部门索引
+            -- Create department index
             CREATE INDEX IF NOT EXISTS idx_departments_parent ON departments(parent_id);
             CREATE INDEX IF NOT EXISTS idx_agents_department ON agents(department_id);
 
-            -- 创建用户索引
+            -- Create user indexes
             CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
             PRAGMA foreign_keys = ON;
@@ -159,11 +159,11 @@ impl Store for SqliteStore {
     async fn save_organization(&self, org: &Organization) -> Result<()> {
         let org = org.clone();
         self.execute(move |conn| {
-            // 清除旧数据
+            // Clear old data
             conn.execute("DELETE FROM agents", [])?;
             conn.execute("DELETE FROM departments", [])?;
 
-            // 插入部门
+            // Insert departments
             for dept in &org.departments {
                 let parent_id = dept.parent_id.as_deref();
                 let leader_id = dept.leader_id.as_deref();
@@ -215,7 +215,7 @@ impl Store for SqliteStore {
         self.execute(|conn| {
             let mut org = Organization::new();
 
-            // 加载部门
+            // Load departments
             let mut stmt = conn.prepare(
                 "SELECT id, name, parent_id, leader_id FROM departments"
             )?;
@@ -233,7 +233,7 @@ impl Store for SqliteStore {
                 org.add_department(dept?);
             }
 
-            // 加载 Agent
+            // Load Agent
             let mut stmt = conn.prepare(
                 "SELECT
                     id, name, department_id,
@@ -261,6 +261,7 @@ impl Store for SqliteStore {
                         api_key: row.get(8)?,
                         base_url: row.get(9)?,
                     },
+                    mode: AgentMode::Passive, // 默认为被动模式
                 })
             })?;
 

@@ -4,47 +4,47 @@ use imitatort_stateless_company::infrastructure::auth::PasswordService;
 
 #[test]
 fn test_user_position_and_employee_id() {
-    // 测试集团主席用户
+    // Test corporate chairman user
     let password_hash = PasswordService::hash_password("password123").unwrap();
     let chairman_user = User::new_chairman(
         "chairman_user".to_string(),
-        "集团主席".to_string(),
+        "Corporate Chairman".to_string(),
         password_hash,
         None,
     );
 
     assert_eq!(chairman_user.employee_id, "00001");
     assert!(matches!(chairman_user.position, Position::Chairman));
-    assert_eq!(chairman_user.department, "集团办公室");
+    assert_eq!(chairman_user.department, "Corporate Office");
 
     // 测试管理层用户
     let password_hash = PasswordService::hash_password("password123").unwrap();
     let management_user = User::new_management(
         "manager_user".to_string(),
-        "经理".to_string(),
+        "Manager".to_string(),
         password_hash,
-        2, // 工号00002
+        2, // Employee ID 00002
         None,
     );
 
     assert_eq!(management_user.employee_id, "00002");
     assert!(matches!(management_user.position, Position::Management));
-    assert_eq!(management_user.department, "综合管理部");
+    assert_eq!(management_user.department, "General Management Department");
 
-    // 测试普通员工用户
+    // Test regular employee user
     let password_hash = PasswordService::hash_password("password123").unwrap();
     let employee_user = User::new_employee(
         "employee_user".to_string(),
-        "员工".to_string(),
+        "Employee".to_string(),
         password_hash,
-        1, // 工号10001
-        "销售部".to_string(),
+        1, // Employee ID 10001
+        "Sales Department".to_string(),
         None,
     );
 
     assert_eq!(employee_user.employee_id, "10001");
     assert!(matches!(employee_user.position, Position::Employee));
-    assert_eq!(employee_user.department, "销售部");
+    assert_eq!(employee_user.department, "Sales Department");
 
     println!("✓ 用户职位和工号测试通过");
 }

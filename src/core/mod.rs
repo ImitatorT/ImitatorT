@@ -10,3 +10,7 @@ pub mod state;
 pub mod store;
 pub mod tool;
 pub mod tool_provider;
+pub mod watchdog;
+
+// Re-export important types from watchdog for easy access
+pub use watchdog::TriggerCondition;

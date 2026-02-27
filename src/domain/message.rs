@@ -1,13 +1,13 @@
-//! 消息领域实体
+//! Message Domain Entity
 //!
-//! 简化的消息系统定义
+//! Simplified message system definition
 
 use serde::{Deserialize, Serialize};
 
-/// 消息ID
+/// Message ID
 pub type MessageId = String;
 
-/// 消息实体
+/// Message Entity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub id: MessageId,
@@ -15,14 +15,14 @@ pub struct Message {
     pub to: MessageTarget,
     pub content: String,
     pub timestamp: i64,
-    /// 引用的消息ID（回复功能）
+    /// Referenced message ID (reply functionality)
     pub reply_to: Option<String>,
-    /// @的用户列表
+    /// List of @ users
     pub mentions: Vec<String>,
 }
 
 impl Message {
-    /// 创建私聊消息
+    /// Create private message
     pub fn private(from: impl Into<String>, to: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -35,7 +35,7 @@ impl Message {
         }
     }
 
-    /// 创建群聊消息
+    /// Create group message
     pub fn group(from: impl Into<String>, group_id: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -48,13 +48,13 @@ impl Message {
         }
     }
 
-    /// 设置回复的消息ID
+    /// Set reply message ID
     pub fn with_reply_to(mut self, message_id: impl Into<String>) -> Self {
         self.reply_to = Some(message_id.into());
         self
     }
 
-    /// 添加@用户
+    /// Add @ user
     pub fn with_mention(mut self, agent_id: impl Into<String>) -> Self {
         let id = agent_id.into();
         if !self.mentions.contains(&id) {
@@ -63,7 +63,7 @@ impl Message {
         self
     }
 
-    /// 批量添加@用户
+    /// Batch add @ users
     pub fn with_mentions(mut self, agent_ids: Vec<impl Into<String>>) -> Self {
         for id in agent_ids {
             let id = id.into();
@@ -74,7 +74,7 @@ impl Message {
         self
     }
 
-    /// 获取目标Agent（如果是私聊）
+    /// Get target Agent (if private message)
     pub fn target_agent(&self) -> Option<&str> {
         match &self.to {
             MessageTarget::Direct(agent_id) => Some(agent_id),
@@ -82,7 +82,7 @@ impl Message {
         }
     }
 
-    /// 获取目标群组（如果是群聊）
+    /// Get target group (if group message)
     pub fn target_group(&self) -> Option<&str> {
         match &self.to {
             MessageTarget::Group(group_id) => Some(group_id),
@@ -91,17 +91,17 @@ impl Message {
     }
 }
 
-/// 消息目标
+/// Message Target
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MessageTarget {
-    /// 私聊给指定Agent
+    /// Private message to specified Agent
     Direct(String),
-    /// 群聊
+    /// Group chat
     Group(String),
 }
 
-/// 群组定义
+/// Group Definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Group {
     pub id: String,
@@ -112,7 +112,7 @@ pub struct Group {
 }
 
 impl Group {
-    /// 创建新群组
+    /// Create new group
     pub fn new(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -128,7 +128,7 @@ impl Group {
         }
     }
 
-    /// 添加成员
+    /// Add member
     pub fn add_member(&mut self, agent_id: impl Into<String>) {
         let id = agent_id.into();
         if !self.members.contains(&id) {
@@ -136,12 +136,12 @@ impl Group {
         }
     }
 
-    /// 移除成员
+    /// Remove member
     pub fn remove_member(&mut self, agent_id: &str) {
         self.members.retain(|m| m != agent_id);
     }
 
-    /// 检查是否是成员
+    /// Check if is member
     pub fn has_member(&self, agent_id: &str) -> bool {
         self.members.contains(&agent_id.to_string())
     }

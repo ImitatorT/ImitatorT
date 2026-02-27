@@ -111,7 +111,7 @@ export default function Sidebar({ isOpen, onClose, onShowAuth }: SidebarProps) {
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-[var(--tg-text-color)] truncate">{currentUser.name}</p>
                 <p className="text-sm text-[var(--tg-hint-color)]">
-                  {isChairman ? '董事局主席' : isDirector ? '董事' : '普通用户'}
+                  {isChairman ? '集团主席' : isDirector ? '管理层' : '普通员工'}
                 </p>
               </div>
             </a>

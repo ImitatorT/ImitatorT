@@ -13,11 +13,11 @@ async fn test_user_registration_flow() {
     let store = Arc::new(MemoryStore::new());
     let jwt_service = JwtService::new("test_secret");
 
-    // 1. 测试首位注册用户成为集团主席
+    // 1. Test first registered user becomes corporate chairman
     let password_hash = PasswordService::hash_password("password123").unwrap();
     let chairman_user = User::new_chairman(
         "chairman_user".to_string(),
-        "集团主席".to_string(),
+        "Corporate Chairman".to_string(),
         password_hash,
         None,
     );
@@ -33,23 +33,23 @@ async fn test_user_registration_flow() {
     let management_password_hash = PasswordService::hash_password("password123").unwrap();
     let management_user = User::new_management(
         "manager_user".to_string(),
-        "经理".to_string(),
+        "Manager".to_string(),
         management_password_hash,
-        2, // 工号00002
+        2, // Employee ID 00002
         None,
     );
 
     assert_eq!(management_user.employee_id, "00002");
     assert!(matches!(management_user.position, imitatort_stateless_company::domain::user::Position::Management));
 
-    // 4. 测试普通员工用户创建
+    // 4. Test regular employee user creation
     let employee_password_hash = PasswordService::hash_password("password123").unwrap();
     let employee_user = User::new_employee(
         "employee_user".to_string(),
-        "员工".to_string(),
+        "Employee".to_string(),
         employee_password_hash,
-        1, // 工号10001
-        "销售部".to_string(),
+        1, // Employee ID 10001
+        "Sales Department".to_string(),
         None,
     );
 
@@ -63,30 +63,30 @@ async fn test_user_registration_flow() {
 async fn test_invitation_code_lifecycle() {
     let store = Arc::new(MemoryStore::new());
 
-    // 创建邀请码
+    // Create invitation code
     let mut invitation_code = InvitationCode::new("test_user".to_string(), Some(1));
     assert!(invitation_code.is_valid());
     assert_eq!(invitation_code.current_usage, 0);
     assert_eq!(invitation_code.max_usage, 1);
 
-    // 使用邀请码
+    // Use invitation code
     invitation_code.use_code();
     assert_eq!(invitation_code.current_usage, 1);
-    assert!(!invitation_code.is_valid()); // 因为已达到最大使用次数
+    assert!(!invitation_code.is_valid()); // Because maximum usage has been reached
 
-    // 测试多次使用邀请码
+    // Test multiple uses of invitation code
     let mut invitation_code_multi = InvitationCode::new("test_user".to_string(), Some(2));
     assert!(invitation_code_multi.is_valid());
 
-    // 第一次使用
+    // First use
     invitation_code_multi.use_code();
     assert_eq!(invitation_code_multi.current_usage, 1);
-    assert!(invitation_code_multi.is_valid()); // 仍然有效，因为还没达到最大使用次数
+    assert!(invitation_code_multi.is_valid()); // Still valid, because maximum usage hasn't been reached yet
 
-    // 第二次使用
+    // Second use
     invitation_code_multi.use_code();
     assert_eq!(invitation_code_multi.current_usage, 2);
-    assert!(!invitation_code_multi.is_valid()); // 现在应该无效了
+    assert!(!invitation_code_multi.is_valid()); // Now should be invalid
 
     println!("All invitation code lifecycle tests passed!");
 }

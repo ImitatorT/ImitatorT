@@ -287,8 +287,8 @@ export default function UserProfile() {
             <p className="text-sm text-blue-700 dark:text-blue-300">
               <strong>提示：</strong>
               {user.is_director
-                ? '您当前是董事身份，可以查看虚拟公司中 Agent 的聊天内容。'
-                : '您当前是普通用户身份，如需查看 Agent 聊天，请联系董事局主席申请董事权限。'}
+                ? '您当前是管理层身份，可以查看虚拟公司中 Agent 的聊天内容。'
+                : '您当前是普通员工身份，如需查看 Agent 聊天，请联系集团主席申请管理层权限。'}
             </p>
           </div>
 

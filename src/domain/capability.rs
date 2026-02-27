@@ -1,27 +1,27 @@
-//! Capability 领域实体
+//! Capability Domain Entity
 //!
-//! 功能系统的核心业务定义，支持多级分类，兼容 MCP (Model Context Protocol)
-//! 参数使用 JSON Schema 格式，直接兼容 MCP Capability Discovery 协议
+//! Core business definition for capability system, supporting multi-level classification, compatible with MCP (Model Context Protocol)
+//! Parameters use JSON Schema format, directly compatible with MCP Capability Discovery protocol
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// 功能实体 - 唯一真理来源
+/// Capability Entity - Single source of truth
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Capability {
     pub id: String,
     pub name: String,
     pub description: String,
     pub capability_path: CapabilityPath,
-    /// 参数 JSON Schema 定义 (MCP 兼容格式)
+    /// Parameter JSON Schema definition (MCP compatible format)
     pub input_schema: Value,
     pub output_schema: Value,
-    pub protocol: String, // MCP 协议类型: "http", "stdio", "websocket", "sse" 等
-    pub endpoint: Option<String>, // 可选的端点 URL
+    pub protocol: String, // MCP protocol type: "http", "stdio", "websocket", "sse", etc.
+    pub endpoint: Option<String>, // Optional endpoint URL
 }
 
 impl Capability {
-    /// 创建新功能
+    /// Create new capability
     pub fn new(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -44,7 +44,7 @@ impl Capability {
         }
     }
 
-    /// 获取必填参数字段列表
+    /// Get required parameter field list
     pub fn required_inputs(&self) -> Vec<String> {
         self.input_schema
             .get("required")

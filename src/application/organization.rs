@@ -1,6 +1,6 @@
-//! 组织架构管理模块
+//! Organization Management Module
 //!
-//! 提供组织架构创建、管理以及特殊架构（如思过崖线）的功能
+//! Provides organization structure creation, management, and special architectures (such as Cliff of Contemplation Line)
 
 use anyhow::Result;
 use std::sync::Arc;
@@ -20,28 +20,28 @@ impl OrganizationManager {
         Self { store }
     }
 
-    /// 初始化思过崖线组织架构
+    /// Initialize Cliff of Contemplation Line organization structure
     ///
-    /// 思过崖线是一个特殊的组织架构，与用户自定义架构平行存在
-    /// - 集团主席成为思过崖线主管
-    /// - 管理层直接加入思过崖线
-    /// - 创建"思过崖线"群聊
-    /// - 自动将用户自定义架构的最高级成员加入群聊
+    /// Cliff of Contemplation Line is a special organization structure that exists parallel to user-defined architecture
+    /// - Corporate chairman becomes Cliff of Contemplation Line supervisor
+    /// - Management directly joins Cliff of Contemplation Line
+    /// - Create "Cliff of Contemplation Line" group chat
+    /// - Automatically add highest level members of user-defined architecture to group chat
     pub async fn initialize_guilty_cliff_line(&self, _org: &mut Organization, users: &[User]) -> Result<()> {
-        // 创建思过崖线群聊
+        // Create Cliff of Contemplation Line group chat
         let guilty_cliff_group = Group {
             id: "guilty-cliff-line".to_string(),
-            name: "思过崖线".to_string(),
-            creator_id: String::new(), // 将在下面设置
+            name: "Cliff of Contemplation Line".to_string(),
+            creator_id: String::new(), // Will be set below
             members: Vec::new(),
             created_at: chrono::Utc::now().timestamp(),
         };
 
-        // 查找集团主席
+        // Find corporate chairman
         let chairman = users.iter().find(|user| matches!(user.position, Position::Chairman));
 
         if let Some(chairman_user) = chairman {
-            // 将集团主席添加为群聊创建者和成员
+            // Add corporate chairman as group chat creator and member
             let mut updated_group = guilty_cliff_group;
             updated_group.creator_id = chairman_user.id.clone();
             updated_group.members.push(chairman_user.id.clone());
@@ -55,30 +55,30 @@ impl OrganizationManager {
                 }
             }
 
-            // 保存思过崖线群聊
+            // Save Cliff of Contemplation Line group chat
             self.store.save_group(&updated_group).await?;
         }
 
         Ok(())
     }
 
-    /// 添加用户到思过崖线
+    /// Add user to Cliff of Contemplation Line
     pub async fn add_user_to_guilty_cliff_line(&self, user_id: &str) -> Result<()> {
-        // 加载现有的思过崖线群聊
+        // Load existing Cliff of Contemplation Line group chat
         let mut groups = self.store.load_groups().await?;
         let guilty_cliff_group = groups.iter_mut().find(|g| g.id == "guilty-cliff-line");
 
         if let Some(group) = guilty_cliff_group {
-            // 检查用户是否已在群组中
+            // Check if user is already in the group
             if !group.members.contains(&user_id.to_string()) {
                 group.members.push(user_id.to_string());
                 self.store.save_group(group).await?;
             }
         } else {
-            // 如果没有找到思过崖线群聊，则创建一个
+            // If Cliff of Contemplation Line group chat is not found, create one
             let new_group = Group {
                 id: "guilty-cliff-line".to_string(),
-                name: "思过崖线".to_string(),
+                name: "Cliff of Contemplation Line".to_string(),
                 creator_id: user_id.to_string(),
                 members: vec![user_id.to_string()],
                 created_at: chrono::Utc::now().timestamp(),
@@ -89,7 +89,7 @@ impl OrganizationManager {
         Ok(())
     }
 
-    /// 从思过崖线移除用户
+    /// Remove user from Cliff of Contemplation Line
     pub async fn remove_user_from_guilty_cliff_line(&self, user_id: &str) -> Result<()> {
         let mut groups = self.store.load_groups().await?;
         let guilty_cliff_group = groups.iter_mut().find(|g| g.id == "guilty-cliff-line");
@@ -102,7 +102,7 @@ impl OrganizationManager {
         Ok(())
     }
 
-    /// 检查用户是否在思过崖线中
+    /// Check if user is in Cliff of Contemplation Line
     pub async fn is_user_in_guilty_cliff_line(&self, user_id: &str) -> Result<bool> {
         let groups = self.store.load_groups().await?;
         if let Some(group) = groups.iter().find(|g| g.id == "guilty-cliff-line") {
@@ -112,7 +112,7 @@ impl OrganizationManager {
         }
     }
 
-    /// 获取思过崖线所有成员
+    /// Get all Cliff of Contemplation Line members
     pub async fn get_guilty_cliff_line_members(&self) -> Result<Vec<String>> {
         let groups = self.store.load_groups().await?;
         if let Some(group) = groups.iter().find(|g| g.id == "guilty-cliff-line") {
@@ -126,10 +126,10 @@ impl OrganizationManager {
     pub fn find_highest_level_agents(&self, org: &Organization) -> Vec<String> {
         let mut highest_level_agents = Vec::new();
 
-        // 定义高级职位关键词
+        // Define high-level position keywords
         let high_level_titles = [
-            "CEO", "总裁", "总经理", "Chief Executive Officer", "President",
-            "Director", "主管", "Leader", "Founder", "董事长", "董事会主席"
+            "CEO", "President", "General Manager", "Chief Executive Officer", "President",
+            "Director", "Supervisor", "Leader", "Founder", "Chairman", "Board Chairman"
         ];
 
         for agent in &org.agents {
@@ -145,7 +145,7 @@ impl OrganizationManager {
         highest_level_agents
     }
 
-    /// 将组织架构的最高级成员添加到思过崖线
+    /// Add highest level members of organization structure to Cliff of Contemplation Line
     pub async fn add_highest_level_agents_to_guilty_cliff_line(&self, org: &Organization) -> Result<()> {
         let highest_level_agents = self.find_highest_level_agents(org);
 

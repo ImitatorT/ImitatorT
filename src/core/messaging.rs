@@ -117,7 +117,14 @@ impl MessageBus {
     }
 
     /// 发送群聊消息
-    async fn send_group(&self, message: Message, group_id: &str) -> Result<()> {
+    async fn send_group(&self, mut message: Message, group_id: &str) -> Result<()> {
+        // 如果是群聊消息，自动检测内容中的@提及
+        if let MessageTarget::Group(_) = &message.to {
+            if let Some(group) = self.get_group(group_id).await {
+                message = self.extract_mentions_from_content(message, &group);
+            }
+        }
+
         if let Some(tx) = self.group_txs.get(group_id) {
             tx.send(message).context("Failed to send group message")?;
             debug!("Sent group message to {}", group_id);
@@ -126,6 +133,56 @@ impl MessageBus {
             warn!("Group not found: {}", group_id);
             Err(anyhow::anyhow!("Group not found: {}", group_id))
         }
+    }
+
+    /// 从消息内容中提取@提及
+    fn extract_mentions_from_content(&self, mut message: Message, group: &Group) -> Message {
+        // 查找消息内容中的@提及模式：@用户名 或 @user_id
+        let content = message.content.clone(); // 克隆内容以避免借用冲突
+
+        // 找到所有@提及的位置
+        let mut pos = 0;
+        while let Some(at_pos) = content[pos..].find('@') {
+            let actual_pos = pos + at_pos;
+            if actual_pos + 1 < content.len() {
+                // 找到@符号后的单词
+                let rest = &content[actual_pos + 1..];
+                let word_end = rest.find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+                    .unwrap_or(rest.len());
+
+                if word_end > 0 {
+                    let mentioned_name = &rest[..word_end];
+
+                    // 检查组内是否有匹配的成员
+                    for member_id in &group.members {
+                        // 检查是否匹配用户ID或名称
+                        if member_id == mentioned_name ||
+                           self.is_name_match(member_id, mentioned_name) {
+                            // 添加到mentions列表（如果还没有的话）
+                            if !message.mentions.contains(member_id) {
+                                message = message.with_mention(member_id.clone());
+                            }
+                        }
+                    }
+
+                    pos = actual_pos + 1 + word_end; // 移动到下一个位置
+                } else {
+                    pos = actual_pos + 1;
+                }
+            } else {
+                break;
+            }
+        }
+
+        message
+    }
+
+    /// 检查名称是否匹配（模糊匹配）
+    fn is_name_match(&self, agent_id: &str, mentioned_name: &str) -> bool {
+        // 检查是否为相同名称或包含关系
+        agent_id == mentioned_name ||
+        agent_id.contains(mentioned_name) ||
+        mentioned_name.contains(agent_id)
     }
 
     /// 订阅群聊消息

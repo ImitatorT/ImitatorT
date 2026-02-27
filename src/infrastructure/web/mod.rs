@@ -17,7 +17,7 @@ use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info};
 
-use crate::domain::{Agent, Message, MessageTarget};
+use crate::domain::{Agent, AgentMode, Message, MessageTarget, Organization, Role, LLMConfig};
 use crate::domain::user::User;
 use crate::domain::invitation_code::InvitationCode;
 use crate::infrastructure::auth::{JwtService, PasswordService, UserInfo};
@@ -370,7 +370,7 @@ async fn register(
     };
 
     let user_to_create = if existing_users.is_empty() {
-        // 首位注册用户，自动成为集团主席
+        // The first registered user automatically becomes the corporate chairman
         if req.invite_code.is_some() {
             return (
                 StatusCode::BAD_REQUEST,
@@ -394,7 +394,7 @@ async fn register(
             }
         };
 
-        // 创建集团主席用户
+        // Create corporate chairman user
         User::new_chairman(
             req.username.clone(),
             req.name.clone(),
@@ -509,23 +509,114 @@ async fn register(
         ).into_response();
     }
 
-    // 如果是集团主席或管理层，将用户添加到思过崖线
+    // If it's corporate chairman or management, add user to Cliff of Contemplation Line
     if matches!(user_to_create.position, crate::domain::user::Position::Chairman | crate::domain::user::Position::Management) {
-        // 注意：这里应该通过某种方式通知组织架构模块更新
-        // 由于当前架构限制，我们暂不在此处实现组织架构更新
-        // 实际应用中，这可能需要一个事件系统或类似机制
+        // Create or update organization structure, add user to Cliff of Contemplation Line department
+        let mut org = state.store.load_organization().await.unwrap_or_else(|_| Organization::new());
+
+        // Ensure Cliff of Contemplation Line department exists
+        let guilty_cliff_dept_id = "guilty-cliff-line";
+        let guilty_cliff_dept_name = "Cliff of Contemplation Line";
+
+        // Check if department already exists
+        let dept_exists = org.departments.iter().any(|d| d.id == guilty_cliff_dept_id);
+        if !dept_exists {
+            // Create Cliff of Contemplation Line department
+            let dept = crate::domain::Department {
+                id: guilty_cliff_dept_id.to_string(),
+                name: guilty_cliff_dept_name.to_string(),
+                parent_id: None,  // Cliff of Contemplation Line is the top-level department
+                leader_id: if matches!(user_to_create.position, crate::domain::user::Position::Chairman) {
+                    Some(user_to_create.id.clone())
+                } else {
+                    None
+                },
+            };
+            org.add_department(dept);
+        }
+
+        // 检查是否已有对应的Agent，如果没有则创建
+        let agent_exists = org.agents.iter().any(|a| a.id == user_to_create.id);
+
+        if !agent_exists {
+            // If Agent doesn't exist, create a corresponding Agent and add to Cliff of Contemplation Line
+            let new_agent = Agent {
+                id: user_to_create.id.clone(),
+                name: user_to_create.name.clone(),
+                role: if matches!(user_to_create.position, crate::domain::user::Position::Chairman) {
+                    Role::simple("Cliff of Contemplation Line Supervisor".to_string(), "You are the supervisor of the Cliff of Contemplation Line, responsible for overseeing and managing senior company affairs.".to_string())
+                        .with_responsibilities(vec!["Corporate Chairman".to_string(), "Cliff of Contemplation Line Management".to_string()])
+                        .with_expertise(vec!["Corporate Governance".to_string(), "Strategic Planning".to_string()])
+                } else {
+                    Role::simple("Cliff of Contemplation Line Member".to_string(), "You are a member of the Cliff of Contemplation Line, participating in senior management and decision-making processes.".to_string())
+                        .with_responsibilities(vec!["Management Affairs".to_string(), "Collaborative Work".to_string()])
+                        .with_expertise(vec!["Team Management".to_string(), "Cross-department Collaboration".to_string()])
+                },
+                department_id: Some(guilty_cliff_dept_id.to_string()),
+                llm_config: LLMConfig::openai("fake-api-key".to_string()),
+                mode: AgentMode::Passive,
+            };
+            org.agents.push(new_agent);
+        } else {
+            // If Agent already exists, update its department information
+            if let Some(agent) = org.agents.iter_mut().find(|a| a.id == user_to_create.id) {
+                agent.department_id = Some(guilty_cliff_dept_id.to_string());
+                if matches!(user_to_create.position, crate::domain::user::Position::Chairman) {
+                    // Corporate chairman becomes Cliff of Contemplation Line supervisor
+                    agent.role = Role::simple("Cliff of Contemplation Line Supervisor".to_string(), "You are the supervisor of the Cliff of Contemplation Line, responsible for overseeing and managing senior company affairs.".to_string())
+                        .with_responsibilities(vec!["Corporate Chairman".to_string(), "Cliff of Contemplation Line Management".to_string()])
+                        .with_expertise(vec!["Corporate Governance".to_string(), "Strategic Planning".to_string()]);
+
+                    // Also update department leader
+                    if let Some(dept) = org.departments.iter_mut().find(|d| d.id == guilty_cliff_dept_id) {
+                        dept.leader_id = Some(user_to_create.id.clone());
+                    }
+                } else {
+                    // Management member
+                    agent.role = Role::simple("Cliff of Contemplation Line Member".to_string(), "You are a member of the Cliff of Contemplation Line, participating in senior management and decision-making processes.".to_string())
+                        .with_responsibilities(vec!["Management Affairs".to_string(), "Collaborative Work".to_string()])
+                        .with_expertise(vec!["Team Management".to_string(), "Cross-department Collaboration".to_string()]);
+                }
+            }
+        }
+
+        // 保存更新后的组织架构
+        if let Err(e) = state.store.save_organization(&org).await {
+            error!("Failed to update organization for guilty cliff line: {}", e);
+        }
+
+        // Also update user's department information
+        let mut updated_user = user_to_create.clone();
+        updated_user.department = guilty_cliff_dept_name.to_string(); // Set user department to "Cliff of Contemplation Line"
+
+        // Save updated user information
+        if let Err(e) = state.store.save_user(&updated_user).await {
+            error!("Failed to update user department for guilty cliff line: {}", e);
+        }
     }
+
+    // Use updated user information (if there was an update)
+    let final_user = if matches!(user_to_create.position, crate::domain::user::Position::Chairman | crate::domain::user::Position::Management) {
+        // If it's corporate chairman or management, use updated user information
+        let updated_user = match state.store.load_user_by_username(&user_to_create.username).await {
+            Ok(Some(user)) => user,
+            _ => user_to_create.clone(), // 如果加载失败，使用原始用户
+        };
+        updated_user
+    } else {
+        user_to_create.clone()
+    };
 
     // 生成JWT令牌
     let token: String = match state.jwt_service.generate_token(&UserInfo {
-        id: user_to_create.id.clone(),
-        username: user_to_create.username.clone(),
-        name: user_to_create.name.clone(),
-        email: user_to_create.email.clone(),
-        is_director: matches!(user_to_create.position, crate::domain::user::Position::Chairman | crate::domain::user::Position::Management),
-        employee_id: user_to_create.employee_id.clone(),
-        position: format!("{:?}", user_to_create.position),
-        department: user_to_create.department.clone(),
+        id: final_user.id.clone(),
+        username: final_user.username.clone(),
+        name: final_user.name.clone(),
+        email: final_user.email.clone(),
+        is_director: matches!(final_user.position, crate::domain::user::Position::Chairman | crate::domain::user::Position::Management),
+        employee_id: final_user.employee_id.clone(),
+        position: format!("{:?}", final_user.position),
+        department: final_user.department.clone(),
     }) {
         Ok(token) => token,
         Err(e) => {
@@ -544,14 +635,14 @@ async fn register(
         "data": {
             "token": token,
             "user": {
-                "id": user_to_create.id,
-                "username": user_to_create.username,
-                "name": user_to_create.name,
-                "email": user_to_create.email,
-                "is_director": matches!(user_to_create.position, crate::domain::user::Position::Chairman | crate::domain::user::Position::Management),
-                "employee_id": user_to_create.employee_id,
-                "position": format!("{:?}", user_to_create.position),
-                "department": user_to_create.department,
+                "id": final_user.id,
+                "username": final_user.username,
+                "name": final_user.name,
+                "email": final_user.email,
+                "is_director": matches!(final_user.position, crate::domain::user::Position::Chairman | crate::domain::user::Position::Management),
+                "employee_id": final_user.employee_id,
+                "position": format!("{:?}", final_user.position),
+                "department": final_user.department,
             }
         }
     })).into_response()
@@ -926,6 +1017,226 @@ async fn delete_invite_code(
     ).into_response()
 }
 
+/// 获取聊天会话列表
+async fn list_chat_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    // 从组织架构中获取Agent信息来构建会话列表
+    match state.store.load_organization().await {
+        Ok(org) => {
+            let sessions: Vec<serde_json::Value> = org.agents.into_iter().map(|agent| {
+                serde_json::json!({
+                    "id": agent.id,
+                    "name": agent.name,
+                    "participants": [{
+                        "id": agent.id,
+                        "name": agent.name,
+                        "isAgent": true,
+                        "status": "online"  // 假设Agent始终在线
+                    }],
+                    "lastMessage": null,
+                    "unreadCount": 0,
+                    "createdAt": chrono::Utc::now().timestamp(),
+                    "updatedAt": chrono::Utc::now().timestamp()
+                })
+            }).collect();
+
+            Json(serde_json::json!({
+                "success": true,
+                "data": sessions
+            })).into_response()
+        },
+        Err(e) => {
+            error!("Failed to load organization for chat sessions: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Failed to load chat sessions".to_string(),
+                })
+            ).into_response()
+        }
+    }
+}
+
+/// 获取特定会话的消息
+async fn get_session_messages(
+    State(state): State<Arc<AppState>>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    // 获取该Agent相关的所有消息
+    let filter = crate::core::store::MessageFilter {
+        from: Some(session_id.clone()),  // 消息来自该Agent
+        target_type: None,
+        to: None,
+        since: None,
+        limit: 50,  // 限制返回50条消息
+    };
+
+    match state.store.load_messages(filter).await {
+        Ok(messages) => {
+            // 转换消息格式以匹配前端期望
+            let formatted_messages: Vec<serde_json::Value> = messages.into_iter().map(|msg| {
+                // 获取发送者信息
+                let sender = if msg.from == session_id {
+                    // 如果是Agent发送的
+                    serde_json::json!({
+                        "id": msg.from,
+                        "name": get_agent_name_by_id(&state.agents, &msg.from),
+                        "isAgent": true
+                    })
+                } else {
+                    // 如果是用户发送的
+                    serde_json::json!({
+                        "id": msg.from,
+                        "name": "Unknown User",
+                        "isAgent": false
+                    })
+                };
+
+                serde_json::json!({
+                    "id": msg.id,
+                    "sender": sender,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp,
+                    "replyTo": msg.reply_to,
+                    "mentions": msg.mentions
+                })
+            }).collect();
+
+            Json(serde_json::json!({
+                "success": true,
+                "data": formatted_messages
+            })).into_response()
+        },
+        Err(e) => {
+            error!("Failed to load messages for session {}: {}", session_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Failed to load messages".to_string(),
+                })
+            ).into_response()
+        }
+    }
+}
+
+/// 根据ID获取Agent名称的辅助函数
+fn get_agent_name_by_id(agents: &[Agent], agent_id: &str) -> String {
+    agents.iter()
+        .find(|agent| agent.id == agent_id)
+        .map(|agent| agent.name.clone())
+        .unwrap_or_else(|| "Unknown Agent".to_string())
+}
+
+/// 获取组织架构树
+async fn get_org_tree(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match state.store.load_organization().await {
+        Ok(org) => {
+            // First, convert flat department list to tree structure
+            let mut departments_map: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
+
+            // Step 1: Create basic structure for all departments
+            for dept in &org.departments {
+                let agent_leaders: Vec<serde_json::Value> = org.agents.iter()
+                    .filter(|agent| agent.department_id.as_ref() == Some(&dept.id) && agent.role.title.contains("主管"))
+                    .map(|agent| {
+                        serde_json::json!({
+                            "id": agent.id,
+                            "name": agent.name,
+                            "title": agent.role.title,
+                            "status": "online"
+                        })
+                    })
+                    .collect();
+
+                let dept_agents: Vec<serde_json::Value> = org.agents.iter()
+                    .filter(|agent| agent.department_id.as_ref() == Some(&dept.id) && !agent.role.title.contains("主管"))
+                    .map(|agent| {
+                        serde_json::json!({
+                            "id": agent.id,
+                            "name": agent.name,
+                            "title": agent.role.title,
+                            "status": "online"
+                        })
+                    })
+                    .collect();
+
+                let leader = if !agent_leaders.is_empty() {
+                    agent_leaders.first().cloned()
+                } else {
+                    None
+                };
+
+                let users = [&agent_leaders[..], &dept_agents[..]].concat();
+
+                departments_map.insert(
+                    dept.id.clone(),
+                    serde_json::json!({
+                        "id": dept.id,
+                        "name": dept.name,
+                        "parentId": dept.parent_id,
+                        "leader": leader,
+                        "users": users,
+                        "memberCount": users.len(),
+                        "children": Vec::<serde_json::Value>::new() // 初始化为空数组
+                    })
+                );
+            }
+
+            // Step 2: Build parent-child relationships (add child departments to parent department's children array)
+            let mut processed_depts = std::collections::HashMap::new();
+            for dept in &org.departments {
+                if let Some(mut dept_info) = departments_map.get(&dept.id).cloned() {
+                    // Find all child departments with this department as parent
+                    let child_depts: Vec<serde_json::Value> = org.departments.iter()
+                        .filter(|child| child.parent_id.as_ref() == Some(&dept.id))
+                        .filter_map(|child| processed_depts.get(&child.id).cloned())
+                        .collect();
+
+                    // Update department information, add child departments
+                    if !child_depts.is_empty() {
+                        if let serde_json::Value::Object(ref mut obj) = dept_info {
+                            obj.insert("children".to_string(), serde_json::Value::Array(child_depts));
+                        }
+                    }
+
+                    processed_depts.insert(dept.id.clone(), dept_info);
+                }
+            }
+
+            // Finally get root departments (departments without parent)
+            let root_depts: Vec<serde_json::Value> = org.departments.iter()
+                .filter(|dept| dept.parent_id.is_none())
+                .filter_map(|dept| processed_depts.get(&dept.id).cloned())
+                .collect();
+
+            // 同时返回扁平的agents列表用于其他用途（目前未使用）
+            let _agents: Vec<serde_json::Value> = org.agents.iter().map(|agent| {
+                serde_json::json!({
+                    "id": agent.id,
+                    "name": agent.name,
+                    "title": agent.role.title,
+                    "departmentId": agent.department_id,
+                    "status": "online",  // 假设Agent始终在线
+                    "isOnline": true
+                })
+            }).collect();
+
+            Json(serde_json::json!({
+                "success": true,
+                "data": root_depts  // Directly return department array, matching frontend expectation
+            })).into_response()
+        },
+        Err(e) => {
+            error!("Failed to load organization tree: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Failed to load organization tree".to_string(),
+                })
+            ).into_response()
+        }
+    }
+}
+
 /// 获取所有用户（仅管理员）
 async fn get_users(
     State(state): State<Arc<AppState>>,
@@ -1000,6 +1311,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/auth/current", get(get_current_user))
         .route("/api/admin/invite-codes", get(get_invite_codes).post(create_invite_code))
         .route("/api/admin/invite-codes/{id}", delete(delete_invite_code))
+        .route("/api/chat/list", get(list_chat_sessions))
+        .route("/api/chat/{session_id}/messages", get(get_session_messages))
+        .route("/api/org/tree", get(get_org_tree))
         .route("/api/admin/users", get(get_users))
         .route("/ws", get(websocket_handler))
         .layer(cors)

@@ -570,7 +570,7 @@ impl FrameworkToolExecutor {
 
         let org = self.env.organization.read().await;
 
-        // 查找该 Agent 所在的部门，检查是否为领导
+        // Find the department where this Agent belongs, check if it's a leader
         let agent = org.find_agent(agent_id)
             .ok_or_else(|| anyhow::anyhow!("Agent not found: {}", agent_id))?;
 
@@ -578,9 +578,9 @@ impl FrameworkToolExecutor {
 
         if let Some(dept_id) = &agent.department_id {
             if let Some(dept) = org.find_department(dept_id) {
-                // 检查是否为部门领导
+                // Check if it's a department leader
                 if dept.leader_id.as_ref() == Some(&agent_id.to_string()) {
-                    // 获取部门其他成员作为下属
+                    // Get other department members as subordinates
                     subordinates = org.get_department_members(dept_id)
                         .into_iter()
                         .filter(|a| a.id != agent_id)

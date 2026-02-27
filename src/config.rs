@@ -1,35 +1,35 @@
-//! 应用程序配置
+//! Application Configuration
 //!
-//! 管理所有可配置的参数和默认值
+//! Manages all configurable parameters and default values
 
 use serde::{Deserialize, Serialize};
 use std::env;
 
-/// 应用程序配置
+/// Application Configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    /// 数据库路径
+    /// Database path
     pub db_path: String,
 
-    /// Web 服务器绑定地址
+    /// Web server binding address
     pub web_bind: String,
 
-    /// 输出模式 (cli 或 web)
+    /// Output mode (cli or web)
     pub output_mode: String,
 
-    /// 消息广播通道容量
+    /// Message broadcast channel capacity
     pub message_channel_capacity: usize,
 
-    /// 默认 API 基础 URL
+    /// Default API base URL
     pub default_api_base_url: String,
 
-    /// 默认模型名称
+    /// Default model name
     pub default_model: String,
 
-    /// 日志级别
+    /// Log level
     pub log_level: String,
 
-    /// 是否运行 Agent 自主循环 (web 模式下)
+    /// Whether to run Agent autonomous loops (in web mode)
     pub run_agent_loops: bool,
 }
 
@@ -43,25 +43,25 @@ impl Default for AppConfig {
             default_api_base_url: get_env_or_default("DEFAULT_API_BASE_URL", "https://api.openai.com/v1".to_string()),
             default_model: get_env_or_default("DEFAULT_MODEL", "gpt-4o-mini".to_string()),
             log_level: get_env_or_default("LOG_LEVEL", "info".to_string()),
-            run_agent_loops: get_env_or_default("RUN_AGENT_LOOPS", true), // 默认运行Agent循环，保持向后兼容
+            run_agent_loops: get_env_or_default("RUN_AGENT_LOOPS", true), // Default to run agent loops, maintaining backward compatibility
         }
     }
 }
 
 impl AppConfig {
-    /// 从环境变量加载配置
+    /// Load configuration from environment variables
     pub fn from_env() -> Self {
         Self::default()
     }
 
-    /// 从配置文件加载配置
+    /// Load configuration from file
     pub fn from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
         let config: AppConfig = serde_json::from_str(&content)?;
         Ok(config)
     }
 
-    /// 获取配置，优先从文件加载，如果失败则使用环境变量或默认值
+    /// Get configuration, prioritizing file loading, falling back to environment variables or defaults if failed
     pub fn load(config_path: Option<&str>) -> Self {
         match config_path {
             Some(path) => Self::from_file(path).unwrap_or_else(|_| Self::from_env()),
@@ -70,7 +70,7 @@ impl AppConfig {
     }
 }
 
-/// 辅助函数：从环境变量获取值，如果不存在则返回默认值
+/// Helper function: get value from environment variable, return default if not exists
 fn get_env_or_default<T: std::str::FromStr + Default>(key: &str, default: T) -> T
 where
     T: std::str::FromStr,

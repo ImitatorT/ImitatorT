@@ -424,14 +424,14 @@ impl FrameworkToolProvider {
 
         Tool::new(
             "org.get_department",
-            "获取部门信息",
-            "获取指定部门的详细信息",
+            "Get Department Info",
+            "Get detailed information of specified department",
             CategoryPath::from_str("org/query"),
             JsonSchema::object()
-                .property("department_id", JsonSchema::string().description("部门 ID"))
+                .property("department_id", JsonSchema::string().description("Department ID"))
                 .build(),
         )
-        .with_returns(ReturnType::new("部门信息", json!({"type": "object"})))
+        .with_returns(ReturnType::new("Department Info", json!({"type": "object"})))
     }
 
     fn create_org_get_leader() -> Tool {
@@ -440,11 +440,11 @@ impl FrameworkToolProvider {
 
         Tool::new(
             "org.get_leader",
-            "获取部门领导",
-            "获取指定部门的领导信息",
+            "Get Department Leader",
+            "Get the leader information of specified department",
             CategoryPath::from_str("org/query"),
             JsonSchema::object()
-                .property("department_id", JsonSchema::string().description("部门 ID"))
+                .property("department_id", JsonSchema::string().description("Department ID"))
                 .build(),
         )
         .with_returns(ReturnType::new("领导信息", json!({"type": "object"})))
@@ -457,7 +457,7 @@ impl FrameworkToolProvider {
         Tool::new(
             "org.find_agents",
             "查找 Agent",
-            "按 ID、名称、职位、部门、描述等多维度查找 Agent",
+            "Multi-dimensional Agent search by ID, name, position, department, description, etc.",
             CategoryPath::from_str("org/query"),
             JsonSchema::object()
                 .property(
@@ -486,15 +486,15 @@ impl FrameworkToolProvider {
 
         Tool::new(
             "org.get_sub_departments",
-            "获取子部门",
-            "获取指定部门的直接子部门列表",
+            "Get Sub-departments",
+            "Get the list of direct sub-departments of specified department",
             CategoryPath::from_str("org/query"),
             JsonSchema::object()
-                .property("department_id", JsonSchema::string().description("部门 ID"))
+                .property("department_id", JsonSchema::string().description("Department ID"))
                 .build(),
         )
         .with_returns(ReturnType::new(
-            "子部门列表",
+            "Sub-department List",
             json!({"type": "array", "items": {"type": "object"}}),
         ))
     }
@@ -505,15 +505,15 @@ impl FrameworkToolProvider {
 
         Tool::new(
             "org.get_subordinates",
-            "获取下属",
-            "获取指定 Agent 的下属列表（基于部门领导关系）",
+            "Get Subordinates",
+            "Get the list of subordinates for specified Agent (based on department leadership relationship)",
             CategoryPath::from_str("org/query"),
             JsonSchema::object()
                 .property("agent_id", JsonSchema::string().description("Agent ID"))
                 .build(),
         )
         .with_returns(ReturnType::new(
-            "下属 Agent 列表",
+            "Subordinate Agent List",
             json!({"type": "array", "items": {"type": "object"}}),
         ))
     }

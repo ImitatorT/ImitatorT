@@ -1,4 +1,4 @@
-//! ImitatorT 业务功能端到端测试
+//! ImitatorT Business Function End-to-End Tests
 
 use imitatort_stateless_company::application::framework::{CompanyBuilder, VirtualCompany};
 use imitatort_stateless_company::core::config::CompanyConfig;
@@ -9,30 +9,30 @@ async fn test_company_creation_from_config() {
     // 创建测试配置
     let mut org = Organization::new();
 
-    // 添加部门
-    org.add_department(Department::top_level("engineering", "工程部"));
-    org.add_department(Department::top_level("product", "产品部"));
-    org.add_department(Department::top_level("design", "设计部"));
+    // Add department
+    org.add_department(Department::top_level("engineering", "Engineering Department"));
+    org.add_department(Department::top_level("product", "Product Department"));
+    org.add_department(Department::top_level("design", "Design Department"));
 
     // 添加不同角色的agent
     let ceo = Agent::new(
         "ceo",
         "CEO",
-        Role::simple("Chief Executive Officer", "你是CEO，负责公司战略决策"),
+        Role::simple("Chief Executive Officer", "You are the CEO, responsible for company strategic decisions"),
         LLMConfig::openai("test-key"),
     );
 
     let engineering_manager = Agent::new(
         "eng-manager",
-        "工程经理",
-        Role::simple("Engineering Manager", "你是工程经理，负责技术团队管理"),
+        "Engineering Manager",
+        Role::simple("Engineering Manager", "You are the Engineering Manager, responsible for technical team management"),
         LLMConfig::openai("test-key"),
     ).with_department("engineering");
 
     let product_manager = Agent::new(
         "prod-manager",
-        "产品经理",
-        Role::simple("Product Manager", "你是产品经理，负责产品规划和需求管理"),
+        "Product Manager",
+        Role::simple("Product Manager", "You are the Product Manager, responsible for product planning and requirement management"),
         LLMConfig::openai("test-key"),
     ).with_department("product");
 
@@ -84,8 +84,8 @@ async fn test_company_message_flow() {
 
     let manager = Agent::new(
         "it-manager",
-        "IT经理",
-        Role::simple("IT Manager", "你是IT经理，负责IT部门管理"),
+        "IT Manager",
+        Role::simple("IT Manager", "You are the IT Manager, responsible for IT department management"),
         LLMConfig::openai("test-key"),
     ).with_department("it");
 
@@ -138,19 +138,19 @@ async fn test_company_message_flow() {
 async fn test_company_persistence() {
     let mut org = Organization::new();
 
-    org.add_department(Department::top_level("hr", "人力资源部"));
+    org.add_department(Department::top_level("hr", "Human Resources Department"));
 
     let hr_director = Agent::new(
         "hr-director",
-        "人事总监",
-        Role::simple("HR Director", "你是人事总监，负责人事管理"),
+        "HR Director",
+        Role::simple("HR Director", "You are the HR Director, responsible for human resource management"),
         LLMConfig::openai("test-key"),
     ).with_department("hr");
 
     let hr_specialist = Agent::new(
         "hr-specialist",
-        "人事专员",
-        Role::simple("HR Specialist", "你是人事专员，负责日常人事事务"),
+        "HR Specialist",
+        Role::simple("HR Specialist", "You are the HR Specialist, responsible for daily HR operations"),
         LLMConfig::openai("test-key"),
     ).with_department("hr");
 
@@ -220,15 +220,15 @@ async fn test_organization_hierarchy() {
 
     let backend_lead = Agent::new(
         "backend-lead",
-        "后端主管",
-        Role::simple("Backend Lead", "你是后端技术主管"),
+        "Backend Lead",
+        Role::simple("Backend Lead", "You are the Backend Lead, responsible for backend technology management"),
         LLMConfig::openai("test-key"),
     ).with_department("backend");
 
     let frontend_lead = Agent::new(
         "frontend-lead",
-        "前端主管",
-        Role::simple("Frontend Lead", "你是前端技术主管"),
+        "Frontend Lead",
+        Role::simple("Frontend Lead", "You are the Frontend Lead, responsible for frontend technology management"),
         LLMConfig::openai("test-key"),
     ).with_department("frontend");
 
@@ -304,8 +304,8 @@ async fn test_company_config_validation() {
     let mut org = Organization::new();
     let agent = Agent::new(
         "single-agent",
-        "单人",
-        Role::simple("Solo Worker", "你是独立工作者"),
+        "Solo Worker",
+        Role::simple("Solo Worker", "You are an independent worker"),
         LLMConfig::openai("test-key"),
     );
     org.add_agent(agent);

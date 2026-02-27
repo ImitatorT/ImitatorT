@@ -1,20 +1,20 @@
-//! Agent 运行时
+//! Agent Runtime
 //!
-//! 负责与LLM交互和执行决策
+//! Responsible for interacting with LLM and executing decisions
 
 use anyhow::Result;
-
 use crate::domain::{Agent, Message, MessageTarget};
 use crate::infrastructure::llm::OpenAIClient;
+use serde_json;
 
-/// Agent 运行时 - 负责思考和执行
+/// Agent Runtime - Responsible for thinking and executing
 pub struct AgentRuntime {
     agent: Agent,
     llm: OpenAIClient,
 }
 
 impl AgentRuntime {
-    /// 创建新的Agent运行时
+    /// Create a new Agent Runtime
     pub async fn new(agent: Agent) -> Result<Self> {
         let llm = OpenAIClient::new_with_base_url(
             agent.llm_config.api_key.clone(),
@@ -25,112 +25,173 @@ impl AgentRuntime {
         Ok(Self { agent, llm })
     }
 
-    /// 获取Agent ID
+    /// Get Agent ID
     pub fn id(&self) -> &str {
         &self.agent.id
     }
 
-    /// 获取Agent名称
+    /// Get Agent Name
     pub fn name(&self) -> &str {
         &self.agent.name
     }
 
-    /// 获取Agent引用
+    /// Get Agent reference
     pub fn agent(&self) -> &Agent {
         &self.agent
     }
 
-    /// 思考并做出决策
+    /// Think and make decisions
     pub async fn think(&self, context: Context) -> Result<Decision> {
-        // 构建提示词
+        // Build prompt
         let prompt = self.build_thinking_prompt(&context);
 
-        // 调用LLM
+        // Call LLM
         let response = self.llm.complete(&prompt).await?;
 
-        // 解析决策
+        // Parse decision
         let decision = self.parse_decision(&response)?;
 
         Ok(decision)
     }
 
-    /// 构建思考提示词
+    /// Build thinking prompt
     fn build_thinking_prompt(&self, context: &Context) -> String {
         let mut prompt = format!(
-            "{}
-
-当前情况：
-",
+            "{}\n\nCurrent situation:\n",
             self.agent.system_prompt()
         );
 
-        // 添加未读消息
+        // Add unread messages
         if !context.unread_messages.is_empty() {
-            prompt.push_str("\n未读消息：\n");
+            prompt.push_str("\nUnread messages:\n");
             for msg in &context.unread_messages {
                 prompt.push_str(&format!("- [{}]: {}\n", msg.from, msg.content));
             }
         }
 
-        // 添加当前任务
+        // Add current task
         if let Some(task) = &context.current_task {
-            prompt.push_str(&format!("\n当前任务：{}\n", task));
+            prompt.push_str(&format!("\nCurrent task: {}\n", task));
         }
 
-        // 添加可用决策说明
+        // Add available decision instructions with JSON format
         prompt.push_str(
-            "\n请决定你的下一步行动。你可以：\n\
-            1. SEND_MESSAGE <目标> <内容> - 发送消息（目标是agent_id或group_id）\n\
-            2. CREATE_GROUP <群名称> <成员1,成员2,...> - 创建群聊\n\
-            3. EXECUTE_TASK <任务描述> - 执行任务\n\
-            4. WAIT - 暂时等待\n\
-            \n请输出你的决策（一行）：\n",
+            "\nDecide your next action. Respond with ONLY a valid JSON object with one of these formats:\n\
+            {\n  \"action\": \"send_message\",\n  \"target\": \"agent_id_or_group_id\",\n  \"content\": \"message content\"\n}\n\
+            {\n  \"action\": \"create_group\",\n  \"name\": \"group name\",\n  \"members\": [\"member1\", \"member2\"]\n}\n\
+            {\n  \"action\": \"execute_task\",\n  \"task\": \"task description\"\n}\n\
+            {\n  \"action\": \"wait\"\n}\n\n\
+            Response:",
         );
 
         prompt
     }
 
-    /// 解析LLM响应为决策
+    /// Parse LLM response into decision
     fn parse_decision(&self, response: &str) -> Result<Decision> {
-        let line = response.lines().next().unwrap_or("WAIT").trim();
+        // Extract JSON from response (in case LLM adds extra text)
+        let json_str = self.extract_json_from_response(response);
 
-        if line.starts_with("SEND_MESSAGE ") {
-            let parts: Vec<&str> = line[13..].splitn(2, ' ').collect();
-            if parts.len() == 2 {
-                let target = parts[0].to_string();
-                let content = parts[1].to_string();
+        if let Some(json_str) = json_str {
+            let decision: serde_json::Value = serde_json::from_str(&json_str)
+                .map_err(|e| anyhow::anyhow!("Failed to parse JSON decision: {}", e))?;
 
-                // 判断目标是群组还是个人
-                let target = if target.starts_with("group-") {
-                    MessageTarget::Group(target)
-                } else {
-                    MessageTarget::Direct(target)
-                };
+            if let Some(action) = decision.get("action").and_then(|v| v.as_str()) {
+                match action {
+                    "send_message" => {
+                        let target = decision.get("target")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow::anyhow!("Missing target in send_message action"))?
+                            .to_string();
 
-                return Ok(Decision::SendMessage { target, content });
+                        let content = decision.get("content")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow::anyhow!("Missing content in send_message action"))?
+                            .to_string();
+
+                        // Determine if target is a group or individual
+                        let target = if target.starts_with("group-") || target.starts_with("group_") {
+                            MessageTarget::Group(target)
+                        } else {
+                            MessageTarget::Direct(target)
+                        };
+
+                        Ok(Decision::SendMessage { target, content })
+                    },
+                    "create_group" => {
+                        let name = decision.get("name")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow::anyhow!("Missing name in create_group action"))?
+                            .to_string();
+
+                        let members = decision.get("members")
+                            .and_then(|v| v.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                                    .collect()
+                            })
+                            .unwrap_or_default(); // Default to empty vector if no members specified
+
+                        Ok(Decision::CreateGroup { name, members })
+                    },
+                    "execute_task" => {
+                        let task = decision.get("task")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow::anyhow!("Missing task in execute_task action"))?
+                            .to_string();
+
+                        Ok(Decision::ExecuteTask { task })
+                    },
+                    "wait" => Ok(Decision::Wait),
+                    _ => {
+                        tracing::warn!("Unknown action in decision: {}", action);
+                        Ok(Decision::Wait)
+                    }
+                }
+            } else {
+                tracing::warn!("No action field in decision JSON: {}", json_str);
+                Ok(Decision::Wait)
             }
-        } else if line.starts_with("CREATE_GROUP ") {
-            let parts: Vec<&str> = line[13..].splitn(2, ' ').collect();
-            if parts.len() == 2 {
-                let name = parts[0].to_string();
-                let members: Vec<String> = parts[1].split(',').map(|s| s.trim().to_string()).collect();
-                return Ok(Decision::CreateGroup { name, members });
-            }
-        } else if line.starts_with("EXECUTE_TASK ") {
-            let task = line[13..].to_string();
-            return Ok(Decision::ExecuteTask { task });
+        } else {
+            tracing::warn!("Could not extract JSON from response: {}", response);
+            Ok(Decision::Wait)
         }
-
-        Ok(Decision::Wait)
     }
 
-    /// 执行任务
+    /// Extract JSON from response (handles cases where LLM adds extra text around JSON)
+    fn extract_json_from_response(&self, response: &str) -> Option<String> {
+        // Look for JSON object in the response
+        let mut brace_count = 0;
+        let mut start_idx = None;
+
+        for (i, ch) in response.char_indices() {
+            if ch == '{' {
+                if brace_count == 0 {
+                    start_idx = Some(i);
+                }
+                brace_count += 1;
+            } else if ch == '}' {
+                brace_count -= 1;
+                if brace_count == 0 && start_idx.is_some() {
+                    return Some(response[start_idx.unwrap()..=i].to_string());
+                }
+            }
+        }
+
+        // If we couldn't find a properly closed JSON object, try to parse the whole response
+        if serde_json::from_str::<serde_json::Value>(response.trim()).is_ok() {
+            Some(response.trim().to_string())
+        } else {
+            None
+        }
+    }
+
+    /// Execute task
     pub async fn execute_task(&self, task: &str) -> Result<String> {
         let prompt = format!(
-            "{}
-
-请完成以下任务：
-{}\n",
+            "{}\n\nComplete the following task:\n{}\n",
             self.agent.system_prompt(),
             task
         );
@@ -139,46 +200,46 @@ impl AgentRuntime {
     }
 }
 
-/// Agent 决策
+/// Agent Decision
 #[derive(Debug, Clone)]
 pub enum Decision {
-    /// 发送消息
+    /// Send message
     SendMessage {
         target: MessageTarget,
         content: String,
     },
-    /// 创建群聊
+    /// Create group chat
     CreateGroup {
         name: String,
         members: Vec<String>,
     },
-    /// 执行任务
+    /// Execute task
     ExecuteTask {
         task: String,
     },
-    /// 等待
+    /// Wait
     Wait,
 }
 
-/// Agent 上下文
+/// Agent Context
 #[derive(Debug, Clone, Default)]
 pub struct Context {
-    /// 未读消息
+    /// Unread messages
     pub unread_messages: Vec<Message>,
-    /// 当前任务
+    /// Current task
     pub current_task: Option<String>,
-    /// 组织架构信息
+    /// Organization information
     pub organization_info: Option<String>,
 }
 
 impl Context {
-    /// 添加上下文
+    /// Add context
     pub fn with_messages(mut self, messages: Vec<Message>) -> Self {
         self.unread_messages = messages;
         self
     }
 
-    /// 添加任务
+    /// Add task
     pub fn with_task(mut self, task: impl Into<String>) -> Self {
         self.current_task = Some(task.into());
         self

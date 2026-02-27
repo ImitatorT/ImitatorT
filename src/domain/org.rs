@@ -1,13 +1,13 @@
-//! 组织架构领域实体
+//! Organizational Structure Domain Entity
 //!
-//! 简化的组织架构定义
+//! Simplified organizational structure definition
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::domain::Agent;
 
-/// 组织架构
+/// Organization Structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Organization {
     pub departments: Vec<Department>,
@@ -15,7 +15,7 @@ pub struct Organization {
 }
 
 impl Organization {
-    /// 创建空组织架构
+    /// Create empty organization structure
     pub fn new() -> Self {
         Self {
             departments: vec![],
@@ -23,7 +23,7 @@ impl Organization {
         }
     }
 
-    /// 从配置创建
+    /// Create from configuration
     pub fn from_config(config: OrgConfig) -> Self {
         Self {
             departments: config.departments,
@@ -31,27 +31,27 @@ impl Organization {
         }
     }
 
-    /// 添加部门
+    /// Add department
     pub fn add_department(&mut self, dept: Department) {
         self.departments.push(dept);
     }
 
-    /// 添加Agent
+    /// Add Agent
     pub fn add_agent(&mut self, agent: Agent) {
         self.agents.push(agent);
     }
 
-    /// 查找Agent
+    /// Find Agent
     pub fn find_agent(&self, id: &str) -> Option<&Agent> {
         self.agents.iter().find(|a| a.id == id)
     }
 
-    /// 查找部门
+    /// Find Department
     pub fn find_department(&self, id: &str) -> Option<&Department> {
         self.departments.iter().find(|d| d.id == id)
     }
 
-    /// 获取部门成员
+    /// Get department members
     pub fn get_department_members(&self, dept_id: &str) -> Vec<&Agent> {
         self.agents
             .iter()
@@ -59,13 +59,13 @@ impl Organization {
             .collect()
     }
 
-    /// 获取部门领导
+    /// Get department leader
     pub fn get_department_leader(&self, dept_id: &str) -> Option<&Agent> {
         let dept = self.find_department(dept_id)?;
         dept.leader_id.as_ref().and_then(|id| self.find_agent(id))
     }
 
-    /// 获取子部门
+    /// Get sub-departments
     pub fn get_sub_departments(&self, parent_id: &str) -> Vec<&Department> {
         self.departments
             .iter()
@@ -73,7 +73,7 @@ impl Organization {
             .collect()
     }
 
-    /// 构建部门树
+    /// Build department tree
     pub fn build_tree(&self) -> Vec<DepartmentNode> {
         let mut roots: Vec<DepartmentNode> = vec![];
         let mut children_map: HashMap<String, Vec<DepartmentNode>> = HashMap::new();
@@ -98,7 +98,7 @@ impl Organization {
             }
         }
 
-        // 附加子部门
+        // Attach sub-departments
         fn attach_children(node: &mut DepartmentNode, map: &HashMap<String, Vec<DepartmentNode>>) {
             if let Some(children) = map.get(&node.department.id) {
                 node.children = children.clone();
@@ -122,7 +122,7 @@ impl Default for Organization {
     }
 }
 
-/// 部门定义
+/// Department Definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Department {
     pub id: String,
@@ -132,7 +132,7 @@ pub struct Department {
 }
 
 impl Department {
-    /// 创建顶级部门
+    /// Create top-level department
     pub fn top_level(id: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             id: id.into(),
@@ -142,7 +142,7 @@ impl Department {
         }
     }
 
-    /// 创建子部门
+    /// Create child department
     pub fn child(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -156,21 +156,21 @@ impl Department {
         }
     }
 
-    /// 设置领导
+    /// Set leader
     pub fn with_leader(mut self, leader_id: impl Into<String>) -> Self {
         self.leader_id = Some(leader_id.into());
         self
     }
 }
 
-/// 组织架构配置
+/// Organization Configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrgConfig {
     pub departments: Vec<Department>,
     pub agents: Vec<Agent>,
 }
 
-/// 部门树节点
+/// Department Tree Node
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DepartmentNode {
     pub department: Department,

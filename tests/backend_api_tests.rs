@@ -1,4 +1,4 @@
-//! ImitatorT 后端API集成测试
+//! ImitatorT Backend API Integration Tests
 
 use axum::Router;
 use std::sync::Arc;
@@ -16,14 +16,14 @@ fn create_test_app_state() -> Arc<AppState> {
     // 添加测试agent
     let agent1 = Agent::new(
         "test-agent-1",
-        "测试员工1",
-        Role::simple("Developer", "你是开发人员"),
+        "Test Employee 1",
+        Role::simple("Developer", "You are a developer"),
         LLMConfig::openai("test-key"),
     );
     let agent2 = Agent::new(
         "test-agent-2",
-        "测试员工2",
-        Role::simple("Manager", "你是经理"),
+        "Test Employee 2",
+        Role::simple("Manager", "You are a manager"),
         LLMConfig::openai("test-key"),
     );
 
@@ -149,7 +149,7 @@ async fn test_get_single_agent_endpoint() {
 
     let agent: serde_json::Value = response.json().await.unwrap();
     assert_eq!(agent["id"], "test-agent-1");
-    assert_eq!(agent["name"], "测试员工1");
+    assert_eq!(agent["name"], "Test Employee 1");
 
     // 请求不存在的agent
     let response = client

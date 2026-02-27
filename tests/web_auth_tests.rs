@@ -17,6 +17,9 @@ async fn test_jwt_generation() {
         name: "Test User".to_string(),
         email: Some("test@example.com".to_string()),
         is_director: false,
+        employee_id: "emp123".to_string(),
+        position: "Developer".to_string(),
+        department: "Engineering".to_string(),
     };
 
     let token = jwt_service.generate_token(&user).expect("Failed to generate token");
