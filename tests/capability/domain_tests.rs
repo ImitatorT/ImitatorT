@@ -1,4 +1,4 @@
-use imitatort_stateless_company::domain::capability::*;
+use imitatort::domain::capability::*;
 
 #[tokio::test]
 async fn test_capability_creation() {

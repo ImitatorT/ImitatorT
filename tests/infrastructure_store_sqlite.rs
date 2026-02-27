@@ -1,8 +1,8 @@
 //! SQLite 存储实现测试
 
-use imitatort_stateless_company::core::store::{MessageFilter, Store};
-use imitatort_stateless_company::domain::{Agent, Department, Group, LLMConfig, Message, Organization, Role};
-use imitatort_stateless_company::infrastructure::store::SqliteStore;
+use imitatort::core::store::{MessageFilter, Store};
+use imitatort::domain::{Agent, Department, Group, LLMConfig, Message, Organization, Role};
+use imitatort::infrastructure::store::SqliteStore;
 
 fn create_test_organization() -> Organization {
     let mut org = Organization::new();

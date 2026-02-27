@@ -1,6 +1,6 @@
 //! Agent 领域实体测试
 
-use imitatort_stateless_company::{Agent, LLMConfig, Role};
+use imitatort::{Agent, LLMConfig, Role};
 
 #[test]
 fn test_agent_creation() {

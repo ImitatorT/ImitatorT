@@ -6,20 +6,20 @@
 //! ## 快速开始
 //!
 //! ```rust
-//! use imitatort_stateless_company::{quick_start, VirtualCompany, CompanyBuilder, CompanyConfig};
+//! use imitatort::{quick_start, VirtualCompany, CompanyBuilder, CompanyConfig};
 //!
 //! // Method 1: Quick start using auto-configuration
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
 //!     // Auto-configure and start multi-Agent system and web service
-//!     imitatort_stateless_company::quick_start().await?;
+//!     imitatort::quick_start().await?;
 //!     Ok(())
 //! }
 //! ```
 //!
 //! ```rust
 //! // Method 2: Manual configuration startup
-//! use imitatort_stateless_company::{VirtualCompany, CompanyBuilder, CompanyConfig};
+//! use imitatort::{VirtualCompany, CompanyBuilder, CompanyConfig};
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {

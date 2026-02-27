@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use imitatort_stateless_company::core::capability::CapabilityRegistry;
-use imitatort_stateless_company::domain::capability::*;
+use imitatort::core::capability::CapabilityRegistry;
+use imitatort::domain::capability::*;
 
 #[tokio::test]
 async fn test_capability_registry_basic_operations() {

@@ -1,6 +1,6 @@
 //! ImitatorT AI Agent Behavior Tests
 
-use imitatort_stateless_company::domain::{Agent, LLMConfig, Message, MessageTarget, Organization, Role};
+use imitatort::domain::{Agent, LLMConfig, Message, MessageTarget, Organization, Role};
 // 移除对私有模块的引用，使用公共API
 use std::sync::Arc;
 use tokio::sync::broadcast;

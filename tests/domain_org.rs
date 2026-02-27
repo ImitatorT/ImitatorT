@@ -1,6 +1,6 @@
 //! Organization 领域实体测试
 
-use imitatort_stateless_company::{Agent, Department, LLMConfig, Organization, Role};
+use imitatort::{Agent, Department, LLMConfig, Organization, Role};
 
 #[test]
 fn test_organization_building() {

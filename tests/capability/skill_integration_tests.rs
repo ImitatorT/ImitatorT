@@ -1,4 +1,4 @@
-use imitatort_stateless_company::{
+use imitatort::{
     core::skill::SkillManager,
     domain::capability::*,
     domain::skill::{BindingType, ToolAccessType},
@@ -9,11 +9,11 @@ async fn test_skill_capability_binding() {
     let skill_manager = SkillManager::new();
 
     // Create a skill
-    let skill = imitatort_stateless_company::domain::skill::Skill {
+    let skill = imitatort::domain::skill::Skill {
         id: "test-skill".to_string(),
         name: "Test Skill".to_string(),
         description: "A test skill".to_string(),
-        category_path: imitatort_stateless_company::domain::skill::CategoryPath::from("test.skills"),
+        category_path: imitatort::domain::skill::CategoryPath::from("test.skills"),
         access_type: ToolAccessType::Public,
     };
 
@@ -49,11 +49,11 @@ async fn test_skill_based_capability_access() {
     let skill_manager = SkillManager::new();
 
     // Register a skill
-    let skill = imitatort_stateless_company::domain::skill::Skill {
+    let skill = imitatort::domain::skill::Skill {
         id: "admin-skill".to_string(),
         name: "Admin Skill".to_string(),
         description: "Administrator skill".to_string(),
-        category_path: imitatort_stateless_company::domain::skill::CategoryPath::from("admin.skills"),
+        category_path: imitatort::domain::skill::CategoryPath::from("admin.skills"),
         access_type: ToolAccessType::Public,
     };
 
@@ -91,19 +91,19 @@ async fn test_multiple_capability_bindings() {
     let skill_manager = SkillManager::new();
 
     // Create multiple skills
-    let skill1 = imitatort_stateless_company::domain::skill::Skill {
+    let skill1 = imitatort::domain::skill::Skill {
         id: "skill1".to_string(),
         name: "Skill 1".to_string(),
         description: "First skill".to_string(),
-        category_path: imitatort_stateless_company::domain::skill::CategoryPath::from("skills.group1"),
+        category_path: imitatort::domain::skill::CategoryPath::from("skills.group1"),
         access_type: ToolAccessType::Public,
     };
 
-    let skill2 = imitatort_stateless_company::domain::skill::Skill {
+    let skill2 = imitatort::domain::skill::Skill {
         id: "skill2".to_string(),
         name: "Skill 2".to_string(),
         description: "Second skill".to_string(),
-        category_path: imitatort_stateless_company::domain::skill::CategoryPath::from("skills.group2"),
+        category_path: imitatort::domain::skill::CategoryPath::from("skills.group2"),
         access_type: ToolAccessType::Public,
     };
 
@@ -151,11 +151,11 @@ async fn test_capability_unbinding() {
     let skill_manager = SkillManager::new();
 
     // Create skill and capability
-    let skill = imitatort_stateless_company::domain::skill::Skill {
+    let skill = imitatort::domain::skill::Skill {
         id: "unbind-test-skill".to_string(),
         name: "Unbind Test Skill".to_string(),
         description: "Skill for unbind testing".to_string(),
-        category_path: imitatort_stateless_company::domain::skill::CategoryPath::from("test.unbind"),
+        category_path: imitatort::domain::skill::CategoryPath::from("test.unbind"),
         access_type: ToolAccessType::Public,
     };
 

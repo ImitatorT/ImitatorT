@@ -1,6 +1,6 @@
 //! Message 领域实体测试
 
-use imitatort_stateless_company::{Group, Message};
+use imitatort::{Group, Message};
 
 #[test]
 fn test_private_message() {

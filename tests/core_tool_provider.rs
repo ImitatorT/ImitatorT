@@ -1,7 +1,7 @@
 //! ToolProvider 实现测试
 
-use imitatort_stateless_company::core::tool_provider::FrameworkToolProvider;
-use imitatort_stateless_company::domain::tool::{MatchType, ToolProvider};
+use imitatort::core::tool_provider::FrameworkToolProvider;
+use imitatort::domain::tool::{MatchType, ToolProvider};
 
 #[test]
 fn test_framework_tool_provider() {

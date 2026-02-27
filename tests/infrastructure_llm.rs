@@ -1,6 +1,6 @@
 //! LLM 客户端测试
 
-use imitatort_stateless_company::infrastructure::llm::{Message, OpenAIClient};
+use imitatort::infrastructure::llm::{Message, OpenAIClient};
 
 #[test]
 fn test_client_creation() {

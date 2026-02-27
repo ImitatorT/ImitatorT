@@ -1,4 +1,4 @@
-use imitatort_stateless_company::infrastructure::auth::{JwtService, PasswordService};
+use imitatort::infrastructure::auth::{JwtService, PasswordService};
 
 #[tokio::test]
 async fn test_password_hashing() {
@@ -11,7 +11,7 @@ async fn test_password_hashing() {
 #[tokio::test]
 async fn test_jwt_generation() {
     let jwt_service = JwtService::new("secret_key_for_testing");
-    let user = imitatort_stateless_company::infrastructure::auth::UserInfo {
+    let user = imitatort::infrastructure::auth::UserInfo {
         id: "user123".to_string(),
         username: "testuser".to_string(),
         name: "Test User".to_string(),

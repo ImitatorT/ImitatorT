@@ -1,8 +1,8 @@
 //! Tool 执行器接口测试
 
-use imitatort_stateless_company::infrastructure::tool::{FnToolExecutor, ToolContext, ToolExecutorRegistry, ToolResult, ToolExecutor};
-use imitatort_stateless_company::core::skill::SkillManager;
-use imitatort_stateless_company::core::tool::ToolRegistry;
+use imitatort::infrastructure::tool::{FnToolExecutor, ToolContext, ToolExecutorRegistry, ToolResult, ToolExecutor};
+use imitatort::core::skill::SkillManager;
+use imitatort::core::tool::ToolRegistry;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -19,7 +19,7 @@ async fn test_tool_executor_registry() {
     registry.register(Box::new(executor));
 
     // 创建一个工具调用上下文
-    let context = imitatort_stateless_company::domain::tool::ToolCallContext::new("test-agent");
+    let context = imitatort::domain::tool::ToolCallContext::new("test-agent");
 
     // 测试执行
     let result = registry.execute("test.echo", json!("hello"), &context).await.unwrap();
@@ -43,7 +43,7 @@ async fn test_fn_tool_executor() {
     assert!(executor.can_execute("math.add"));
     assert!(!executor.can_execute("math.sub"));
 
-    let context = imitatort_stateless_company::domain::tool::ToolCallContext::new("test-agent");
+    let context = imitatort::domain::tool::ToolCallContext::new("test-agent");
     let result = executor.execute("math.add", json!({"a": 1, "b": 2}), &context).await.unwrap();
     assert_eq!(result["result"], 3);
 }

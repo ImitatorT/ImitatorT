@@ -2,7 +2,7 @@
 //!
 //! 测试新的Agent模式功能
 
-use imitatort_stateless_company::domain::agent::{Agent, AgentMode, TriggerCondition, Role, LLMConfig};
+use imitatort::domain::agent::{Agent, AgentMode, TriggerCondition, Role, LLMConfig};
 
 #[test]
 fn test_agent_passive_mode_default() {

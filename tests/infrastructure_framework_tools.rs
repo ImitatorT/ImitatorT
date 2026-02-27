@@ -1,10 +1,10 @@
 //! 框架内置工具实现测试
 
-use imitatort_stateless_company::core::messaging::MessageBus;
-use imitatort_stateless_company::core::tool::ToolRegistry;
-use imitatort_stateless_company::domain::{Organization, Agent, Role, LLMConfig};
-use imitatort_stateless_company::domain::tool::ToolCallContext;
-use imitatort_stateless_company::infrastructure::tool::{FrameworkToolExecutor, ToolEnvironment, ToolExecutor};
+use imitatort::core::messaging::MessageBus;
+use imitatort::core::tool::ToolRegistry;
+use imitatort::domain::{Organization, Agent, Role, LLMConfig};
+use imitatort::domain::tool::ToolCallContext;
+use imitatort::infrastructure::tool::{FrameworkToolExecutor, ToolEnvironment, ToolExecutor};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -12,7 +12,7 @@ fn create_test_environment() -> ToolEnvironment {
     let message_bus = Arc::new(MessageBus::new());
     let organization = Arc::new(RwLock::new(Organization::new()));
     let tool_registry = Arc::new(ToolRegistry::new());
-    let store = Arc::new(imitatort_stateless_company::core::store::MemoryStore::new());
+    let store = Arc::new(imitatort::core::store::MemoryStore::new());
 
     ToolEnvironment::new(
         message_bus,

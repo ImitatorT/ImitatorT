@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use imitatort_stateless_company::core::capability_provider::{CapabilityProvider, CompositeCapabilityProvider};
-use imitatort_stateless_company::domain::capability::*;
+use imitatort::core::capability_provider::{CapabilityProvider, CompositeCapabilityProvider};
+use imitatort::domain::capability::*;
 
 // Mock capability provider for testing
 struct MockCapabilityProvider {
@@ -109,7 +109,7 @@ async fn test_composite_capability_provider_empty() {
 
 #[tokio::test]
 async fn test_framework_capability_provider() {
-    use imitatort_stateless_company::core::capability_provider::FrameworkCapabilityProvider;
+    use imitatort::core::capability_provider::FrameworkCapabilityProvider;
 
     let provider = FrameworkCapabilityProvider::new();
     let caps = provider.list_capabilities().await.unwrap();

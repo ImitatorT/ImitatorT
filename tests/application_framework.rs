@@ -1,8 +1,8 @@
 //! 虚拟公司框架 API 测试
 
-use imitatort_stateless_company::application::framework::{CompanyBuilder, VirtualCompany};
-use imitatort_stateless_company::core::config::CompanyConfig;
-use imitatort_stateless_company::domain::{Agent, Department, LLMConfig, Organization, Role};
+use imitatort::application::framework::{CompanyBuilder, VirtualCompany};
+use imitatort::core::config::CompanyConfig;
+use imitatort::domain::{Agent, Department, LLMConfig, Organization, Role};
 
 #[tokio::test]
 async fn test_company_builder() {

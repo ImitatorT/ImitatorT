@@ -1,4 +1,4 @@
-use imitatort_stateless_company::{
+use imitatort::{
     domain::{Message, MessageTarget},
     infrastructure::store::SqliteStore,
     core::store::{MessageFilter, Store},

@@ -2,11 +2,11 @@
 //!
 //! 验证主动/被动模式Agent与Watchdog框架的协同工作
 
-use imitatort_stateless_company::domain::agent::{Agent, AgentMode, TriggerCondition, Role, LLMConfig};
-use imitatort_stateless_company::core::watchdog::{WatchdogFramework, WatchdogRule, ToolExecutionEvent};
-use imitatort_stateless_company::domain::tool::ToolCallContext;
-use imitatort_stateless_company::application::autonomous::AutonomousAgent;
-use imitatort_stateless_company::core::messaging::MessageBus;
+use imitatort::domain::agent::{Agent, AgentMode, TriggerCondition, Role, LLMConfig};
+use imitatort::core::watchdog::{WatchdogFramework, WatchdogRule, ToolExecutionEvent};
+use imitatort::domain::tool::ToolCallContext;
+use imitatort::application::autonomous::AutonomousAgent;
+use imitatort::core::messaging::MessageBus;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -92,9 +92,9 @@ use std::sync::Arc;
 
 // #[tokio::test]
 // async fn test_watchdog_with_tool_executor_hooks() {
-//     use imitatort_stateless_company::core::skill::SkillManager;
-//     use imitatort_stateless_company::core::tool::ToolRegistry;
-//     use imitatort_stateless_company::infrastructure::tool::ToolExecutorRegistry;
+//     use imitatort::core::skill::SkillManager;
+//     use imitatort::core::tool::ToolRegistry;
+//     use imitatort::infrastructure::tool::ToolExecutorRegistry;
 //
 //     let watchdog_framework = Arc::new(WatchdogFramework::new());
 //     let tool_registry = Arc::new(ToolRegistry::new());
@@ -127,7 +127,7 @@ use std::sync::Arc;
 
 #[tokio::test]
 async fn test_message_mentions_extraction() {
-    use imitatort_stateless_company::domain::{Message, Group};
+    use imitatort::domain::{Message, Group};
 
     // 测试消息中的@提及功能
     let group = Group::new(
@@ -183,7 +183,7 @@ async fn test_message_mentions_extraction() {
 
 // #[tokio::test]
 // async fn test_agent_mode_based_message_filtering() {
-//     use imitatort_stateless_company::domain::{Message, MessageTarget};
+//     use imitatort::domain::{Message, MessageTarget};
 //
 //     // 创建一个被动模式Agent并测试消息过滤
 //     let agent = Agent::new_with_mode(

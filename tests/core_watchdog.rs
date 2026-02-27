@@ -2,11 +2,11 @@
 //!
 //! 测试Watchdog框架的核心功能
 
-use imitatort_stateless_company::core::watchdog::{
+use imitatort::core::watchdog::{
     WatchdogFramework, WatchdogRule, TriggerCondition, ToolExecutionEvent,
     client::WatchdogClient,
 };
-use imitatort_stateless_company::domain::tool::ToolCallContext;
+use imitatort::domain::tool::ToolCallContext;
 use serde_json::json;
 
 #[tokio::test]

@@ -1083,7 +1083,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "imitatort_stateless_company"
+name = "imitatort"
 version = "0.2.0"
 dependencies = [
  "anyhow",

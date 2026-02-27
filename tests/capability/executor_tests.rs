@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use imitatort_stateless_company::infrastructure::capability::executor::{CapabilityExecutor, CapabilityExecutorRegistry, FnCapabilityExecutor};
-use imitatort_stateless_company::domain::capability::*;
+use imitatort::infrastructure::capability::executor::{CapabilityExecutor, CapabilityExecutorRegistry, FnCapabilityExecutor};
+use imitatort::domain::capability::*;
 
 #[tokio::test]
 async fn test_fn_capability_executor() {

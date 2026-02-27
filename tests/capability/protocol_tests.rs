@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use imitatort_stateless_company::infrastructure::capability::{McpProtocolHandler, CapabilityExecutorRegistry, CapabilityRegistry};
-use imitatort_stateless_company::domain::capability::*;
+use imitatort::infrastructure::capability::{McpProtocolHandler, CapabilityExecutorRegistry, CapabilityRegistry};
+use imitatort::domain::capability::*;
 
 #[tokio::test]
 async fn test_mcp_protocol_handler_ping() {
@@ -76,7 +76,7 @@ async fn test_mcp_protocol_handler_execute_with_registry() {
     capability_registry.register(capability).await.unwrap();
 
     // Add a corresponding executor
-    let executor = imitatort_stateless_company::infrastructure::capability::executor::FnCapabilityExecutor::new(
+    let executor = imitatort::infrastructure::capability::executor::FnCapabilityExecutor::new(
         "calc-add-executor".to_string(),
         |params| {
             Box::pin(async move {

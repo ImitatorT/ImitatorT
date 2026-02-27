@@ -1,7 +1,7 @@
 //! 存储接口定义测试
 
-use imitatort_stateless_company::core::store::{MemoryStore, MessageFilter, Store};
-use imitatort_stateless_company::domain::{Agent, Department, LLMConfig, Message, Organization, Role};
+use imitatort::core::store::{MemoryStore, MessageFilter, Store};
+use imitatort::domain::{Agent, Department, LLMConfig, Message, Organization, Role};
 
 fn create_test_organization() -> Organization {
     let mut org = Organization::new();
@@ -82,7 +82,7 @@ async fn test_memory_store_messages() {
 async fn test_memory_store_groups() {
     let store = MemoryStore::new();
 
-    let group = imitatort_stateless_company::domain::Group::new(
+    let group = imitatort::domain::Group::new(
         "g1",
         "测试群",
         "agent1",

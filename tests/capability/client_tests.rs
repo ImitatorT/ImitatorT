@@ -1,4 +1,4 @@
-use imitatort_stateless_company::infrastructure::capability::mcp_client::{McpClient, McpTransport};
+use imitatort::infrastructure::capability::mcp_client::{McpClient, McpTransport};
 
 #[tokio::test]
 async fn test_mcp_client_creation() {

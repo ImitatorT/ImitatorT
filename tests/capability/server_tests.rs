@@ -3,7 +3,7 @@ use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use futures_util::{SinkExt, StreamExt};
 
-use imitatort_stateless_company::infrastructure::capability::{McpServer, CapabilityRegistry, CapabilityExecutorRegistry};
+use imitatort::infrastructure::capability::{McpServer, CapabilityRegistry, CapabilityExecutorRegistry};
 
 #[tokio::test]
 async fn test_mcp_server_creation() {
@@ -53,7 +53,7 @@ async fn test_mcp_server_with_registries() {
     let executor_registry = Arc::new(CapabilityExecutorRegistry::new());
 
     // Add a simple capability to test with
-    use imitatort_stateless_company::domain::capability::*;
+    use imitatort::domain::capability::*;
 
     let capability = Capability {
         id: "test.server.echo".to_string(),
@@ -69,7 +69,7 @@ async fn test_mcp_server_with_registries() {
     capability_registry.register(capability).await.unwrap();
 
     // Add corresponding executor
-    let executor = imitatort_stateless_company::infrastructure::capability::executor::FnCapabilityExecutor::new(
+    let executor = imitatort::infrastructure::capability::executor::FnCapabilityExecutor::new(
         "echo-executor".to_string(),
         |params| {
             Box::pin(async move {

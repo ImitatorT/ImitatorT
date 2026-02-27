@@ -1,7 +1,7 @@
 //! 消息通信层测试
 
-use imitatort_stateless_company::core::messaging::MessageBus;
-use imitatort_stateless_company::domain::Message;
+use imitatort::core::messaging::MessageBus;
+use imitatort::domain::Message;
 
 #[test]
 fn test_message_bus_creation() {

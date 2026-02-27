@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use imitatort_stateless_company::{
+use imitatort::{
     core::capability::{CapabilityRegistry},
     infrastructure::capability::{
         executor::{CapabilityExecutorRegistry, FnCapabilityExecutor},

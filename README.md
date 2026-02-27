@@ -25,7 +25,7 @@ A lightweight, production-ready multi-agent framework that simulates real compan
 ### Method 1: Quick Start (Recommended)
 
 ```rust
-use imitatort_stateless_company::quick_start;
+use imitatort::quick_start;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
 ### Method 2: Manual Configuration
 
 ```rust
-use imitatort_stateless_company::{VirtualCompany, CompanyBuilder, CompanyConfig};
+use imitatort::{VirtualCompany, CompanyBuilder, CompanyConfig};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -54,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
 ### Method 3: Custom Configuration
 
 ```rust
-use imitatort_stateless_company::{FrameworkLauncher, AppConfig};
+use imitatort::{FrameworkLauncher, AppConfig};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -154,7 +154,7 @@ organization:
 The framework follows a clean, layered architecture based on Domain-Driven Design principles:
 
 ```
-imitatort_stateless_company/
+imitatort/
 ├── src/
 │   ├── domain/              # Domain entities (Agent, Message, Organization, Tool, Capability)
 │   │   ├── agent.rs         # Agent entity and related types
@@ -260,7 +260,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-imitatort_stateless_company = { git = "https://github.com/your-org/imitatort.git", tag = "v0.2.0" }
+imitatort = { git = "https://github.com/your-org/imitatort.git", tag = "v0.2.0" }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
@@ -291,7 +291,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ## 🐛 Issues
 
-If you encounter any issues, please file them in our [Issue Tracker](https://github.com/your-org/imitatort/issues).
+If you encounter any issues, please file them in our [Issue Tracker](https://github.com/imitatort/imitatort/issues).
 
 ---
 

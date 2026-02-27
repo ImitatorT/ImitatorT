@@ -1,5 +1,5 @@
 [package]
-name = "imitatort_stateless_company"
+name = "imitatort"
 version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
@@ -40,7 +40,7 @@ dotenv = "0.15"
 tempfile = "3"
 
 [lib]
-name = "imitatort_stateless_company"
+name = "imitatort"
 path = "src/lib.rs"
 
 [[bin]]

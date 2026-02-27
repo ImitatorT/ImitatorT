@@ -1,4 +1,4 @@
-use imitatort_stateless_company::{
+use imitatort::{
     application::autonomous::AutonomousAgent, CompanyConfig, VirtualCompany,
     domain::{Agent, LLMConfig, Role, MessageTarget}
 };
@@ -7,10 +7,10 @@ use std::sync::Arc;
 #[tokio::test]
 async fn test_group_creation() {
     // 创建一个简单的测试配置
-    let mut org = imitatort_stateless_company::Organization::new();
+    let mut org = imitatort::Organization::new();
 
     // Add a department
-    org.add_department(imitatort_stateless_company::Department::top_level("tech", "Technology Department"));
+    org.add_department(imitatort::Department::top_level("tech", "Technology Department"));
 
     // 添加几个Agent
     let agent1 = Agent::new(
@@ -38,7 +38,7 @@ async fn test_group_creation() {
     // 创建虚拟公司
     let company = VirtualCompany::with_store(
         config,
-        Arc::new(imitatort_stateless_company::infrastructure::store::SqliteStore::new_in_memory().unwrap())
+        Arc::new(imitatort::infrastructure::store::SqliteStore::new_in_memory().unwrap())
     );
 
     // 启动公司

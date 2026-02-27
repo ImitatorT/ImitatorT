@@ -1,6 +1,6 @@
-use imitatort_stateless_company::domain::user::{User, Position};
-use imitatort_stateless_company::domain::invitation_code::InvitationCode;
-use imitatort_stateless_company::infrastructure::auth::PasswordService;
+use imitatort::domain::user::{User, Position};
+use imitatort::domain::invitation_code::InvitationCode;
+use imitatort::infrastructure::auth::PasswordService;
 
 #[test]
 fn test_user_position_and_employee_id() {

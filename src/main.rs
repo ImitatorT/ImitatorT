@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use imitatort_stateless_company::{
+use imitatort::{
     Agent, AppConfig, CompanyBuilder, CompanyConfig, VirtualCompany, start_web_server,
 };
 use tokio::sync::broadcast;
@@ -91,7 +91,7 @@ async fn start_services(company: VirtualCompany, app_config: &AppConfig) -> Resu
     info!("👥 Loaded {} agents", agents.len());
 
     // Create message broadcast channel
-    let (message_tx, _) = broadcast::channel::<imitatort_stateless_company::Message>(1000);
+    let (message_tx, _) = broadcast::channel::<imitatort::Message>(1000);
 
     // Create shared reference to company instance
     let company_arc = Arc::new(company);
@@ -135,7 +135,7 @@ async fn start_services(company: VirtualCompany, app_config: &AppConfig) -> Resu
 /// Start autonomous loops for all Agents
 async fn start_agent_loops(
     company: Arc<VirtualCompany>,
-    _message_tx: broadcast::Sender<imitatort_stateless_company::Message>,
+    _message_tx: broadcast::Sender<imitatort::Message>,
 ) {
     info!("🤖 Starting agent autonomous operations...");
 

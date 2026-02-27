@@ -1,6 +1,6 @@
 //! Tool 领域实体测试
 
-use imitatort_stateless_company::domain::tool::{CategoryPath, Tool, JsonSchema, ReturnType};
+use imitatort::domain::tool::{CategoryPath, Tool, JsonSchema, ReturnType};
 use serde_json::json;
 
 #[test]

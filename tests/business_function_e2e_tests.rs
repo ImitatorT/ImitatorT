@@ -1,8 +1,8 @@
 //! ImitatorT Business Function End-to-End Tests
 
-use imitatort_stateless_company::application::framework::{CompanyBuilder, VirtualCompany};
-use imitatort_stateless_company::core::config::CompanyConfig;
-use imitatort_stateless_company::domain::{Agent, Department, LLMConfig, Message, MessageTarget, Organization, Role};
+use imitatort::application::framework::{CompanyBuilder, VirtualCompany};
+use imitatort::core::config::CompanyConfig;
+use imitatort::domain::{Agent, Department, LLMConfig, Message, MessageTarget, Organization, Role};
 
 #[tokio::test]
 async fn test_company_creation_from_config() {

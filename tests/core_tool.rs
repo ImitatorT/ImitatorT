@@ -1,7 +1,7 @@
 //! Tool 注册表测试
 
-use imitatort_stateless_company::core::tool::ToolRegistry;
-use imitatort_stateless_company::domain::tool::{CategoryPath, Tool, JsonSchema, ReturnType};
+use imitatort::core::tool::ToolRegistry;
+use imitatort::domain::tool::{CategoryPath, Tool, JsonSchema, ReturnType};
 use serde_json::json;
 
 fn create_test_tool(id: &str, category: &str) -> Tool {
