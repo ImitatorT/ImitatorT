@@ -17,7 +17,7 @@ use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info};
 
-use crate::domain::{Agent, AgentMode, Message, MessageTarget, Organization, Role, LLMConfig};
+use crate::domain::{Agent, Message, MessageTarget, Organization, Role, LLMConfig};
 use crate::domain::user::User;
 use crate::domain::invitation_code::InvitationCode;
 use crate::infrastructure::auth::{JwtService, PasswordService, UserInfo};
@@ -554,7 +554,8 @@ async fn register(
                 },
                 department_id: Some(guilty_cliff_dept_id.to_string()),
                 llm_config: LLMConfig::openai("fake-api-key".to_string()),
-                mode: AgentMode::Passive,
+                watched_tools: vec![],
+                trigger_conditions: vec![],
             };
             org.agents.push(new_agent);
         } else {

@@ -60,6 +60,7 @@ pub mod core {
     pub mod capability;
     pub mod capability_provider;
     pub mod watchdog;
+    pub mod watchdog_agent;
 }
 
 /// 应用层 - 业务逻辑编排
@@ -106,9 +107,8 @@ pub use infrastructure::web::start_web_server;
 // ================================
 
 /// Agent Entity - Core representation of virtual employees
-pub use domain::{Agent, AgentId, Department, Group, LLMConfig, Message, MessageTarget, Organization, Role, AgentMode};
-/// TriggerCondition - 用于Watchdog框架的触发条件
-pub use core::watchdog::TriggerCondition;
+pub use domain::{Agent, AgentId, Department, Group, GroupVisibility, LLMConfig, Message, MessageTarget, Organization, Role, TriggerCondition};
+
 
 /// 用户实体 - 系统用户
 pub use domain::user::User;
@@ -144,6 +144,9 @@ pub use infrastructure::store::SqliteStore;
 
 /// 应用程序配置 - 框架运行时配置
 pub use config::AppConfig;
+
+/// Watchdog Agent相关类型
+pub use core::watchdog_agent::{WatchdogAgent, WatchdogRule, ToolExecutionEvent, WatchdogClient};
 
 /// 错误类型定义
 pub use errors::{ImitatorError, Result as ImitatorResult};

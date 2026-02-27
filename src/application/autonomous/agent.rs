@@ -9,6 +9,7 @@ use tracing::{debug, error, info};
 
 use crate::core::agent::{AgentRuntime, Context, Decision};
 use crate::core::messaging::{MessageBus, MessageReceiver};
+use crate::core::watchdog_agent::WatchdogAgent;
 use crate::domain::{Agent, Message, MessageTarget};
 
 /// 自主Agent
@@ -21,6 +22,7 @@ pub struct AutonomousAgent {
     message_rx: Arc<RwLock<MessageReceiver>>,
     message_tx: broadcast::Sender<Message>,
     pending_task: Arc<RwLock<Option<String>>>,
+    watchdog_agent: Option<Arc<WatchdogAgent>>,
 }
 
 impl AutonomousAgent {
@@ -28,6 +30,7 @@ impl AutonomousAgent {
     pub async fn new(
         agent: Agent,
         message_bus: Arc<MessageBus>,
+        watchdog_agent: Option<Arc<WatchdogAgent>>,
     ) -> Result<Self> {
         let runtime = Arc::new(AgentRuntime::new(agent).await?);
 
@@ -41,13 +44,25 @@ impl AutonomousAgent {
 
         let (message_tx, _) = broadcast::channel(100);
 
-        Ok(Self {
+        let autonomous_agent = Self {
             runtime,
             message_bus,
             message_rx,
             message_tx,
             pending_task: Arc::new(RwLock::new(None)),
-        })
+            watchdog_agent: watchdog_agent.clone(),
+        };
+
+        // 如果提供了WatchdogAgent，则自动注册默认唤醒机制
+        if let Some(wa) = &watchdog_agent {
+            if let Err(e) = wa.register_default_watchers(autonomous_agent.id()) {
+                error!("Failed to register default watchers for agent {}: {}", autonomous_agent.id(), e);
+            } else {
+                info!("Successfully registered default watchers for agent {}", autonomous_agent.id());
+            }
+        }
+
+        Ok(autonomous_agent)
     }
 
     /// 获取Agent ID
@@ -167,6 +182,9 @@ impl AutonomousAgent {
             Decision::Wait => {
                 // 什么都不做，等待下一次循环
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            }
+            Decision::Error(error_msg) => {
+                error!("Agent {} received error decision: {}", self.id(), error_msg);
             }
         }
 

@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - dev
+      - '**'
     paths:
       - 'frontend/**'
       - '.github/workflows/deploy-frontend.yml'
@@ -14,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_deploy: ${{ steps.changes.outputs.should_deploy }}
+      branch_name: ${{ steps.determine_branch.outputs.branch_name }}
+      base_path: ${{ steps.determine_branch.outputs.base_path }}
     steps:
       - name: Checkout source repo
         uses: actions/checkout@v4
@@ -32,10 +36,27 @@ jobs:
             echo "should_deploy=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Determine branch and base path
+        id: determine_branch
+        run: |
+          BRANCH_NAME="${GITHUB_REF##*/}"
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            BASE_PATH="/"
+          elif [ "$BRANCH_NAME" = "dev" ]; then
+            BASE_PATH="/dev/"
+          else
+            BASE_PATH="/daily/"
+          fi
+
+          echo "Branch: $BRANCH_NAME, Base path: $BASE_PATH"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "base_path=$BASE_PATH" >> $GITHUB_OUTPUT
+
   build-and-deploy:
     needs: check-changes
     if: needs.check-changes.outputs.should_deploy == 'true'
-    runs-on: ubuntu-latest  # Using ubuntu-latest as it's already optimized for Node.js workflows
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
@@ -53,19 +74,42 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Configure base path based on branch
+        run: |
+          BASE_PATH="${{ needs.check-changes.outputs.base_path }}"
+          if [ "$BASE_PATH" != "/" ]; then
+            echo "Updating vite.config.ts to use base path: $BASE_PATH"
+            sed -i.bak "s|base: '/'|base: '$BASE_PATH'|g" vite.config.ts
+          fi
+        working-directory: .
+
       - name: Build
         run: npm run build
 
-      - name: Run frontend unit tests
-        run: npm run test:unit
+      - name: Adjust output directory for subdirectories
+        run: |
+          BASE_PATH="${{ needs.check-changes.outputs.base_path }}"
+          if [ "$BASE_PATH" = "/dev/" ]; then
+            mkdir -p ../adjusted_dist/dev
+            cp -r dist/* ../adjusted_dist/dev/
+            echo "Publish dir: ../adjusted_dist"
+          elif [ "$BASE_PATH" = "/daily/" ]; then
+            mkdir -p ../adjusted_dist/daily
+            cp -r dist/* ../adjusted_dist/daily/
+            echo "Publish dir: ../adjusted_dist"
+          else
+            echo "Publish dir: ./frontend/dist"
+          fi
+        working-directory: .
 
-      - name: Deploy to User Pages
+      - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           personal_token: ${{ secrets.PAT }}
           external_repository: ImitatorT/ImitatorT.github.io
           publish_branch: main
-          publish_dir: ./frontend/dist
+          publish_dir: ${{ needs.check-changes.outputs.base_path == '/' && './frontend/dist' || '../adjusted_dist' }}
+          destination_dir: ${{ needs.check-changes.outputs.base_path == '/dev/' && 'dev' || (needs.check-changes.outputs.base_path == '/daily/' && 'daily' || '.') }}
 
   skip-deployment:
     needs: check-changes

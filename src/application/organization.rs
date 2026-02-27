@@ -5,7 +5,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use crate::domain::{Group, Organization};
+use crate::domain::{Group, GroupVisibility, Organization};
 use crate::core::store::Store;
 use crate::domain::user::{User, Position};
 
@@ -35,6 +35,7 @@ impl OrganizationManager {
             creator_id: String::new(), // Will be set below
             members: Vec::new(),
             created_at: chrono::Utc::now().timestamp(),
+            visibility: GroupVisibility::Hidden,
         };
 
         // Find corporate chairman
@@ -82,6 +83,7 @@ impl OrganizationManager {
                 creator_id: user_id.to_string(),
                 members: vec![user_id.to_string()],
                 created_at: chrono::Utc::now().timestamp(),
+                visibility: GroupVisibility::Hidden,
             };
             self.store.save_group(&new_group).await?;
         }

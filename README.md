@@ -260,10 +260,16 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-imitatort = { git = "https://github.com/your-org/imitatort.git", tag = "v0.2.0" }
+imitatort = "0.2.0"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
+```
+
+Or install via cargo:
+
+```bash
+cargo add imitatort
 ```
 
 ## 🤝 Contributing

@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use rusqlite::Connection;
 
 use crate::core::store::{MessageFilter, Store};
-use crate::domain::{Agent, AgentMode, Department, Group, LLMConfig, Message, MessageTarget, Organization, Role};
+use crate::domain::{Agent, Department, Group, GroupVisibility, LLMConfig, Message, MessageTarget, Organization, Role};
 use crate::domain::user::User;
 use crate::domain::invitation_code::InvitationCode;
 
@@ -78,7 +78,8 @@ impl SqliteStore {
                 name TEXT NOT NULL,
                 creator_id TEXT NOT NULL,
                 members TEXT NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                visibility TEXT NOT NULL DEFAULT 'public'
             );
 
             -- 消息表
@@ -261,7 +262,8 @@ impl Store for SqliteStore {
                         api_key: row.get(8)?,
                         base_url: row.get(9)?,
                     },
-                    mode: AgentMode::Passive, // 默认为被动模式
+                    watched_tools: vec![],
+                    trigger_conditions: vec![],
                 })
             })?;
 
@@ -277,16 +279,21 @@ impl Store for SqliteStore {
         let group = group.clone();
         self.execute(move |conn| {
             let members_json = serde_json::to_string(&group.members).unwrap_or_default();
+            let visibility_str = match group.visibility {
+                GroupVisibility::Public => "public",
+                GroupVisibility::Hidden => "hidden",
+            };
 
             conn.execute(
-                "INSERT OR REPLACE INTO groups (id, name, creator_id, members, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT OR REPLACE INTO groups (id, name, creator_id, members, created_at, visibility)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 rusqlite::params![
                     &group.id,
                     &group.name,
                     &group.creator_id,
                     members_json,
                     &group.created_at,
+                    visibility_str,
                 ],
             )?;
             Ok(())
@@ -296,12 +303,18 @@ impl Store for SqliteStore {
     async fn load_groups(&self) -> Result<Vec<Group>> {
         self.execute(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT id, name, creator_id, members, created_at FROM groups"
+                "SELECT id, name, creator_id, members, created_at, visibility FROM groups"
             )?;
 
             let group_iter = stmt.query_map([], |row| {
                 let members: String = row.get(3)?;
                 let created_at: i64 = row.get(4)?;
+                let visibility_str: String = row.get(5)?;
+
+                let visibility = match visibility_str.as_str() {
+                    "hidden" => GroupVisibility::Hidden,
+                    _ => GroupVisibility::Public, // 默认为public
+                };
 
                 Ok(Group {
                     id: row.get(0)?,
@@ -309,6 +322,7 @@ impl Store for SqliteStore {
                     creator_id: row.get(2)?,
                     members: serde_json::from_str(&members).unwrap_or_default(),
                     created_at,
+                    visibility,
                 })
             })?;
 

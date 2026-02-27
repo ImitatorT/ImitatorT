@@ -33,6 +33,7 @@ pub struct VirtualCompany {
     message_bus: Arc<MessageBus>,
     message_tx: broadcast::Sender<Message>,
     store: Arc<dyn Store>,
+    watchdog_agent: Arc<crate::core::watchdog_agent::WatchdogAgent>,
 }
 
 impl VirtualCompany {
@@ -56,6 +57,16 @@ impl VirtualCompany {
         let tool_capability_manager = ToolCapabilityManager::new();
         let agent_manager = AgentManager::new(message_bus.clone());
 
+        // 创建系统WatchdogAgent
+        let watchdog_agent = Arc::new(crate::core::watchdog_agent::WatchdogAgent::new(
+            crate::domain::Agent::new(
+                "system_watchdog",
+                "System Watchdog Agent",
+                crate::domain::Role::simple("System", "System monitoring agent"),
+                crate::domain::LLMConfig::openai("dummy-key"),
+            )
+        ));
+
         Self {
             organization_manager,
             agent_manager,
@@ -63,6 +74,7 @@ impl VirtualCompany {
             message_bus,
             message_tx,
             store,
+            watchdog_agent,
         }
     }
 
@@ -104,9 +116,13 @@ impl VirtualCompany {
     pub async fn run(&self) -> Result<()> {
         info!("Starting virtual company: {}", self.organization_manager.config().name);
 
+        // 启动WatchdogAgent的永久运行循环
+        let watchdog_handle = self.watchdog_agent.spawn_background_task();
+        info!("Watchdog agent started");
+
         // 1. 初始化所有Agent
         let org = self.organization_manager.organization().await;
-        self.agent_manager.initialize_agents(&*org).await?;
+        self.agent_manager.initialize_agents(&*org, Some(self.watchdog_agent.clone())).await?;
         drop(org); // 释放读锁
 
         info!("All {} agents initialized", self.agent_manager.get_agents().await?.len());
@@ -120,6 +136,9 @@ impl VirtualCompany {
         for handle in handles {
             let _ = handle.await;
         }
+
+        // 等待WatchdogAgent（理论上也不会结束）
+        let _ = watchdog_handle.await;
 
         Ok(())
     }
@@ -206,6 +225,26 @@ impl VirtualCompany {
     /// 获取 MCP 协议处理器
     pub fn get_mcp_protocol_handler(&self) -> McpProtocolHandler {
         self.tool_capability_manager.get_mcp_protocol_handler()
+    }
+
+    /// 注册技能
+    pub fn register_skill(&self, skill: crate::domain::skill::Skill) -> Result<()> {
+        self.tool_capability_manager.register_skill(skill)
+    }
+
+    /// 绑定技能和工具
+    pub fn bind_skill_tool(&self, binding: crate::domain::skill::SkillToolBinding) -> Result<()> {
+        self.tool_capability_manager.bind_skill_tool(binding)
+    }
+
+    /// 设置工具访问类型
+    pub fn set_tool_access(&self, tool_id: &str, access_type: crate::domain::skill::ToolAccessType) -> Result<()> {
+        self.tool_capability_manager.set_tool_access(tool_id, access_type)
+    }
+
+    /// 获取技能管理器引用
+    pub fn skill_manager(&self) -> Arc<crate::core::skill::SkillManager> {
+        self.tool_capability_manager.skill_manager()
     }
 }
 

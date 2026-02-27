@@ -8,10 +8,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::core::messaging::MessageBus;
+use crate::core::skill::SkillManager;
 use crate::core::store::{MessageFilter, Store};
 use crate::core::tool::ToolRegistry;
 use crate::core::tool_provider::{CompositeToolProvider, FrameworkToolProvider};
-use crate::domain::{Message, MessageTarget, Organization};
+use crate::domain::{Group, Message, MessageTarget, Organization};
 use crate::domain::tool::{MatchType, ToolCallContext, ToolProvider};
 use crate::infrastructure::tool::ToolResult;
 
@@ -30,6 +31,8 @@ pub struct ToolEnvironment {
     pub tool_provider: Arc<CompositeToolProvider>,
     /// 消息存储
     pub message_store: Arc<dyn Store>,
+    /// 技能管理器
+    pub skill_manager: Arc<SkillManager>,
 }
 
 impl ToolEnvironment {
@@ -39,6 +42,7 @@ impl ToolEnvironment {
         organization: Arc<RwLock<Organization>>,
         tool_registry: Arc<ToolRegistry>,
         message_store: Arc<dyn Store>,
+        skill_manager: Arc<SkillManager>,
     ) -> Self {
         // 创建组合提供者，包含框架工具和应用工具
         let tool_provider = CompositeToolProvider::new()
@@ -51,6 +55,7 @@ impl ToolEnvironment {
             tool_registry,
             tool_provider: Arc::new(tool_provider),
             message_store,
+            skill_manager,
         }
     }
 }
@@ -76,7 +81,10 @@ impl FrameworkToolExecutor {
             // 消息发送类
             "message.send_direct",
             "message.send_group",
+            "message.send_to_guilty_line",
             "message.reply",
+            // 群组管理类
+            "group.list",
             // 时间类
             "time.now",
             // 组织架构类
@@ -104,7 +112,10 @@ impl FrameworkToolExecutor {
             // 消息发送类
             "message.send_direct" => self.execute_message_send_direct(params, context).await,
             "message.send_group" => self.execute_message_send_group(params, context).await,
+            "message.send_to_guilty_line" => self.execute_message_send_to_guilty_line(params, context).await,
             "message.reply" => self.execute_message_reply(params, context).await,
+            // 群组管理类
+            "group.list" => self.execute_group_list(params, context).await,
             // 时间类
             "time.now" => self.execute_time_now().await,
             // 组织架构类
@@ -260,6 +271,29 @@ impl FrameworkToolExecutor {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("content is required"))?;
 
+        // 检查群聊是否为隐藏群聊，如果是，则不允许通过常规消息发送工具发送
+        let groups = self.env.message_store.load_groups().await?;
+        let target_group = groups.iter()
+            .find(|g| g.id == group_id);
+
+        match target_group {
+            Some(group) => {
+                // 如果是隐藏群聊，不允许通过普通的消息发送工具发送
+                if matches!(group.visibility, crate::domain::message::GroupVisibility::Hidden) {
+                    return Ok(ToolResult::error("Cannot send message to hidden group using regular message.send_group tool. Use message.send_to_guilty_line instead.".to_string()));
+                }
+
+                // 检查调用者是否是群聊成员
+                let is_member = group.members.contains(&context.caller_id);
+                if !is_member {
+                    return Ok(ToolResult::error("Caller is not a member of the target group".to_string()));
+                }
+            },
+            None => {
+                return Ok(ToolResult::error("Target group not found".to_string()));
+            }
+        }
+
         let mut message = Message::group(
             &context.caller_id,
             group_id,
@@ -283,6 +317,97 @@ impl FrameworkToolExecutor {
         self.env.message_bus.send(message).await?;
 
         Ok(ToolResult::success(json!({ "sent": true })))
+    }
+
+    async fn execute_message_send_to_guilty_line(
+        &self,
+        params: Value,
+        context: &ToolCallContext,
+    ) -> Result<ToolResult> {
+        // 首先检查调用者是否具备特定技能来访问隐藏群聊
+        // 检查调用者是否拥有guilty_line_access技能
+        let _required_skills = vec!["guilty_line_access".to_string()];
+
+        // 这里我们检查调用者是否拥有访问隐藏群聊的权限
+        // 为了实现这一点，我们需要模拟调用者拥有的技能
+        // 在实际实现中，这通常通过Agent的配置或其他方式传递
+        let _caller_has_required_skills = true; // 临时设置为true，后续实现真实权限检查
+
+        let groups = self.env.message_store.load_groups().await?;
+        let guilty_line_group = groups.iter()
+            .find(|g| g.id == "guilty_line_group" && matches!(g.visibility, crate::domain::message::GroupVisibility::Hidden));
+
+        match guilty_line_group {
+            Some(group) => {
+                // 检查调用者是否是该群聊的成员
+                let is_member = group.members.contains(&context.caller_id);
+
+                if !is_member {
+                    return Ok(ToolResult::error("Caller is not a member of the Guilty Line group".to_string()));
+                }
+
+                let content = params["content"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("content is required"))?;
+
+                let mut message = Message::group(
+                    &context.caller_id,
+                    &group.id,
+                    content
+                );
+
+                // 处理 @ 列表
+                if let Some(mentions) = params["mention_agent_ids"].as_array() {
+                    for mention in mentions {
+                        if let Some(id) = mention.as_str() {
+                            message = message.with_mention(id);
+                        }
+                    }
+                }
+
+                // 处理回复
+                if let Some(reply_id) = params["reply_to_message_id"].as_str() {
+                    message = message.with_reply_to(reply_id);
+                }
+
+                self.env.message_bus.send(message).await?;
+
+                Ok(ToolResult::success(json!({
+                    "sent": true,
+                    "group_id": &group.id,
+                    "group_name": &group.name
+                })))
+            }
+            None => Ok(ToolResult::error("Guilty Line group not found or not hidden".to_string())),
+        }
+    }
+
+    async fn execute_group_list(
+        &self,
+        _params: Value,
+        _context: &ToolCallContext,
+    ) -> Result<ToolResult> {
+        let all_groups = self.env.message_store.load_groups().await?;
+
+        // 只返回非隐藏的群组
+        let visible_groups: Vec<&Group> = all_groups.iter()
+            .filter(|g| matches!(g.visibility, crate::domain::message::GroupVisibility::Public))
+            .collect();
+
+        let groups_json: Vec<Value> = visible_groups.iter().map(|g| {
+            json!({
+                "id": g.id,
+                "name": g.name,
+                "creator_id": g.creator_id,
+                "member_count": g.members.len(),
+                "created_at": g.created_at,
+            })
+        }).collect();
+
+        Ok(ToolResult::success(json!({
+            "count": groups_json.len(),
+            "groups": groups_json,
+        })))
     }
 
     async fn execute_message_reply(
@@ -643,6 +768,11 @@ impl ToolExecutorTrait for FrameworkToolExecutor {
 
     fn can_execute(&self, tool_id: &str) -> bool {
         Self::supported_tool_ids().contains(&tool_id)
+    }
+
+    fn can_execute_with_skills(&self, tool_id: &str, skills: &[String]) -> bool {
+        // 检查技能管理器是否允许使用此工具
+        self.env.skill_manager.can_call_tool(tool_id, skills)
     }
 
     fn supported_tools(&self) -> Vec<String> {
