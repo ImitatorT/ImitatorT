@@ -91,7 +91,7 @@ async fn get_current_user(
 
     if let Some(auth_str) = auth_header {
         if auth_str.starts_with("Bearer ") {
-            let token = &auth_str[7..];
+            let token = auth_str.strip_prefix("Bearer ").unwrap();
 
             if let Ok(user_info) = state.jwt_service.validate_token(token) {
                 return Json(serde_json::json!({
@@ -837,7 +837,7 @@ async fn get_invite_codes(
 
     if let Some(auth_str) = auth_header {
         if auth_str.starts_with("Bearer ") {
-            let token = &auth_str[7..];
+            let token = auth_str.strip_prefix("Bearer ").unwrap();
 
             if check_admin_permission(&state, token).await.is_some() {
                 match state.store.load_invitation_codes().await {
@@ -894,7 +894,7 @@ async fn create_invite_code(
 
     if let Some(auth_str) = auth_header {
         if auth_str.starts_with("Bearer ") {
-            let token = &auth_str[7..];
+            let token = auth_str.strip_prefix("Bearer ").unwrap();
 
             if let Some(user_info) = check_admin_permission(&state, token).await {
                 // 创建邀请码
@@ -959,7 +959,7 @@ async fn delete_invite_code(
 
     if let Some(auth_str) = auth_header {
         if auth_str.starts_with("Bearer ") {
-            let token = &auth_str[7..];
+            let token = auth_str.strip_prefix("Bearer ").unwrap();
 
             if check_admin_permission(&state, token).await.is_some() {
                 // 由于我们的存储接口没有直接的删除方法，我们需要先加载所有邀请码，找到要删除的，然后不保存它
@@ -1248,7 +1248,7 @@ async fn get_users(
 
     if let Some(auth_str) = auth_header {
         if auth_str.starts_with("Bearer ") {
-            let token = &auth_str[7..];
+            let token = auth_str.strip_prefix("Bearer ").unwrap();
 
             if check_admin_permission(&state, token).await.is_some() {
                 match state.store.load_users().await {

@@ -69,7 +69,7 @@ impl Capability {
 }
 
 /// 功能路径 - 支持多级如 ["file", "read"]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct CapabilityPath(Vec<String>);
 
 impl CapabilityPath {
@@ -134,11 +134,6 @@ impl CapabilityPath {
     }
 }
 
-impl Default for CapabilityPath {
-    fn default() -> Self {
-        Self(Vec::new())
-    }
-}
 
 /// JSON Schema 输入参数构建器
 ///
@@ -333,11 +328,12 @@ impl TypeBuilder {
 }
 
 /// 匹配类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MatchType {
     /// 精确匹配
     Exact,
     /// 模糊匹配
+    #[default]
     Fuzzy,
 }
 
