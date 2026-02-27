@@ -80,6 +80,14 @@ jobs:
             sed -i.bak "s|base: '/'|base: '$BASE_PATH'|g" frontend/vite.config.ts
           fi
 
+      - name: Restore vite.config.ts
+        if: always()
+        run: |
+          # Restore the original vite.config.ts if backup exists
+          if [ -f "frontend/vite.config.ts.bak" ]; then
+            mv frontend/vite.config.ts.bak frontend/vite.config.ts
+          fi
+
       - name: Build
         run: npm run build
         working-directory: frontend
@@ -88,15 +96,18 @@ jobs:
         run: |
           BASE_PATH="${{ needs.check-changes.outputs.base_path }}"
           if [ "$BASE_PATH" = "/dev/" ]; then
-            mkdir -p ../adjusted_dist/dev
-            cp -r frontend/dist/* ../adjusted_dist/dev/
-            echo "Publish dir: ../adjusted_dist"
+            mkdir -p ../adjusted_dist_root/dev
+            cp -r frontend/dist/* ../adjusted_dist_root/dev/
+            echo "Publish dir: ../adjusted_dist_root"
+            echo "Destination dir: ."
           elif [ "$BASE_PATH" = "/daily/" ]; then
-            mkdir -p ../adjusted_dist/daily
-            cp -r frontend/dist/* ../adjusted_dist/daily/
-            echo "Publish dir: ../adjusted_dist"
+            mkdir -p ../adjusted_dist_root/daily
+            cp -r frontend/dist/* ../adjusted_dist_root/daily/
+            echo "Publish dir: ../adjusted_dist_root"
+            echo "Destination dir: ."
           else
             echo "Publish dir: ./frontend/dist"
+            echo "Destination dir: ./"
           fi
 
       - name: Deploy to GitHub Pages
@@ -105,8 +116,8 @@ jobs:
           personal_token: ${{ secrets.PAT }}
           external_repository: ImitatorT/ImitatorT.github.io
           publish_branch: main
-          publish_dir: ${{ needs.check-changes.outputs.base_path == '/' && './frontend/dist' || '../adjusted_dist' }}
-          destination_dir: ${{ needs.check-changes.outputs.base_path == '/dev/' && 'dev' || (needs.check-changes.outputs.base_path == '/daily/' && 'daily' || '.') }}
+          publish_dir: ${{ needs.check-changes.outputs.base_path == '/' && './frontend/dist' || '../adjusted_dist_root' }}
+          destination_dir: ${{ needs.check-changes.outputs.base_path == '/dev/' && '.' || (needs.check-changes.outputs.base_path == '/daily/' && '.' || '.') }}
 
   skip-deployment:
     needs: check-changes
