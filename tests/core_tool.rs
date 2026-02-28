@@ -9,7 +9,7 @@ fn create_test_tool(id: &str, category: &str) -> Tool {
         id,
         format!("Tool {}", id),
         "Test description",
-        CategoryPath::from_str(category),
+        CategoryPath::from_string(category),
         JsonSchema::object()
             .property("arg", JsonSchema::string().description("Test argument"))
             .build(),

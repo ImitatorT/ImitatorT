@@ -3,21 +3,17 @@
 use serde::{Deserialize, Serialize};
 
 /// User Position Enum
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum Position {
     /// Group Chairman
     Chairman,
     /// Management
     Management,
     /// Regular Employee
+    #[default]
     Employee,
 }
 
-impl Default for Position {
-    fn default() -> Self {
-        Position::Employee
-    }
-}
 
 /// User Model
 #[derive(Debug, Clone, Serialize, Deserialize)]

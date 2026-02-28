@@ -149,11 +149,17 @@ pub struct EventDispatcher {
     handlers: DashMap<String, Arc<dyn EventHandler>>,
 }
 
-impl EventDispatcher {
-    pub fn new() -> Self {
+impl Default for EventDispatcher {
+    fn default() -> Self {
         Self {
             handlers: DashMap::new(),
         }
+    }
+}
+
+impl EventDispatcher {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// 注册事件处理器
@@ -281,31 +287,8 @@ impl WatchdogAgent {
     }
 }
 
-// 永久运行机制相关实现
 impl WatchdogAgent {
-    /// 启动Watchdog Agent的永久运行循环
-    pub async fn start_permanent_loop(self: Arc<Self>) -> Result<()> {
-        info!("Starting permanent watchdog agent loop...");
-
-        loop {
-            // 检查是否仍然启用
-            if !self.is_enabled().await {
-                // 短暂休眠后再次检查，避免过于频繁的检查
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                continue;
-            }
-
-            // 这里可以添加更多监控逻辑
-            // 在实际应用中，这可能连接到事件源，如消息队列或工具调用流
-
-            // 休眠一段时间，避免过度占用CPU
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-            // 发送心跳信号表明Agent仍在运行
-            self.ensure_alive().await;
-        }
-    }
-
+    
     /// 为Agent注册私聊唤醒事件
     pub fn register_direct_message_watcher(&self, agent_id: &str) -> Result<()> {
         let rule = WatchdogRule::new(
@@ -341,20 +324,8 @@ impl WatchdogAgent {
         Ok(())
     }
 
-    /// 启动后台任务以保持运行
-    pub fn spawn_background_task(&self) -> tokio::task::JoinHandle<Result<()>> {
-        let watchdog = Arc::new(self.clone());
-        tokio::spawn(async move {
-            watchdog.start_permanent_loop().await
-        })
+    
     }
-
-    /// 检查并重启失效的任务（实现永活机制）
-    pub async fn ensure_alive(&self) {
-        // 这里可以实现心跳检测和自动重启逻辑
-        info!("Watchdog agent heartbeat: alive and monitoring");
-    }
-}
 
 impl Clone for WatchdogAgent {
     fn clone(&self) -> Self {

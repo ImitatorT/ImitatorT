@@ -187,10 +187,13 @@ impl ToolExecutorRegistry {
 
 /// 函数式工具执行器包装
 ///
+/// Tool executor function type alias
+type ToolHandlerFn = dyn Fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + Send>> + Send + Sync;
+
 /// 允许将普通异步函数包装为ToolExecutor
 pub struct FnToolExecutor {
     tool_id: String,
-    handler: Box<dyn Fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + Send>> + Send + Sync>,
+    handler: Box<ToolHandlerFn>,
 }
 
 impl FnToolExecutor {

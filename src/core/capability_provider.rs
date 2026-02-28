@@ -237,7 +237,7 @@ impl FrameworkCapabilityProvider {
             "mcp.discover",
             "MCP Capability Discovery",
             "Discover available MCP capabilities",
-            CapabilityPath::from_str("mcp/discovery"),
+            CapabilityPath::from_string("mcp/discovery"),
             InputSchema::object()
                 .property(
                     "requested",
@@ -273,7 +273,7 @@ impl FrameworkCapabilityProvider {
             "mcp.list",
             "List Capabilities",
             "List all available capabilities",
-            CapabilityPath::from_str("mcp/discovery"),
+            CapabilityPath::from_string("mcp/discovery"),
             InputSchema::object().build(),
             OutputSchema::object()
                 .property(
@@ -303,7 +303,7 @@ impl FrameworkCapabilityProvider {
             "mcp.info",
             "Get Capability Info",
             "Get detailed information about a specific capability",
-            CapabilityPath::from_str("mcp/discovery"),
+            CapabilityPath::from_string("mcp/discovery"),
             InputSchema::object()
                 .property(
                     "capability_id",
@@ -325,7 +325,7 @@ impl FrameworkCapabilityProvider {
             "mcp.ping",
             "MCP Ping",
             "Ping the MCP server to check connectivity",
-            CapabilityPath::from_str("mcp/protocol"),
+            CapabilityPath::from_string("mcp/protocol"),
             InputSchema::object().build(),
             OutputSchema::object()
                 .property("result", OutputSchema::string().description("Ping result"))
@@ -343,7 +343,7 @@ impl FrameworkCapabilityProvider {
             "mcp.initialize",
             "MCP Initialize",
             "Initialize the MCP connection",
-            CapabilityPath::from_str("mcp/protocol"),
+            CapabilityPath::from_string("mcp/protocol"),
             InputSchema::object()
                 .raw_property(
                     "client_info",
@@ -394,7 +394,7 @@ impl FrameworkCapabilityProvider {
             "mcp.server.notification",
             "MCP Server Notification",
             "Handle server-initiated notifications",
-            CapabilityPath::from_str("mcp/protocol"),
+            CapabilityPath::from_string("mcp/protocol"),
             InputSchema::object()
                 .property("method", InputSchema::string().description("Notification method"))
                 .raw_property(
@@ -421,7 +421,7 @@ impl FrameworkCapabilityProvider {
             "mcp.server.request",
             "MCP Server Request",
             "Handle server-initiated requests",
-            CapabilityPath::from_str("mcp/protocol"),
+            CapabilityPath::from_string("mcp/protocol"),
             InputSchema::object()
                 .property("method", InputSchema::string().description("Request method"))
                 .raw_property(
@@ -480,7 +480,7 @@ impl CapabilityProvider for FrameworkCapabilityProvider {
 
     fn list_capabilities_by_path(&self, path: &str) -> Vec<Capability> {
         let all_capabilities = Self::get_framework_capabilities();
-        let capability_path = crate::domain::capability::CapabilityPath::from_str(path);
+        let capability_path = crate::domain::capability::CapabilityPath::from_string(path);
 
         all_capabilities
             .into_iter()

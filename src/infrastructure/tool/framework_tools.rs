@@ -326,7 +326,7 @@ impl FrameworkToolExecutor {
     ) -> Result<ToolResult> {
         // 首先检查调用者是否具备特定技能来访问隐藏群聊
         // 检查调用者是否拥有guilty_line_access技能
-        let _required_skills = vec!["guilty_line_access".to_string()];
+        let _required_skills = ["guilty_line_access".to_string()];
 
         // 这里我们检查调用者是否拥有访问隐藏群聊的权限
         // 为了实现这一点，我们需要模拟调用者拥有的技能
@@ -620,13 +620,15 @@ impl FrameworkToolExecutor {
                     }
                 }
                 "department" => {
-                    agent.department_id.as_ref().map_or(false, |d| {
+                    if let Some(d) = agent.department_id.as_ref() {
                         if fuzzy {
                             d.to_lowercase().contains(&query_lower)
                         } else {
                             d.to_lowercase() == query_lower
                         }
-                    })
+                    } else {
+                        false
+                    }
                 }
                 "description" => {
                     if fuzzy {

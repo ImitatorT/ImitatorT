@@ -39,7 +39,7 @@ pub struct VirtualCompany {
 impl VirtualCompany {
     /// 从配置创建虚拟公司，使用默认SQLite存储
     pub fn from_config(config: CompanyConfig) -> Result<Self> {
-        Self::with_sqlite(config, &std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string()))
+        Self::with_sqlite(config, std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string()))
     }
 
     /// 从配置创建虚拟公司，使用指定路径的SQLite存储
@@ -107,7 +107,7 @@ impl VirtualCompany {
     pub async fn save(&self) -> Result<()> {
         info!("Saving company state to storage...");
         let org = self.organization_manager.organization().await;
-        self.store.save_organization(&*org).await?;
+        self.store.save_organization(&org).await?;
         info!("Company state saved successfully");
         Ok(())
     }
@@ -116,29 +116,15 @@ impl VirtualCompany {
     pub async fn run(&self) -> Result<()> {
         info!("Starting virtual company: {}", self.organization_manager.config().name);
 
-        // 启动WatchdogAgent的永久运行循环
-        let watchdog_handle = self.watchdog_agent.spawn_background_task();
-        info!("Watchdog agent started");
-
         // 1. 初始化所有Agent
         let org = self.organization_manager.organization().await;
-        self.agent_manager.initialize_agents(&*org, Some(self.watchdog_agent.clone())).await?;
+        self.agent_manager.initialize_agents(&org, Some(self.watchdog_agent.clone())).await?;
         drop(org); // 释放读锁
 
         info!("All {} agents initialized", self.agent_manager.get_agents().await?.len());
 
-        // 2. 启动所有Agent的自主循环
-        let handles = self.agent_manager.start_agent_loops().await?;
-
-        info!("All agents started, company is running...");
-
-        // 3. 等待所有Agent（实际上不会结束）
-        for handle in handles {
-            let _ = handle.await;
-        }
-
-        // 等待WatchdogAgent（理论上也不会结束）
-        let _ = watchdog_handle.await;
+        // 现在Agent只在事件触发时激活，不再启动持续循环
+        info!("Agents initialized and ready for event-driven activation");
 
         Ok(())
     }
@@ -148,11 +134,7 @@ impl VirtualCompany {
         self.message_tx.subscribe()
     }
 
-    /// 手动触发任务给指定Agent
-    pub fn assign_task(&self, agent_id: &str, task: impl Into<String>) -> Result<()> {
-        self.agent_manager.assign_task(agent_id, task)
-    }
-
+    
     /// 获取组织架构（异步读取）
     pub async fn organization(&self) -> tokio::sync::RwLockReadGuard<'_, Organization> {
         self.organization_manager.organization().await
@@ -257,7 +239,7 @@ pub struct CompanyBuilder {
 impl CompanyBuilder {
     /// 创建新的构建器，使用默认SQLite路径
     pub fn new() -> Result<Self> {
-        Self::with_sqlite(&std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string()))
+        Self::with_sqlite(std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string()))
     }
 
     /// 从配置创建，使用默认SQLite路径

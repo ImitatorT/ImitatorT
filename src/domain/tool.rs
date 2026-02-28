@@ -63,7 +63,7 @@ impl Tool {
 }
 
 /// 分类路径 - 支持多级如 ["file", "read"]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct CategoryPath(Vec<String>);
 
 impl CategoryPath {
@@ -73,7 +73,7 @@ impl CategoryPath {
     }
 
     /// 从字符串解析，如 "file/read" -> ["file", "read"]
-    pub fn from_str(path: &str) -> Self {
+    pub fn from_string(path: &str) -> Self {
         let parts: Vec<String> = path
             .split('/')
             .filter(|s| !s.is_empty())
@@ -128,11 +128,6 @@ impl CategoryPath {
     }
 }
 
-impl Default for CategoryPath {
-    fn default() -> Self {
-        Self(Vec::new())
-    }
-}
 
 /// JSON Schema 参数构建器
 ///
@@ -317,19 +312,15 @@ impl Default for ReturnType {
 }
 
 /// 匹配类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MatchType {
     /// 精确匹配
     Exact,
     /// 模糊匹配
+    #[default]
     Fuzzy,
 }
 
-impl Default for MatchType {
-    fn default() -> Self {
-        MatchType::Fuzzy
-    }
-}
 
 /// Tool 提供者接口
 ///

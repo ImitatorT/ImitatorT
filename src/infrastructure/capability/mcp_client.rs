@@ -107,20 +107,20 @@ impl McpWebSocketClient {
                     }
 
                     if let Some(result) = response.get("result") {
-                        return Ok(result.clone());
+                        Ok(result.clone())
                     } else {
-                        return Ok(response);
+                        Ok(response)
                     }
                 }
                 Message::Close(_) => {
-                    return Err(anyhow::anyhow!("Connection closed by server"));
+                    Err(anyhow::anyhow!("Connection closed by server"))
                 }
                 _ => {
-                    return Err(anyhow::anyhow!("Unexpected message type"));
+                    Err(anyhow::anyhow!("Unexpected message type"))
                 }
             }
         } else {
-            return Err(anyhow::anyhow!("No response received"));
+            Err(anyhow::anyhow!("No response received"))
         }
     }
 
@@ -198,6 +198,7 @@ impl McpSseClient {
     }
 }
 
+#[derive(Default)]
 pub struct McpStdioClient;
 
 impl McpStdioClient {
@@ -213,13 +214,13 @@ impl McpStdioClient {
             "params": params
         });
 
-        println!("{}", request.to_string());
+        println!("{}", request);
 
         // 从 stdin 读取响应
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
 
-        let response: Value = serde_json::from_str(&input.trim())?;
+        let response: Value = serde_json::from_str(input.trim())?;
 
         if let Some(error_obj) = response.get("error") {
             return Err(anyhow::anyhow!("MCP Error: {:?}", error_obj));

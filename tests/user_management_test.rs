@@ -5,12 +5,13 @@ use serde_json::json;
 
 use imitatort::domain::user::User;
 use imitatort::domain::invitation_code::InvitationCode;
-use imitatort::core::store::{Store, MemoryStore};
+use imitatort::core::store::Store;
+use imitatort::infrastructure::store::SqliteStore;
 use imitatort::infrastructure::auth::{JwtService, PasswordService};
 
 #[tokio::test]
 async fn test_user_registration_flow() {
-    let store = Arc::new(MemoryStore::new());
+    let store = Arc::new(SqliteStore::new_in_memory().unwrap());
     let jwt_service = JwtService::new("test_secret");
 
     // 1. Test first registered user becomes corporate chairman
@@ -61,7 +62,7 @@ async fn test_user_registration_flow() {
 
 #[tokio::test]
 async fn test_invitation_code_lifecycle() {
-    let store = Arc::new(MemoryStore::new());
+    let store = Arc::new(SqliteStore::new_in_memory().unwrap());
 
     // Create invitation code
     let mut invitation_code = InvitationCode::new("test_user".to_string(), Some(1));

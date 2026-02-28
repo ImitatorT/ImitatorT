@@ -1,6 +1,7 @@
 //! 存储接口定义测试
 
-use imitatort::core::store::{MemoryStore, MessageFilter, Store};
+use imitatort::core::store::{MessageFilter, Store};
+use imitatort::infrastructure::store::SqliteStore;
 use imitatort::domain::{Agent, Department, LLMConfig, Message, Organization, Role};
 
 fn create_test_organization() -> Organization {
@@ -38,7 +39,7 @@ async fn test_message_filter_builder() {
 
 #[tokio::test]
 async fn test_memory_store_basic() {
-    let store = MemoryStore::new();
+    let store = SqliteStore::new_in_memory().unwrap();
 
     // 测试组织架构
     let org = create_test_organization();
@@ -51,7 +52,7 @@ async fn test_memory_store_basic() {
 
 #[tokio::test]
 async fn test_memory_store_messages() {
-    let store = MemoryStore::new();
+    let store = SqliteStore::new_in_memory().unwrap();
 
     // 保存消息
     let msg1 = Message::private("a1", "a2", "Hello!");
@@ -80,7 +81,7 @@ async fn test_memory_store_messages() {
 
 #[tokio::test]
 async fn test_memory_store_groups() {
-    let store = MemoryStore::new();
+    let store = SqliteStore::new_in_memory().unwrap();
 
     let group = imitatort::domain::Group::new(
         "g1",

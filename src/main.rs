@@ -139,7 +139,7 @@ async fn start_agent_loops(
 ) {
     info!("🤖 Starting agent autonomous operations...");
 
-    // Start loops for all Agents via framework API
+    // 启动事件驱动的Agent系统
     match company.run().await {
         Ok(_) => info!("Agent operations completed"),
         Err(e) => {

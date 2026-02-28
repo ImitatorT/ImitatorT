@@ -13,6 +13,7 @@ use crate::{
 };
 
 /// Framework Launcher - Provides auto-configured startup functionality
+#[derive(Default)]
 pub struct FrameworkLauncher {
     config: AppConfig,
 }
@@ -152,7 +153,7 @@ impl FrameworkLauncher {
     ) -> Result<()> {
         info!("🤖 Starting agent autonomous operations...");
 
-        // Start loops for all Agents via framework API
+        // 启动事件驱动的Agent系统
         company.run().await
     }
 

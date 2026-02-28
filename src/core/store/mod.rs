@@ -123,7 +123,7 @@ pub trait Store: Send + Sync {
         }
 
         // 按时间戳排序，最新的在前
-        all_msgs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        all_msgs.sort_by_key(|msg| std::cmp::Reverse(msg.timestamp));
         all_msgs.truncate(limit);
 
         Ok(all_msgs)
@@ -187,5 +187,3 @@ pub trait Store: Send + Sync {
     }
 }
 
-mod memory;
-pub use memory::MemoryStore;

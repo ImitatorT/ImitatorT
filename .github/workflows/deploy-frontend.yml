@@ -80,12 +80,29 @@ jobs:
             sed -i.bak "s|base: '/'|base: '$BASE_PATH'|g" frontend/vite.config.ts
           fi
 
+      - name: Configure API endpoint for deployment
+        run: |
+          BASE_PATH="${{ needs.check-changes.outputs.base_path }}"
+
+          # Create a config file to inject the API endpoint
+          mkdir -p frontend/public
+
+          if [ "$BASE_PATH" != "/" ]; then
+            # For subdirectory deployments, use production API endpoint
+            echo "// Production API configuration" > frontend/public/config.js
+            echo "window.IMITATOR_CONFIG = { defaultBackendUrl: 'https://imitatort.zeyuan.site' };" >> frontend/public/config.js
+          else
+            # For main branch, could use a different endpoint if needed
+            echo "// Production API configuration" > frontend/public/config.js
+            echo "window.IMITATOR_CONFIG = { defaultBackendUrl: 'https://imitatort.zeyuan.site' };" >> frontend/public/config.js
+          fi
+
       - name: Restore vite.config.ts
         if: always()
         run: |
           # Restore the original vite.config.ts if backup exists
           if [ -f "frontend/vite.config.ts.bak" ]; then
-            mv frontend/vite.config.ts.bak frontend/vite.config.ts
+            mv frontend.vite.config.ts.bak frontend/vite.config.ts
           fi
 
       - name: Build
@@ -99,15 +116,12 @@ jobs:
             mkdir -p ../adjusted_dist_root/dev
             cp -r frontend/dist/* ../adjusted_dist_root/dev/
             echo "Publish dir: ../adjusted_dist_root"
-            echo "Destination dir: ."
           elif [ "$BASE_PATH" = "/daily/" ]; then
             mkdir -p ../adjusted_dist_root/daily
             cp -r frontend/dist/* ../adjusted_dist_root/daily/
             echo "Publish dir: ../adjusted_dist_root"
-            echo "Destination dir: ."
           else
             echo "Publish dir: ./frontend/dist"
-            echo "Destination dir: ./"
           fi
 
       - name: Deploy to GitHub Pages
@@ -117,7 +131,7 @@ jobs:
           external_repository: ImitatorT/ImitatorT.github.io
           publish_branch: main
           publish_dir: ${{ needs.check-changes.outputs.base_path == '/' && './frontend/dist' || '../adjusted_dist_root' }}
-          destination_dir: ${{ needs.check-changes.outputs.base_path == '/dev/' && '.' || (needs.check-changes.outputs.base_path == '/daily/' && '.' || '.') }}
+          destination_dir: ${{ needs.check-changes.outputs.base_path == '/dev/' && 'dev' || (needs.check-changes.outputs.base_path == '/daily/' && 'daily' || '.') }}
 
   skip-deployment:
     needs: check-changes

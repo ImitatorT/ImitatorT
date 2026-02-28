@@ -182,10 +182,13 @@ impl CapabilityExecutorRegistry {
 
 /// 函数式功能执行器包装
 ///
+/// Capability executor function type alias
+type CapabilityHandlerFn = dyn Fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + Send>> + Send + Sync;
+
 /// 允许将普通异步函数包装为CapabilityExecutor
 pub struct FnCapabilityExecutor {
     capability_id: String,
-    handler: Box<dyn Fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + Send>> + Send + Sync>,
+    handler: Box<CapabilityHandlerFn>,
 }
 
 impl FnCapabilityExecutor {

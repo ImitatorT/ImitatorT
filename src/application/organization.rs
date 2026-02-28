@@ -49,10 +49,8 @@ impl OrganizationManager {
 
             // 添加所有管理层成员
             for user in users.iter() {
-                if matches!(user.position, Position::Management) {
-                    if !updated_group.members.contains(&user.id) {
-                        updated_group.members.push(user.id.clone());
-                    }
+                if matches!(user.position, Position::Management) && !updated_group.members.contains(&user.id) {
+                    updated_group.members.push(user.id.clone());
                 }
             }
 

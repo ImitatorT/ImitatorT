@@ -72,8 +72,6 @@ impl AppConfig {
 
 /// Helper function: get value from environment variable, return default if not exists
 fn get_env_or_default<T: std::str::FromStr + Default>(key: &str, default: T) -> T
-where
-    T: std::str::FromStr,
 {
     env::var(key)
         .ok()

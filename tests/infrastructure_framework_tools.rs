@@ -12,13 +12,16 @@ fn create_test_environment() -> ToolEnvironment {
     let message_bus = Arc::new(MessageBus::new());
     let organization = Arc::new(RwLock::new(Organization::new()));
     let tool_registry = Arc::new(ToolRegistry::new());
-    let store = Arc::new(imitatort::core::store::MemoryStore::new());
+    let capability_registry = Arc::new(imitatort::core::capability::CapabilityRegistry::new());
+    let store = Arc::new(imitatort::infrastructure::store::SqliteStore::new_in_memory().unwrap());
+    let skill_manager = Arc::new(imitatort::core::skill::SkillManager::new(tool_registry.clone(), capability_registry));
 
     ToolEnvironment::new(
         message_bus,
         organization,
         tool_registry,
         store,
+        skill_manager,
     )
 }
 

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use dashmap::DashMap;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::info;
 
 use crate::core::config::CompanyConfig;
 use crate::core::messaging::MessageBus;
@@ -76,33 +76,8 @@ impl AgentManager {
         Ok(())
     }
 
-    /// 启动所有 Agent 的自主循环
-    pub async fn start_agent_loops(&self) -> Result<Vec<tokio::task::JoinHandle<()>>> {
-        let mut handles = vec![];
-
-        for agent_ref in self.agents.iter() {
-            let agent = agent_ref.value().clone();
-            let handle = tokio::spawn(async move {
-                if let Err(e) = agent.run_loop().await {
-                    error!("Agent {} error: {}", agent.id(), e);
-                }
-            });
-            handles.push(handle);
-        }
-
-        Ok(handles)
-    }
-
-    /// 手动触发任务给指定Agent
-    pub fn assign_task(&self, agent_id: &str, task: impl Into<String>) -> Result<()> {
-        if let Some(agent) = self.agents.get(agent_id) {
-            agent.assign_task(task)?;
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Agent not found: {}", agent_id))
-        }
-    }
-
+    
+    
     /// 获取所有 Agent 列表（用于 Web API）
     /// 注意：由于Agent数据存储在Organization中，这里返回空向量
     /// 实际的Agent列表应通过OrganizationManager获取
@@ -116,6 +91,20 @@ pub struct ToolCapabilityManager {
     tool_registry: Arc<ToolRegistry>,
     capability_registry: Arc<CapabilityRegistry>,
     skill_manager: Arc<SkillManager>,
+}
+
+impl Default for ToolCapabilityManager {
+    fn default() -> Self {
+        let tool_registry = Arc::new(ToolRegistry::new());
+        let capability_registry = Arc::new(CapabilityRegistry::new());
+        let skill_manager = Arc::new(SkillManager::new_with_tool_registry(tool_registry.clone()));
+
+        Self {
+            tool_registry,
+            capability_registry,
+            skill_manager,
+        }
+    }
 }
 
 impl ToolCapabilityManager {

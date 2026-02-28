@@ -20,8 +20,77 @@ pub struct Capability {
     pub endpoint: Option<String>, // Optional endpoint URL
 }
 
+/// Builder for Capability
+#[derive(Default)]
+pub struct CapabilityBuilder {
+    id: Option<String>,
+    name: Option<String>,
+    description: Option<String>,
+    capability_path: Option<CapabilityPath>,
+    input_schema: Option<Value>,
+    output_schema: Option<Value>,
+    protocol: Option<String>,
+    endpoint: Option<String>,
+}
+
+impl CapabilityBuilder {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    pub fn capability_path(mut self, capability_path: CapabilityPath) -> Self {
+        self.capability_path = Some(capability_path);
+        self
+    }
+
+    pub fn input_schema(mut self, input_schema: Value) -> Self {
+        self.input_schema = Some(input_schema);
+        self
+    }
+
+    pub fn output_schema(mut self, output_schema: Value) -> Self {
+        self.output_schema = Some(output_schema);
+        self
+    }
+
+    pub fn protocol(mut self, protocol: impl Into<String>) -> Self {
+        self.protocol = Some(protocol.into());
+        self
+    }
+
+    pub fn endpoint(mut self, endpoint: Option<String>) -> Self {
+        self.endpoint = endpoint;
+        self
+    }
+
+    pub fn build(self) -> Capability {
+        Capability {
+            id: self.id.unwrap_or_default(),
+            name: self.name.unwrap_or_default(),
+            description: self.description.unwrap_or_default(),
+            capability_path: self.capability_path.unwrap_or_default(),
+            input_schema: self.input_schema.unwrap_or_default(),
+            output_schema: self.output_schema.unwrap_or_default(),
+            protocol: self.protocol.unwrap_or_default(),
+            endpoint: self.endpoint,
+        }
+    }
+}
+
 impl Capability {
     /// Create new capability
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -42,6 +111,11 @@ impl Capability {
             protocol: protocol.into(),
             endpoint,
         }
+    }
+
+    /// Create a new capability builder
+    pub fn builder() -> CapabilityBuilder {
+        CapabilityBuilder::default()
     }
 
     /// Get required parameter field list
@@ -79,7 +153,7 @@ impl CapabilityPath {
     }
 
     /// 从字符串解析，如 "file/read" -> ["file", "read"]
-    pub fn from_str(path: &str) -> Self {
+    pub fn from_string(path: &str) -> Self {
         let parts: Vec<String> = path
             .split('/')
             .filter(|s| !s.is_empty())
@@ -337,11 +411,6 @@ pub enum MatchType {
     Fuzzy,
 }
 
-impl Default for MatchType {
-    fn default() -> Self {
-        MatchType::Fuzzy
-    }
-}
 
 /// Capability 提供者接口
 ///

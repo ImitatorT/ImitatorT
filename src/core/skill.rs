@@ -106,13 +106,13 @@ impl SkillManager {
         // 添加到技能-工具映射
         self.skill_tool_bindings
             .entry(binding.skill_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(binding.clone());
 
         // 添加到工具-技能映射
         self.tool_skill_bindings
             .entry(binding.tool_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(binding.skill_id.clone());
 
         // 自动将工具设为私有（如果尚未设置）
@@ -137,13 +137,13 @@ impl SkillManager {
         // 添加到技能-功能映射
         self.skill_capability_bindings
             .entry(binding.skill_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(binding.clone());
 
         // 添加到功能-技能映射
         self.capability_skill_bindings
             .entry(binding.capability_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(binding.skill_id.clone());
 
         // 自动将功能设为私有（如果尚未设置）
