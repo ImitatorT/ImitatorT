@@ -84,6 +84,36 @@ export const useBackendStore = create<BackendState>()(
   )
 );
 
+// ==================== 验证函数 ====================
+export const validateBackendUrl = (url: string): { valid: boolean; error?: string } => {
+  if (!url.trim()) {
+    return { valid: false, error: '请输入后端地址' };
+  }
+
+  try {
+    // 如果没有协议，则添加默认协议
+    const normalizedUrl = url.startsWith('http://') || url.startsWith('https://')
+      ? url
+      : `http://${url}`;
+
+    const parsedUrl = new URL(normalizedUrl);
+
+    // 检查主机名是否有效
+    if (!parsedUrl.hostname || parsedUrl.hostname.length === 0) {
+      return { valid: false, error: '无效的主机名' };
+    }
+
+    // 检查协议是否为http或https
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return { valid: false, error: '协议必须是 http 或 https' };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: '地址格式不正确' };
+  }
+};
+
 // ==================== 导出便捷方法 ====================
 export const getBackendUrl = () => useBackendStore.getState().backendUrl;
 export const getApiUrl = (path: string) => useBackendStore.getState().getApiUrl(path);
