@@ -102,7 +102,7 @@ jobs:
         run: |
           # Restore the original vite.config.ts if backup exists
           if [ -f "frontend/vite.config.ts.bak" ]; then
-            mv frontend.vite.config.ts.bak frontend/vite.config.ts
+            mv frontend/vite.config.ts.bak frontend/vite.config.ts
           fi
 
       - name: Build
