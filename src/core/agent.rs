@@ -54,12 +54,13 @@ impl AgentRuntime {
             let reasoning_result = self.reason_step(&current_context, &tools).await?;
 
             match reasoning_result {
-                ReActStepResult::Action { tool_calls, .. } => {
+                ReActStepResult::Action { tool_calls, observation } => {
                     // Step 2: Execute actions and observe results
                     let observations = self.execute_actions(tool_calls, &current_context).await?;
 
                     // Step 3: Update context with observations for next iteration
-                    current_context = current_context.with_observation(observations.join("\n"));
+                    let obs_text = format!("{}\n{}", observation, observations.join("\n"));
+                    current_context = current_context.with_observation(obs_text);
                 }
                 ReActStepResult::FinalDecision(decision) => {
                     // Return final decision when no more actions needed

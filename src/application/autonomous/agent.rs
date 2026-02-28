@@ -4,11 +4,11 @@
 
 use anyhow::Result;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::broadcast;
 use tracing::{debug, error, info};
 
 use crate::core::agent::{AgentRuntime, Context, Decision};
-use crate::core::messaging::{MessageBus, MessageReceiver};
+use crate::core::messaging::MessageBus;
 use crate::core::watchdog_agent::WatchdogAgent;
 use crate::domain::{Agent, Message, MessageTarget};
 
@@ -19,9 +19,7 @@ use crate::domain::{Agent, Message, MessageTarget};
 pub struct AutonomousAgent {
     runtime: Arc<AgentRuntime>,
     message_bus: Arc<MessageBus>,
-    message_rx: Arc<RwLock<MessageReceiver>>,
     message_tx: broadcast::Sender<Message>,
-    pending_task: Arc<RwLock<Option<String>>>,
 }
 
 impl AutonomousAgent {
@@ -32,14 +30,6 @@ impl AutonomousAgent {
         watchdog_agent: Option<Arc<WatchdogAgent>>,
     ) -> Result<Self> {
         let runtime = Arc::new(AgentRuntime::new(agent).await?);
-
-        // 注册到消息总线
-        let private_rx = message_bus.register(runtime.id());
-
-        let message_rx = Arc::new(RwLock::new(MessageReceiver::new(
-            runtime.id().to_string(),
-            private_rx,
-        )));
 
         let (message_tx, _) = broadcast::channel(100);
 
@@ -55,9 +45,7 @@ impl AutonomousAgent {
         let autonomous_agent = Self {
             runtime,
             message_bus,
-            message_rx,
             message_tx,
-            pending_task: Arc::new(RwLock::new(None)),
         };
 
         Ok(autonomous_agent)
