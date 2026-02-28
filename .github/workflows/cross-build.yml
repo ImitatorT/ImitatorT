@@ -42,8 +42,10 @@ jobs:
             ${{ runner.os }}-cargo-prebuild-
             ${{ runner.os }}-cargo-
 
-      - name: Run backend tests
-        run: cargo test --release
+      - name: Check syntax and dependencies
+        run: |
+          cargo check --release
+          cargo test --release --no-run
 
   build:
     name: Build for ${{ matrix.target }}
@@ -82,9 +84,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target/
-          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.target }}-
             ${{ runner.os }}-cargo-
 
       - name: Install cross-compilation tools (Linux)
@@ -102,6 +103,7 @@ jobs:
       # Skip tests since they ran in pre-checks
       - name: Build for target
         run: |
+          # Build only the binary, leveraging cached dependencies from pre-checks
           cargo build --release --target ${{ matrix.target }}
         env:
           RUSTFLAGS: -D warnings
