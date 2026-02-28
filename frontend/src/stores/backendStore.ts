@@ -27,7 +27,7 @@ interface BackendState {
   isValid: boolean;
 
   // Actions
-  setBackendUrl: (url: string) => { valid: boolean };
+  setBackendUrl: (url: string) => { valid: boolean; error?: string };
   getApiUrl: (path: string) => string;
   getWsUrl: () => string;
   getBaseUrl: () => string;
