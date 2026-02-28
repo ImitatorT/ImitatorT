@@ -43,9 +43,16 @@ export const useBackendStore = create<BackendState>()(
 
       // 设置后端地址
       setBackendUrl: (url: string) => {
+        // 验证URL
+        const validation = validateBackendUrl(url);
+
+        if (!validation.valid) {
+          return { valid: false, error: validation.error };
+        }
+
         // 移除末尾的斜杠
         const cleanUrl = url.replace(/\/$/, '');
-        set({ backendUrl: cleanUrl, isValid: true });
+        set({ backendUrl: cleanUrl, isValid: validation.valid });
         console.log('[Backend] URL updated:', cleanUrl);
 
         return { valid: true };
