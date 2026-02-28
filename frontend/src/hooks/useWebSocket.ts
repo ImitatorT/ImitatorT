@@ -58,7 +58,7 @@ export function useWebSocket() {
     console.log('[WebSocket] Received event:', event.type);
     
     switch (event.type) {
-      case 'message_sent':
+      case 'message_sent': {
         const message: Message = {
           id: event.message_id,
           content: event.content,
@@ -69,6 +69,7 @@ export function useWebSocket() {
         };
         addMessage(event.session_id, message);
         break;
+      }
         
       case 'agent_typing':
         setTyping(event.session_id, event.agent_id, true);
