@@ -43,9 +43,9 @@ export default function UserManagement() {
       loadInviteCodes();
       loadUsers();
     }
-  }, [user]);
+  }, [isChairman, loadInviteCodes, loadUsers]);
 
-  const loadInviteCodes = async () => {
+  const loadInviteCodes = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/admin/invite-codes', {
@@ -57,14 +57,14 @@ export default function UserManagement() {
       if (data.success) {
         setInviteCodes(data.data || []);
       }
-    } catch (error) {
-      console.error('加载邀请码失败:', error);
+    } catch (_error) {
+      console.error('加载邀请码失败:', _error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token]);
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/admin/users', {
@@ -76,12 +76,12 @@ export default function UserManagement() {
       if (data.success) {
         setUsers(data.data || []);
       }
-    } catch (error) {
-      console.error('加载用户列表失败:', error);
+    } catch (_error) {
+      console.error('加载用户列表失败:', _error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token]);
 
   const createInviteCode = async () => {
     setIsLoading(true);
@@ -108,7 +108,7 @@ export default function UserManagement() {
       } else {
         alert(data.error || '创建失败');
       }
-    } catch (error) {
+    } catch (_error) {
       alert('网络错误');
     } finally {
       setIsLoading(false);
@@ -134,7 +134,7 @@ export default function UserManagement() {
       } else {
         alert(data.error || '删除失败');
       }
-    } catch (error) {
+    } catch (_error) {
       alert('网络错误');
     } finally {
       setIsLoading(false);

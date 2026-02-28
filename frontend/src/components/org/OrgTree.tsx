@@ -174,7 +174,7 @@ export default function OrgTree() {
   useEffect(() => {
     fetchDepartments();
     fetchAgents();
-  }, []);
+  }, [fetchDepartments, fetchAgents]);
 
   // 过滤数据
   const filteredData = useMemo(() => {
@@ -182,8 +182,8 @@ export default function OrgTree() {
     return searchDepartments(departments, searchQuery);
   }, [departments, searchQuery]);
 
-  const handleUserClick = (user: UserType) => {
-    console.log('Clicked user:', user);
+  const handleUserClick = (_user: UserType) => {
+    // Handle user click
   };
 
   // 计算统计数据

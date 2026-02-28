@@ -75,8 +75,8 @@ export const useBoardStore = create<ExtendedBoardState>()(
             return true;
           }
           return false;
-        } catch (error) {
-          console.error('Login error:', error);
+        } catch (_error) {
+          console.error('Login error:', _error);
           // Fallback for development
           if (username === 'observer' && password === 'observe') {
             set({ 
@@ -110,7 +110,7 @@ export const useBoardStore = create<ExtendedBoardState>()(
           if (data.success) {
             set({ members: data.data });
           }
-        } catch (error) {
+        } catch (_error) {
           console.log('Board members fetch failed, using empty list');
           set({ members: [] });
         }
@@ -134,8 +134,8 @@ export const useBoardStore = create<ExtendedBoardState>()(
             return true;
           }
           return false;
-        } catch (error) {
-          console.error('Add member error:', error);
+        } catch (_error) {
+          console.error('Add member error:', _error);
           return false;
         }
       },
@@ -156,8 +156,8 @@ export const useBoardStore = create<ExtendedBoardState>()(
             return true;
           }
           return false;
-        } catch (error) {
-          console.error('Delete member error:', error);
+        } catch (_error) {
+          console.error('Delete member error:', _error);
           return false;
         }
       },
@@ -211,8 +211,8 @@ export const useChatStore = create<ExtendedChatStore>()((set) => ({
       if (data.success) {
         set({ sessions: data.data });
       }
-    } catch (error) {
-      console.error('Fetch sessions error:', error);
+    } catch (_error) {
+      console.error('Fetch sessions error:', _error);
       set({ sessions: [] });
     } finally {
       set({ isLoading: false });
@@ -232,8 +232,8 @@ export const useChatStore = create<ExtendedChatStore>()((set) => ({
           messages: { ...state.messages, [sessionId]: data.data },
         }));
       }
-    } catch (error) {
-      console.error('Fetch messages error:', error);
+    } catch (_error) {
+      console.error('Fetch messages error:', _error);
       set((state) => ({
         messages: { ...state.messages, [sessionId]: [] },
       }));
@@ -247,8 +247,8 @@ export const useChatStore = create<ExtendedChatStore>()((set) => ({
       if (data.success) {
         set({ agents: data.data });
       }
-    } catch (error) {
-      console.error('Fetch agents error:', error);
+    } catch (_error) {
+      console.error('Fetch agents error:', _error);
     }
   },
 
@@ -259,8 +259,8 @@ export const useChatStore = create<ExtendedChatStore>()((set) => ({
       if (data.success) {
         set({ departments: data.data });
       }
-    } catch (error) {
-      console.error('Fetch departments error:', error);
+    } catch (_error) {
+      console.error('Fetch departments error:', _error);
     }
   },
 

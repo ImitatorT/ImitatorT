@@ -14,8 +14,8 @@ const convertToWsUrl = (httpUrl: string): string => {
     const protocol = urlObj.protocol === 'https:' ? 'wss:' : 'ws:';
     const port = urlObj.port ? `:${urlObj.port}` : '';
     return `${protocol}//${urlObj.hostname}${port}`;
-  } catch (e) {
-    console.error('[Backend] Failed to convert to WS URL:', e);
+  } catch (_e) {
+    console.error('[Backend] Failed to convert to WS URL:', _e);
     return 'ws://localhost:8080';
   }
 };
@@ -116,7 +116,7 @@ export const validateBackendUrl = (url: string): { valid: boolean; error?: strin
     }
 
     return { valid: true };
-  } catch (error) {
+  } catch (_error) {
     return { valid: false, error: '地址格式不正确' };
   }
 };

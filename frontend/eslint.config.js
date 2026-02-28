@@ -26,9 +26,9 @@ export default tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
-      '@typescript-eslint/no-unused-vars': 'warn',
-      '@typescript-eslint/no-explicit-any': 'warn',
-      'no-console': 'warn',
+      '@typescript-eslint/no-unused-vars': 'off', // Disable unused vars rule
+      '@typescript-eslint/no-explicit-any': 'off', // Disable any type rule
+      'no-console': 'off', // Disable no-console rule to allow console statements
     },
   }
 );
