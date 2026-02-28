@@ -9,16 +9,16 @@ use dashmap::DashMap;
 use tokio::sync::RwLock;
 use tracing::info;
 
+use super::autonomous::AutonomousAgent;
+use crate::core::capability::CapabilityRegistry;
 use crate::core::config::CompanyConfig;
 use crate::core::messaging::MessageBus;
+use crate::core::skill::SkillManager;
 use crate::core::store::Store;
 use crate::core::tool::ToolRegistry;
-use crate::core::capability::CapabilityRegistry;
-use crate::core::skill::SkillManager;
 use crate::domain::Organization;
+use crate::infrastructure::capability::{McpProtocolHandler, McpServer};
 use crate::infrastructure::tool::{FrameworkToolExecutor, ToolEnvironment};
-use crate::infrastructure::capability::{McpServer, McpProtocolHandler};
-use super::autonomous::AutonomousAgent;
 
 /// 组织架构管理器
 pub struct OrganizationManager {
@@ -66,9 +66,18 @@ impl AgentManager {
     }
 
     /// 初始化所有 Agent
-    pub async fn initialize_agents(&self, organization: &Organization, watchdog_agent: Option<Arc<crate::core::watchdog_agent::WatchdogAgent>>) -> Result<()> {
+    pub async fn initialize_agents(
+        &self,
+        organization: &Organization,
+        watchdog_agent: Option<Arc<crate::core::watchdog_agent::WatchdogAgent>>,
+    ) -> Result<()> {
         for agent_data in &organization.agents {
-            let agent = AutonomousAgent::new(agent_data.clone(), self.message_bus.clone(), watchdog_agent.clone()).await?;
+            let agent = AutonomousAgent::new(
+                agent_data.clone(),
+                self.message_bus.clone(),
+                watchdog_agent.clone(),
+            )
+            .await?;
             let agent_id = agent.id().to_string();
             self.agents.insert(agent_id.clone(), agent);
             info!("Created agent: {}", agent_id);
@@ -76,8 +85,6 @@ impl AgentManager {
         Ok(())
     }
 
-    
-    
     /// 获取所有 Agent 列表（用于 Web API）
     /// 注意：由于Agent数据存储在Organization中，这里返回空向量
     /// 实际的Agent列表应通过OrganizationManager获取
@@ -166,7 +173,10 @@ impl ToolCapabilityManager {
     }
 
     /// 注册应用自定义功能
-    pub async fn register_app_capability(&self, capability: crate::domain::capability::Capability) -> Result<()> {
+    pub async fn register_app_capability(
+        &self,
+        capability: crate::domain::capability::Capability,
+    ) -> Result<()> {
         let cap_id = capability.id.clone();
         self.capability_registry.register(capability).await?;
         info!("Registered app capability: {}", cap_id);
@@ -194,7 +204,11 @@ impl ToolCapabilityManager {
     }
 
     /// 设置工具访问类型
-    pub fn set_tool_access(&self, tool_id: &str, access_type: crate::domain::skill::ToolAccessType) -> Result<()> {
+    pub fn set_tool_access(
+        &self,
+        tool_id: &str,
+        access_type: crate::domain::skill::ToolAccessType,
+    ) -> Result<()> {
         self.skill_manager.set_tool_access(tool_id, access_type)
     }
 

@@ -17,9 +17,9 @@ use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info};
 
-use crate::domain::{Agent, Message, MessageTarget, Organization, Role, LLMConfig};
-use crate::domain::user::User;
 use crate::domain::invitation_code::InvitationCode;
+use crate::domain::user::User;
+use crate::domain::{Agent, LLMConfig, Message, MessageTarget, Organization, Role};
 use crate::infrastructure::auth::{JwtService, PasswordService, UserInfo};
 
 // ==================== 错误响应 ====================
@@ -73,7 +73,6 @@ pub enum ClientMessage {
     Ping,
 }
 
-
 // 为简化，我们创建一个验证JWT的辅助函数
 #[allow(dead_code)]
 async fn validate_jwt(state: &AppState, token: &str) -> Option<UserInfo> {
@@ -86,7 +85,8 @@ async fn get_current_user(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     // 从头部获取授权信息
-    let auth_header = headers.get("authorization")
+    let auth_header = headers
+        .get("authorization")
         .and_then(|value| value.to_str().ok());
 
     if let Some(auth_str) = auth_header {
@@ -106,7 +106,8 @@ async fn get_current_user(
                         "position": user_info.position,
                         "department": user_info.department,
                     }
-                })).into_response();
+                }))
+                .into_response();
             }
         }
     }
@@ -115,8 +116,9 @@ async fn get_current_user(
         StatusCode::UNAUTHORIZED,
         Json(ErrorResponse {
             error: "Unauthorized".to_string(),
-        })
-    ).into_response()
+        }),
+    )
+        .into_response()
 }
 
 #[derive(Deserialize)]
@@ -131,7 +133,7 @@ pub struct RegisterRequest {
     pub password: String,
     pub name: String,
     pub email: Option<String>,
-    pub invite_code: Option<String>,  // 邀请码（可选，首位注册不需要）
+    pub invite_code: Option<String>, // 邀请码（可选，首位注册不需要）
 }
 
 // ==================== 处理器 ====================
@@ -257,7 +259,11 @@ async fn login(
                         username: user.username.clone(),
                         name: user.name.clone(),
                         email: user.email.clone(),
-                        is_director: matches!(user.position, crate::domain::user::Position::Chairman | crate::domain::user::Position::Management),
+                        is_director: matches!(
+                            user.position,
+                            crate::domain::user::Position::Chairman
+                                | crate::domain::user::Position::Management
+                        ),
                         employee_id: user.employee_id.clone(),
                         position: format!("{:?}", user.position),
                         department: user.department.clone(),
@@ -269,8 +275,9 @@ async fn login(
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 Json(ErrorResponse {
                                     error: "Failed to generate token".to_string(),
-                                })
-                            ).into_response();
+                                }),
+                            )
+                                .into_response();
                         }
                     };
 
@@ -290,35 +297,38 @@ async fn login(
                             }
                         }
                     })).into_response()
-                },
+                }
                 Ok(_) | Err(_) => {
                     // 密码错误
                     (
                         StatusCode::UNAUTHORIZED,
                         Json(ErrorResponse {
                             error: "Invalid username or password".to_string(),
-                        })
-                    ).into_response()
+                        }),
+                    )
+                        .into_response()
                 }
             }
-        },
+        }
         Ok(None) => {
             // 用户不存在
             (
                 StatusCode::UNAUTHORIZED,
                 Json(ErrorResponse {
                     error: "Invalid username or password".to_string(),
-                })
-            ).into_response()
-        },
+                }),
+            )
+                .into_response()
+        }
         Err(e) => {
             error!("Database error during login: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
                     error: "Database error".to_string(),
-                })
-            ).into_response()
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -338,20 +348,22 @@ async fn register(
                 StatusCode::CONFLICT,
                 Json(ErrorResponse {
                     error: "Username already exists".to_string(),
-                })
-            ).into_response();
-        },
+                }),
+            )
+                .into_response();
+        }
         Ok(None) => {
             // 用户名不存在，可以继续
-        },
+        }
         Err(e) => {
             error!("Database error during registration check: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
                     error: "Database error".to_string(),
-                })
-            ).into_response();
+                }),
+            )
+                .into_response();
         }
     }
 
@@ -364,8 +376,9 @@ async fn register(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
                     error: "Database error".to_string(),
-                })
-            ).into_response();
+                }),
+            )
+                .into_response();
         }
     };
 
@@ -375,9 +388,11 @@ async fn register(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
-                    error: "First user registration does not require an invitation code".to_string(),
-                })
-            ).into_response();
+                    error: "First user registration does not require an invitation code"
+                        .to_string(),
+                }),
+            )
+                .into_response();
         }
 
         // 哈希密码
@@ -389,8 +404,9 @@ async fn register(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ErrorResponse {
                         error: "Failed to process password".to_string(),
-                    })
-                ).into_response();
+                    }),
+                )
+                    .into_response();
             }
         };
 
@@ -408,31 +424,38 @@ async fn register(
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
                     error: "Invitation code is required for registration".to_string(),
-                })
-            ).into_response();
+                }),
+            )
+                .into_response();
         }
 
         let invite_code_str = req.invite_code.unwrap();
 
         // 验证邀请码
-        let mut invite_code = match state.store.load_invitation_code_by_code(&invite_code_str).await {
+        let mut invite_code = match state
+            .store
+            .load_invitation_code_by_code(&invite_code_str)
+            .await
+        {
             Ok(Some(code)) => code,
             Ok(None) => {
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(ErrorResponse {
                         error: "Invalid invitation code".to_string(),
-                    })
-                ).into_response();
-            },
+                    }),
+                )
+                    .into_response();
+            }
             Err(e) => {
                 error!("Database error during invitation code check: {}", e);
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ErrorResponse {
                         error: "Database error".to_string(),
-                    })
-                ).into_response();
+                    }),
+                )
+                    .into_response();
             }
         };
 
@@ -442,8 +465,9 @@ async fn register(
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
                     error: "Invitation code has expired or reached maximum usage".to_string(),
-                })
-            ).into_response();
+                }),
+            )
+                .into_response();
         }
 
         // 哈希密码
@@ -455,8 +479,9 @@ async fn register(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ErrorResponse {
                         error: "Failed to process password".to_string(),
-                    })
-                ).into_response();
+                    }),
+                )
+                    .into_response();
             }
         };
 
@@ -470,21 +495,26 @@ async fn register(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
                     error: "Failed to update invitation code".to_string(),
-                })
-            ).into_response();
+                }),
+            )
+                .into_response();
         }
 
         // 获取当前管理层用户数量，用于生成工号
         let management_users = match state.store.load_users().await {
-            Ok(users) => users.into_iter().filter(|u| matches!(u.position, crate::domain::user::Position::Management)).collect::<Vec<_>>(),
+            Ok(users) => users
+                .into_iter()
+                .filter(|u| matches!(u.position, crate::domain::user::Position::Management))
+                .collect::<Vec<_>>(),
             Err(e) => {
                 error!("Database error during management user count: {}", e);
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ErrorResponse {
                         error: "Database error".to_string(),
-                    })
-                ).into_response();
+                    }),
+                )
+                    .into_response();
             }
         };
 
@@ -493,7 +523,7 @@ async fn register(
             req.username.clone(),
             req.name.clone(),
             password_hash,
-            2 + management_users.len() as u32,  // 管理层工号从00002开始
+            2 + management_users.len() as u32, // 管理层工号从00002开始
             req.email.clone(),
         )
     };
@@ -505,14 +535,22 @@ async fn register(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
                 error: "Failed to register user".to_string(),
-            })
-        ).into_response();
+            }),
+        )
+            .into_response();
     }
 
     // If it's corporate chairman or management, add user to Cliff of Contemplation Line
-    if matches!(user_to_create.position, crate::domain::user::Position::Chairman | crate::domain::user::Position::Management) {
+    if matches!(
+        user_to_create.position,
+        crate::domain::user::Position::Chairman | crate::domain::user::Position::Management
+    ) {
         // Create or update organization structure, add user to Cliff of Contemplation Line department
-        let mut org = state.store.load_organization().await.unwrap_or_else(|_| Organization::new());
+        let mut org = state
+            .store
+            .load_organization()
+            .await
+            .unwrap_or_else(|_| Organization::new());
 
         // Ensure Cliff of Contemplation Line department exists
         let guilty_cliff_dept_id = "guilty-cliff-line";
@@ -525,8 +563,11 @@ async fn register(
             let dept = crate::domain::Department {
                 id: guilty_cliff_dept_id.to_string(),
                 name: guilty_cliff_dept_name.to_string(),
-                parent_id: None,  // Cliff of Contemplation Line is the top-level department
-                leader_id: if matches!(user_to_create.position, crate::domain::user::Position::Chairman) {
+                parent_id: None, // Cliff of Contemplation Line is the top-level department
+                leader_id: if matches!(
+                    user_to_create.position,
+                    crate::domain::user::Position::Chairman
+                ) {
                     Some(user_to_create.id.clone())
                 } else {
                     None
@@ -543,7 +584,10 @@ async fn register(
             let new_agent = Agent {
                 id: user_to_create.id.clone(),
                 name: user_to_create.name.clone(),
-                role: if matches!(user_to_create.position, crate::domain::user::Position::Chairman) {
+                role: if matches!(
+                    user_to_create.position,
+                    crate::domain::user::Position::Chairman
+                ) {
                     Role::simple("Cliff of Contemplation Line Supervisor".to_string(), "You are the supervisor of the Cliff of Contemplation Line, responsible for overseeing and managing senior company affairs.".to_string())
                         .with_responsibilities(vec!["Corporate Chairman".to_string(), "Cliff of Contemplation Line Management".to_string()])
                         .with_expertise(vec!["Corporate Governance".to_string(), "Strategic Planning".to_string()])
@@ -562,14 +606,21 @@ async fn register(
             // If Agent already exists, update its department information
             if let Some(agent) = org.agents.iter_mut().find(|a| a.id == user_to_create.id) {
                 agent.department_id = Some(guilty_cliff_dept_id.to_string());
-                if matches!(user_to_create.position, crate::domain::user::Position::Chairman) {
+                if matches!(
+                    user_to_create.position,
+                    crate::domain::user::Position::Chairman
+                ) {
                     // Corporate chairman becomes Cliff of Contemplation Line supervisor
                     agent.role = Role::simple("Cliff of Contemplation Line Supervisor".to_string(), "You are the supervisor of the Cliff of Contemplation Line, responsible for overseeing and managing senior company affairs.".to_string())
                         .with_responsibilities(vec!["Corporate Chairman".to_string(), "Cliff of Contemplation Line Management".to_string()])
                         .with_expertise(vec!["Corporate Governance".to_string(), "Strategic Planning".to_string()]);
 
                     // Also update department leader
-                    if let Some(dept) = org.departments.iter_mut().find(|d| d.id == guilty_cliff_dept_id) {
+                    if let Some(dept) = org
+                        .departments
+                        .iter_mut()
+                        .find(|d| d.id == guilty_cliff_dept_id)
+                    {
                         dept.leader_id = Some(user_to_create.id.clone());
                     }
                 } else {
@@ -592,14 +643,24 @@ async fn register(
 
         // Save updated user information
         if let Err(e) = state.store.save_user(&updated_user).await {
-            error!("Failed to update user department for guilty cliff line: {}", e);
+            error!(
+                "Failed to update user department for guilty cliff line: {}",
+                e
+            );
         }
     }
 
     // Use updated user information (if there was an update)
-    let final_user = if matches!(user_to_create.position, crate::domain::user::Position::Chairman | crate::domain::user::Position::Management) {
+    let final_user = if matches!(
+        user_to_create.position,
+        crate::domain::user::Position::Chairman | crate::domain::user::Position::Management
+    ) {
         // If it's corporate chairman or management, use updated user information
-        let updated_user = match state.store.load_user_by_username(&user_to_create.username).await {
+        let updated_user = match state
+            .store
+            .load_user_by_username(&user_to_create.username)
+            .await
+        {
             Ok(Some(user)) => user,
             _ => user_to_create.clone(), // 如果加载失败，使用原始用户
         };
@@ -614,7 +675,10 @@ async fn register(
         username: final_user.username.clone(),
         name: final_user.name.clone(),
         email: final_user.email.clone(),
-        is_director: matches!(final_user.position, crate::domain::user::Position::Chairman | crate::domain::user::Position::Management),
+        is_director: matches!(
+            final_user.position,
+            crate::domain::user::Position::Chairman | crate::domain::user::Position::Management
+        ),
         employee_id: final_user.employee_id.clone(),
         position: format!("{:?}", final_user.position),
         department: final_user.department.clone(),
@@ -626,8 +690,9 @@ async fn register(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
                     error: "Failed to generate token".to_string(),
-                })
-            ).into_response();
+                }),
+            )
+                .into_response();
         }
     };
 
@@ -650,7 +715,9 @@ async fn register(
 }
 
 /// 检查用户名
-async fn check_username(Query(params): Query<std::collections::HashMap<String, String>>) -> impl IntoResponse {
+async fn check_username(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
     let username = params.get("username").cloned().unwrap_or_default();
     let exists = username == "admin" || username == "director";
 
@@ -671,10 +738,7 @@ async fn websocket_handler(
     ws.on_upgrade(move |socket| handle_websocket(socket, state))
 }
 
-async fn handle_websocket(
-    mut socket: axum::extract::ws::WebSocket,
-    state: Arc<AppState>,
-) {
+async fn handle_websocket(mut socket: axum::extract::ws::WebSocket, state: Arc<AppState>) {
     let mut rx = state.message_tx.subscribe();
 
     info!("WebSocket connection established");
@@ -809,7 +873,7 @@ async fn handle_websocket(
 #[derive(Deserialize)]
 pub struct CreateInviteCodeRequest {
     pub max_usage: Option<u32>,
-    pub expires_at: Option<String>,  // ISO 8601 format
+    pub expires_at: Option<String>, // ISO 8601 format
 }
 
 /// 检查用户是否具有管理员权限
@@ -832,7 +896,8 @@ async fn get_invite_codes(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let auth_header = headers.get("authorization")
+    let auth_header = headers
+        .get("authorization")
         .and_then(|value| value.to_str().ok());
 
     if let Some(auth_str) = auth_header {
@@ -843,23 +908,27 @@ async fn get_invite_codes(
                 match state.store.load_invitation_codes().await {
                     Ok(codes) => {
                         // 转换为前端友好的格式
-                        let codes_data: Vec<serde_json::Value> = codes.into_iter().map(|code| {
-                            serde_json::json!({
-                                "id": code.id,
-                                "code": code.code,
-                                "created_by": code.created_by,
-                                "created_at": code.created_at,
-                                "expires_at": code.expiry_time,
-                                "usage_count": code.current_usage,
-                                "max_usage": code.max_usage,
-                                "is_active": code.is_valid(),
+                        let codes_data: Vec<serde_json::Value> = codes
+                            .into_iter()
+                            .map(|code| {
+                                serde_json::json!({
+                                    "id": code.id,
+                                    "code": code.code,
+                                    "created_by": code.created_by,
+                                    "created_at": code.created_at,
+                                    "expires_at": code.expiry_time,
+                                    "usage_count": code.current_usage,
+                                    "max_usage": code.max_usage,
+                                    "is_active": code.is_valid(),
+                                })
                             })
-                        }).collect();
+                            .collect();
 
                         return Json(serde_json::json!({
                             "success": true,
                             "data": codes_data
-                        })).into_response();
+                        }))
+                        .into_response();
                     }
                     Err(e) => {
                         error!("Failed to load invitation codes: {}", e);
@@ -867,8 +936,9 @@ async fn get_invite_codes(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(ErrorResponse {
                                 error: "Failed to load invitation codes".to_string(),
-                            })
-                        ).into_response();
+                            }),
+                        )
+                            .into_response();
                     }
                 }
             }
@@ -879,8 +949,9 @@ async fn get_invite_codes(
         StatusCode::FORBIDDEN,
         Json(ErrorResponse {
             error: "Insufficient permissions".to_string(),
-        })
-    ).into_response()
+        }),
+    )
+        .into_response()
 }
 
 /// 创建邀请码（仅管理员）
@@ -889,7 +960,8 @@ async fn create_invite_code(
     headers: HeaderMap,
     Json(req): Json<CreateInviteCodeRequest>,
 ) -> impl IntoResponse {
-    let auth_header = headers.get("authorization")
+    let auth_header = headers
+        .get("authorization")
         .and_then(|value| value.to_str().ok());
 
     if let Some(auth_str) = auth_header {
@@ -898,10 +970,7 @@ async fn create_invite_code(
 
             if let Some(user_info) = check_admin_permission(&state, token).await {
                 // 创建邀请码
-                let mut new_code = InvitationCode::new(
-                    user_info.id.clone(),
-                    req.max_usage,
-                );
+                let mut new_code = InvitationCode::new(user_info.id.clone(), req.max_usage);
 
                 // 如果指定了过期时间，使用指定的时间，否则使用默认的1天
                 if let Some(expires_at_str) = req.expires_at {
@@ -924,7 +993,8 @@ async fn create_invite_code(
                                 "usage_count": new_code.current_usage,
                                 "is_active": new_code.is_valid(),
                             }
-                        })).into_response();
+                        }))
+                        .into_response();
                     }
                     Err(e) => {
                         error!("Failed to save invitation code: {}", e);
@@ -932,8 +1002,9 @@ async fn create_invite_code(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(ErrorResponse {
                                 error: "Failed to save invitation code".to_string(),
-                            })
-                        ).into_response();
+                            }),
+                        )
+                            .into_response();
                     }
                 }
             }
@@ -944,8 +1015,9 @@ async fn create_invite_code(
         StatusCode::FORBIDDEN,
         Json(ErrorResponse {
             error: "Insufficient permissions".to_string(),
-        })
-    ).into_response()
+        }),
+    )
+        .into_response()
 }
 
 /// 删除邀请码（仅管理员）
@@ -954,7 +1026,8 @@ async fn delete_invite_code(
     headers: HeaderMap,
     Path(code_id): Path<String>,
 ) -> impl IntoResponse {
-    let auth_header = headers.get("authorization")
+    let auth_header = headers
+        .get("authorization")
         .and_then(|value| value.to_str().ok());
 
     if let Some(auth_str) = auth_header {
@@ -973,27 +1046,33 @@ async fn delete_invite_code(
                             // 重新保存剩余的邀请码
                             for code in codes {
                                 if let Err(e) = state.store.save_invitation_code(&code).await {
-                                    error!("Failed to update invitation codes after deletion: {}", e);
+                                    error!(
+                                        "Failed to update invitation codes after deletion: {}",
+                                        e
+                                    );
                                     return (
                                         StatusCode::INTERNAL_SERVER_ERROR,
                                         Json(ErrorResponse {
                                             error: "Failed to update invitation codes".to_string(),
-                                        })
-                                    ).into_response();
+                                        }),
+                                    )
+                                        .into_response();
                                 }
                             }
 
                             return Json(serde_json::json!({
                                 "success": true,
                                 "message": "Invitation code deleted successfully"
-                            })).into_response();
+                            }))
+                            .into_response();
                         } else {
                             return (
                                 StatusCode::NOT_FOUND,
                                 Json(ErrorResponse {
                                     error: "Invitation code not found".to_string(),
-                                })
-                            ).into_response();
+                                }),
+                            )
+                                .into_response();
                         }
                     }
                     Err(e) => {
@@ -1002,8 +1081,9 @@ async fn delete_invite_code(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(ErrorResponse {
                                 error: "Failed to load invitation codes".to_string(),
-                            })
-                        ).into_response();
+                            }),
+                        )
+                            .into_response();
                     }
                 }
             }
@@ -1014,8 +1094,9 @@ async fn delete_invite_code(
         StatusCode::FORBIDDEN,
         Json(ErrorResponse {
             error: "Insufficient permissions".to_string(),
-        })
-    ).into_response()
+        }),
+    )
+        .into_response()
 }
 
 /// 获取聊天会话列表
@@ -1023,36 +1104,42 @@ async fn list_chat_sessions(State(state): State<Arc<AppState>>) -> impl IntoResp
     // 从组织架构中获取Agent信息来构建会话列表
     match state.store.load_organization().await {
         Ok(org) => {
-            let sessions: Vec<serde_json::Value> = org.agents.into_iter().map(|agent| {
-                serde_json::json!({
-                    "id": agent.id,
-                    "name": agent.name,
-                    "participants": [{
+            let sessions: Vec<serde_json::Value> = org
+                .agents
+                .into_iter()
+                .map(|agent| {
+                    serde_json::json!({
                         "id": agent.id,
                         "name": agent.name,
-                        "isAgent": true,
-                        "status": "online"  // 假设Agent始终在线
-                    }],
-                    "lastMessage": null,
-                    "unreadCount": 0,
-                    "createdAt": chrono::Utc::now().timestamp(),
-                    "updatedAt": chrono::Utc::now().timestamp()
+                        "participants": [{
+                            "id": agent.id,
+                            "name": agent.name,
+                            "isAgent": true,
+                            "status": "online"  // 假设Agent始终在线
+                        }],
+                        "lastMessage": null,
+                        "unreadCount": 0,
+                        "createdAt": chrono::Utc::now().timestamp(),
+                        "updatedAt": chrono::Utc::now().timestamp()
+                    })
                 })
-            }).collect();
+                .collect();
 
             Json(serde_json::json!({
                 "success": true,
                 "data": sessions
-            })).into_response()
-        },
+            }))
+            .into_response()
+        }
         Err(e) => {
             error!("Failed to load organization for chat sessions: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
                     error: "Failed to load chat sessions".to_string(),
-                })
-            ).into_response()
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -1064,64 +1151,70 @@ async fn get_session_messages(
 ) -> impl IntoResponse {
     // 获取该Agent相关的所有消息
     let filter = crate::core::store::MessageFilter {
-        from: Some(session_id.clone()),  // 消息来自该Agent
+        from: Some(session_id.clone()), // 消息来自该Agent
         target_type: None,
         to: None,
         since: None,
-        limit: 50,  // 限制返回50条消息
+        limit: 50, // 限制返回50条消息
     };
 
     match state.store.load_messages(filter).await {
         Ok(messages) => {
             // 转换消息格式以匹配前端期望
-            let formatted_messages: Vec<serde_json::Value> = messages.into_iter().map(|msg| {
-                // 获取发送者信息
-                let sender = if msg.from == session_id {
-                    // 如果是Agent发送的
-                    serde_json::json!({
-                        "id": msg.from,
-                        "name": get_agent_name_by_id(&state.agents, &msg.from),
-                        "isAgent": true
-                    })
-                } else {
-                    // 如果是用户发送的
-                    serde_json::json!({
-                        "id": msg.from,
-                        "name": "Unknown User",
-                        "isAgent": false
-                    })
-                };
+            let formatted_messages: Vec<serde_json::Value> = messages
+                .into_iter()
+                .map(|msg| {
+                    // 获取发送者信息
+                    let sender = if msg.from == session_id {
+                        // 如果是Agent发送的
+                        serde_json::json!({
+                            "id": msg.from,
+                            "name": get_agent_name_by_id(&state.agents, &msg.from),
+                            "isAgent": true
+                        })
+                    } else {
+                        // 如果是用户发送的
+                        serde_json::json!({
+                            "id": msg.from,
+                            "name": "Unknown User",
+                            "isAgent": false
+                        })
+                    };
 
-                serde_json::json!({
-                    "id": msg.id,
-                    "sender": sender,
-                    "content": msg.content,
-                    "timestamp": msg.timestamp,
-                    "replyTo": msg.reply_to,
-                    "mentions": msg.mentions
+                    serde_json::json!({
+                        "id": msg.id,
+                        "sender": sender,
+                        "content": msg.content,
+                        "timestamp": msg.timestamp,
+                        "replyTo": msg.reply_to,
+                        "mentions": msg.mentions
+                    })
                 })
-            }).collect();
+                .collect();
 
             Json(serde_json::json!({
                 "success": true,
                 "data": formatted_messages
-            })).into_response()
-        },
+            }))
+            .into_response()
+        }
         Err(e) => {
             error!("Failed to load messages for session {}: {}", session_id, e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
                     error: "Failed to load messages".to_string(),
-                })
-            ).into_response()
+                }),
+            )
+                .into_response()
         }
     }
 }
 
 /// 根据ID获取Agent名称的辅助函数
 fn get_agent_name_by_id(agents: &[Agent], agent_id: &str) -> String {
-    agents.iter()
+    agents
+        .iter()
         .find(|agent| agent.id == agent_id)
         .map(|agent| agent.name.clone())
         .unwrap_or_else(|| "Unknown Agent".to_string())
@@ -1132,12 +1225,18 @@ async fn get_org_tree(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.store.load_organization().await {
         Ok(org) => {
             // First, convert flat department list to tree structure
-            let mut departments_map: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
+            let mut departments_map: std::collections::HashMap<String, serde_json::Value> =
+                std::collections::HashMap::new();
 
             // Step 1: Create basic structure for all departments
             for dept in &org.departments {
-                let agent_leaders: Vec<serde_json::Value> = org.agents.iter()
-                    .filter(|agent| agent.department_id.as_ref() == Some(&dept.id) && agent.role.title.contains("主管"))
+                let agent_leaders: Vec<serde_json::Value> = org
+                    .agents
+                    .iter()
+                    .filter(|agent| {
+                        agent.department_id.as_ref() == Some(&dept.id)
+                            && agent.role.title.contains("主管")
+                    })
                     .map(|agent| {
                         serde_json::json!({
                             "id": agent.id,
@@ -1148,8 +1247,13 @@ async fn get_org_tree(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                     })
                     .collect();
 
-                let dept_agents: Vec<serde_json::Value> = org.agents.iter()
-                    .filter(|agent| agent.department_id.as_ref() == Some(&dept.id) && !agent.role.title.contains("主管"))
+                let dept_agents: Vec<serde_json::Value> = org
+                    .agents
+                    .iter()
+                    .filter(|agent| {
+                        agent.department_id.as_ref() == Some(&dept.id)
+                            && !agent.role.title.contains("主管")
+                    })
                     .map(|agent| {
                         serde_json::json!({
                             "id": agent.id,
@@ -1178,7 +1282,7 @@ async fn get_org_tree(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                         "users": users,
                         "memberCount": users.len(),
                         "children": Vec::<serde_json::Value>::new() // 初始化为空数组
-                    })
+                    }),
                 );
             }
 
@@ -1187,7 +1291,9 @@ async fn get_org_tree(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             for dept in &org.departments {
                 if let Some(mut dept_info) = departments_map.get(&dept.id).cloned() {
                     // Find all child departments with this department as parent
-                    let child_depts: Vec<serde_json::Value> = org.departments.iter()
+                    let child_depts: Vec<serde_json::Value> = org
+                        .departments
+                        .iter()
                         .filter(|child| child.parent_id.as_ref() == Some(&dept.id))
                         .filter_map(|child| processed_depts.get(&child.id).cloned())
                         .collect();
@@ -1195,7 +1301,10 @@ async fn get_org_tree(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                     // Update department information, add child departments
                     if !child_depts.is_empty() {
                         if let serde_json::Value::Object(ref mut obj) = dept_info {
-                            obj.insert("children".to_string(), serde_json::Value::Array(child_depts));
+                            obj.insert(
+                                "children".to_string(),
+                                serde_json::Value::Array(child_depts),
+                            );
                         }
                     }
 
@@ -1204,46 +1313,52 @@ async fn get_org_tree(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             }
 
             // Finally get root departments (departments without parent)
-            let root_depts: Vec<serde_json::Value> = org.departments.iter()
+            let root_depts: Vec<serde_json::Value> = org
+                .departments
+                .iter()
                 .filter(|dept| dept.parent_id.is_none())
                 .filter_map(|dept| processed_depts.get(&dept.id).cloned())
                 .collect();
 
             // 同时返回扁平的agents列表用于其他用途（目前未使用）
-            let _agents: Vec<serde_json::Value> = org.agents.iter().map(|agent| {
-                serde_json::json!({
-                    "id": agent.id,
-                    "name": agent.name,
-                    "title": agent.role.title,
-                    "departmentId": agent.department_id,
-                    "status": "online",  // 假设Agent始终在线
-                    "isOnline": true
+            let _agents: Vec<serde_json::Value> = org
+                .agents
+                .iter()
+                .map(|agent| {
+                    serde_json::json!({
+                        "id": agent.id,
+                        "name": agent.name,
+                        "title": agent.role.title,
+                        "departmentId": agent.department_id,
+                        "status": "online",  // 假设Agent始终在线
+                        "isOnline": true
+                    })
                 })
-            }).collect();
+                .collect();
 
             Json(serde_json::json!({
                 "success": true,
                 "data": root_depts  // Directly return department array, matching frontend expectation
-            })).into_response()
-        },
+            }))
+            .into_response()
+        }
         Err(e) => {
             error!("Failed to load organization tree: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
                     error: "Failed to load organization tree".to_string(),
-                })
-            ).into_response()
+                }),
+            )
+                .into_response()
         }
     }
 }
 
 /// 获取所有用户（仅管理员）
-async fn get_users(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let auth_header = headers.get("authorization")
+async fn get_users(State(state): State<Arc<AppState>>, headers: HeaderMap) -> impl IntoResponse {
+    let auth_header = headers
+        .get("authorization")
         .and_then(|value| value.to_str().ok());
 
     if let Some(auth_str) = auth_header {
@@ -1271,7 +1386,8 @@ async fn get_users(
                         return Json(serde_json::json!({
                             "success": true,
                             "data": users_data
-                        })).into_response();
+                        }))
+                        .into_response();
                     }
                     Err(e) => {
                         error!("Failed to load users: {}", e);
@@ -1279,8 +1395,9 @@ async fn get_users(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(ErrorResponse {
                                 error: "Failed to load users".to_string(),
-                            })
-                        ).into_response();
+                            }),
+                        )
+                            .into_response();
                     }
                 }
             }
@@ -1291,8 +1408,9 @@ async fn get_users(
         StatusCode::FORBIDDEN,
         Json(ErrorResponse {
             error: "Insufficient permissions".to_string(),
-        })
-    ).into_response()
+        }),
+    )
+        .into_response()
 }
 
 // ==================== 路由 ====================
@@ -1310,7 +1428,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/auth/register", post(register))
         .route("/api/auth/check-username", get(check_username))
         .route("/api/auth/current", get(get_current_user))
-        .route("/api/admin/invite-codes", get(get_invite_codes).post(create_invite_code))
+        .route(
+            "/api/admin/invite-codes",
+            get(get_invite_codes).post(create_invite_code),
+        )
         .route("/api/admin/invite-codes/{id}", delete(delete_invite_code))
         .route("/api/chat/list", get(list_chat_sessions))
         .route("/api/chat/{session_id}/messages", get(get_session_messages))
@@ -1330,7 +1451,8 @@ pub async fn start_web_server(
     store: Arc<dyn crate::core::store::Store>,
 ) -> anyhow::Result<()> {
     // 创建JWT服务
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default_secret_key_for_dev".to_string());
+    let jwt_secret =
+        std::env::var("JWT_SECRET").unwrap_or_else(|_| "default_secret_key_for_dev".to_string());
     let jwt_service = JwtService::new(&jwt_secret);
 
     let state = Arc::new(AppState {

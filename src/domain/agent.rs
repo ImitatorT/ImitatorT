@@ -7,27 +7,17 @@ use serde::{Deserialize, Serialize};
 /// Agent Unique Identifier
 pub type AgentId = String;
 
-
 /// Trigger Condition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TriggerCondition {
     /// Numeric range condition: Trigger when tool returns value within specified range
-    NumericRange {
-        min: f64,
-        max: f64,
-    },
+    NumericRange { min: f64, max: f64 },
     /// String matching condition: Trigger when tool returns string containing specified content
-    StringContains {
-        content: String,
-    },
+    StringContains { content: String },
     /// Status matching condition: Trigger when tool returns specific status
-    StatusMatches {
-        expected_status: String,
-    },
+    StatusMatches { expected_status: String },
     /// Custom expression condition: Define complex conditions using expression language
-    CustomExpression {
-        expression: String,
-    },
+    CustomExpression { expression: String },
 }
 
 /// Agent Entity - Unified Agent definition, single source of truth

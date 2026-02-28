@@ -38,9 +38,14 @@ async fn test_group_messaging() {
     let _rx2 = bus.register("agent-2");
 
     // 创建群组成功
-    bus.create_group("g1", "测试群", "agent-1", vec!["agent-1".to_string(), "agent-2".to_string()])
-        .await
-        .unwrap();
+    bus.create_group(
+        "g1",
+        "测试群",
+        "agent-1",
+        vec!["agent-1".to_string(), "agent-2".to_string()],
+    )
+    .await
+    .unwrap();
 
     // 群聊消息发送在集成测试中需要订阅者保持存活
     // 这里仅验证群组创建成功

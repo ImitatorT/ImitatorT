@@ -52,7 +52,10 @@ async fn test_sqlite_store_messages() {
     store.save_message(&msg2).await.unwrap();
 
     // 测试查询全部
-    let messages = store.load_messages(MessageFilter::new().limit(10)).await.unwrap();
+    let messages = store
+        .load_messages(MessageFilter::new().limit(10))
+        .await
+        .unwrap();
     assert_eq!(messages.len(), 2);
 
     // 测试按发送者查询
@@ -106,7 +109,10 @@ async fn test_sqlite_store_batch_messages() {
 
     store.save_messages(&messages).await.unwrap();
 
-    let loaded = store.load_messages(MessageFilter::new().limit(50)).await.unwrap();
+    let loaded = store
+        .load_messages(MessageFilter::new().limit(50))
+        .await
+        .unwrap();
     assert_eq!(loaded.len(), 50);
 }
 

@@ -12,8 +12,8 @@ use crate::core::skill::SkillManager;
 use crate::core::store::{MessageFilter, Store};
 use crate::core::tool::ToolRegistry;
 use crate::core::tool_provider::{CompositeToolProvider, FrameworkToolProvider};
-use crate::domain::{Group, Message, MessageTarget, Organization};
 use crate::domain::tool::{MatchType, ToolCallContext, ToolProvider};
+use crate::domain::{Group, Message, MessageTarget, Organization};
 use crate::infrastructure::tool::ToolResult;
 
 /// 工具执行环境
@@ -112,7 +112,10 @@ impl FrameworkToolExecutor {
             // 消息发送类
             "message.send_direct" => self.execute_message_send_direct(params, context).await,
             "message.send_group" => self.execute_message_send_group(params, context).await,
-            "message.send_to_guilty_line" => self.execute_message_send_to_guilty_line(params, context).await,
+            "message.send_to_guilty_line" => {
+                self.execute_message_send_to_guilty_line(params, context)
+                    .await
+            }
             "message.reply" => self.execute_message_reply(params, context).await,
             // 群组管理类
             "group.list" => self.execute_group_list(params, context).await,
@@ -131,9 +134,7 @@ impl FrameworkToolExecutor {
 
     // ==================== Tool 查询类 ====================
 
-    async fn execute_tool_search(&self,
-        params: Value,
-    ) -> Result<ToolResult> {
+    async fn execute_tool_search(&self, params: Value) -> Result<ToolResult> {
         let query = params["query"].as_str().unwrap_or("");
         if query.is_empty() {
             return Ok(ToolResult::error("Query parameter is required"));
@@ -150,19 +151,20 @@ impl FrameworkToolExecutor {
 
         // 应用分类过滤
         if let Some(category) = category_filter {
-            results.retain(|tool| {
-                tool.category.to_path_string().starts_with(category)
-            });
+            results.retain(|tool| tool.category.to_path_string().starts_with(category));
         }
 
-        let tools_json: Vec<Value> = results.iter().map(|tool| {
-            json!({
-                "id": tool.id,
-                "name": tool.name,
-                "description": tool.description,
-                "category": tool.category.to_path_string(),
+        let tools_json: Vec<Value> = results
+            .iter()
+            .map(|tool| {
+                json!({
+                    "id": tool.id,
+                    "name": tool.name,
+                    "description": tool.description,
+                    "category": tool.category.to_path_string(),
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(ToolResult::success(json!({
             "query": query,
@@ -172,10 +174,7 @@ impl FrameworkToolExecutor {
         })))
     }
 
-    async fn execute_tool_list_categories(
-        &self,
-        params: Value,
-    ) -> Result<ToolResult> {
+    async fn execute_tool_list_categories(&self, params: Value) -> Result<ToolResult> {
         let parent_category = params["parent_category"].as_str().unwrap_or("");
 
         let tree = self.env.tool_provider.get_category_tree();
@@ -200,10 +199,7 @@ impl FrameworkToolExecutor {
         })))
     }
 
-    async fn execute_tool_get_category_tools(
-        &self,
-        params: Value,
-    ) -> Result<ToolResult> {
+    async fn execute_tool_get_category_tools(&self, params: Value) -> Result<ToolResult> {
         let category = params["category"].as_str().unwrap_or("");
         if category.is_empty() {
             return Ok(ToolResult::error("Category parameter is required"));
@@ -213,15 +209,18 @@ impl FrameworkToolExecutor {
 
         let tools = self.env.tool_provider.list_tools_by_category(category);
 
-        let tools_json: Vec<Value> = tools.iter().map(|tool| {
-            json!({
-                "id": tool.id,
-                "name": tool.name,
-                "description": tool.description,
-                "category": tool.category.to_path_string(),
-                "parameters": tool.parameters,
+        let tools_json: Vec<Value> = tools
+            .iter()
+            .map(|tool| {
+                json!({
+                    "id": tool.id,
+                    "name": tool.name,
+                    "description": tool.description,
+                    "category": tool.category.to_path_string(),
+                    "parameters": tool.parameters,
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(ToolResult::success(json!({
             "category": category,
@@ -245,10 +244,7 @@ impl FrameworkToolExecutor {
             .ok_or_else(|| anyhow::anyhow!("content is required"))?;
         let reply_to = params["reply_to_message_id"].as_str();
 
-        let mut message = Message::private(&context.caller_id,
-            to_agent_id,
-            content
-        );
+        let mut message = Message::private(&context.caller_id, to_agent_id, content);
 
         if let Some(reply_id) = reply_to {
             message = message.with_reply_to(reply_id);
@@ -273,32 +269,32 @@ impl FrameworkToolExecutor {
 
         // 检查群聊是否为隐藏群聊，如果是，则不允许通过常规消息发送工具发送
         let groups = self.env.message_store.load_groups().await?;
-        let target_group = groups.iter()
-            .find(|g| g.id == group_id);
+        let target_group = groups.iter().find(|g| g.id == group_id);
 
         match target_group {
             Some(group) => {
                 // 如果是隐藏群聊，不允许通过普通的消息发送工具发送
-                if matches!(group.visibility, crate::domain::message::GroupVisibility::Hidden) {
+                if matches!(
+                    group.visibility,
+                    crate::domain::message::GroupVisibility::Hidden
+                ) {
                     return Ok(ToolResult::error("Cannot send message to hidden group using regular message.send_group tool. Use message.send_to_guilty_line instead.".to_string()));
                 }
 
                 // 检查调用者是否是群聊成员
                 let is_member = group.members.contains(&context.caller_id);
                 if !is_member {
-                    return Ok(ToolResult::error("Caller is not a member of the target group".to_string()));
+                    return Ok(ToolResult::error(
+                        "Caller is not a member of the target group".to_string(),
+                    ));
                 }
-            },
+            }
             None => {
                 return Ok(ToolResult::error("Target group not found".to_string()));
             }
         }
 
-        let mut message = Message::group(
-            &context.caller_id,
-            group_id,
-            content
-        );
+        let mut message = Message::group(&context.caller_id, group_id, content);
 
         // 处理 @ 列表
         if let Some(mentions) = params["mention_agent_ids"].as_array() {
@@ -334,8 +330,13 @@ impl FrameworkToolExecutor {
         let _caller_has_required_skills = true; // 临时设置为true，后续实现真实权限检查
 
         let groups = self.env.message_store.load_groups().await?;
-        let guilty_line_group = groups.iter()
-            .find(|g| g.id == "guilty_line_group" && matches!(g.visibility, crate::domain::message::GroupVisibility::Hidden));
+        let guilty_line_group = groups.iter().find(|g| {
+            g.id == "guilty_line_group"
+                && matches!(
+                    g.visibility,
+                    crate::domain::message::GroupVisibility::Hidden
+                )
+        });
 
         match guilty_line_group {
             Some(group) => {
@@ -343,18 +344,16 @@ impl FrameworkToolExecutor {
                 let is_member = group.members.contains(&context.caller_id);
 
                 if !is_member {
-                    return Ok(ToolResult::error("Caller is not a member of the Guilty Line group".to_string()));
+                    return Ok(ToolResult::error(
+                        "Caller is not a member of the Guilty Line group".to_string(),
+                    ));
                 }
 
                 let content = params["content"]
                     .as_str()
                     .ok_or_else(|| anyhow::anyhow!("content is required"))?;
 
-                let mut message = Message::group(
-                    &context.caller_id,
-                    &group.id,
-                    content
-                );
+                let mut message = Message::group(&context.caller_id, &group.id, content);
 
                 // 处理 @ 列表
                 if let Some(mentions) = params["mention_agent_ids"].as_array() {
@@ -378,7 +377,9 @@ impl FrameworkToolExecutor {
                     "group_name": &group.name
                 })))
             }
-            None => Ok(ToolResult::error("Guilty Line group not found or not hidden".to_string())),
+            None => Ok(ToolResult::error(
+                "Guilty Line group not found or not hidden".to_string(),
+            )),
         }
     }
 
@@ -390,19 +391,28 @@ impl FrameworkToolExecutor {
         let all_groups = self.env.message_store.load_groups().await?;
 
         // 只返回非隐藏的群组
-        let visible_groups: Vec<&Group> = all_groups.iter()
-            .filter(|g| matches!(g.visibility, crate::domain::message::GroupVisibility::Public))
+        let visible_groups: Vec<&Group> = all_groups
+            .iter()
+            .filter(|g| {
+                matches!(
+                    g.visibility,
+                    crate::domain::message::GroupVisibility::Public
+                )
+            })
             .collect();
 
-        let groups_json: Vec<Value> = visible_groups.iter().map(|g| {
-            json!({
-                "id": g.id,
-                "name": g.name,
-                "creator_id": g.creator_id,
-                "member_count": g.members.len(),
-                "created_at": g.created_at,
+        let groups_json: Vec<Value> = visible_groups
+            .iter()
+            .map(|g| {
+                json!({
+                    "id": g.id,
+                    "name": g.name,
+                    "creator_id": g.creator_id,
+                    "member_count": g.members.len(),
+                    "created_at": g.created_at,
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(ToolResult::success(json!({
             "count": groups_json.len(),
@@ -423,9 +433,11 @@ impl FrameworkToolExecutor {
             .ok_or_else(|| anyhow::anyhow!("content is required"))?;
 
         // 从消息存储中查找原消息
-        let original_messages = self.env.message_store.load_messages(
-            MessageFilter::new().limit(1).to(message_id)
-        ).await?;
+        let original_messages = self
+            .env
+            .message_store
+            .load_messages(MessageFilter::new().limit(1).to(message_id))
+            .await?;
 
         let reply_message = if let Some(orig_msg) = original_messages.first() {
             // 如果找到了原始消息，则根据原始消息的目标创建回复
@@ -440,7 +452,7 @@ impl FrameworkToolExecutor {
                         // 否则回复给原始消息发送者
                         Message::private(&context.caller_id, sender_id, reply_content)
                     }
-                },
+                }
                 MessageTarget::Group(group_id) => {
                     // 如果原始消息是群聊，回复到同一群组
                     Message::group(&context.caller_id, group_id, reply_content)
@@ -472,7 +484,10 @@ impl FrameworkToolExecutor {
             })))
         } else {
             // 如果没有找到原始消息，返回错误
-            Ok(ToolResult::error(format!("Original message not found: {}", message_id)))
+            Ok(ToolResult::error(format!(
+                "Original message not found: {}",
+                message_id
+            )))
         };
 
         reply_message
@@ -480,8 +495,7 @@ impl FrameworkToolExecutor {
 
     // ==================== 时间类 ====================
 
-    async fn execute_time_now(&self,
-    ) -> Result<ToolResult> {
+    async fn execute_time_now(&self) -> Result<ToolResult> {
         let now = chrono::Utc::now();
 
         Ok(ToolResult::success(json!({
@@ -495,8 +509,7 @@ impl FrameworkToolExecutor {
 
     // ==================== 组织架构类 ====================
 
-    async fn execute_org_get_structure(&self,
-    ) -> Result<ToolResult> {
+    async fn execute_org_get_structure(&self) -> Result<ToolResult> {
         let org = self.env.organization.read().await;
         let tree = org.build_tree();
 
@@ -512,14 +525,18 @@ impl FrameworkToolExecutor {
 
         let departments: Vec<Value> = tree.iter().map(convert_node).collect();
 
-        let agents: Vec<Value> = org.agents.iter().map(|a| {
-            json!({
-                "id": a.id,
-                "name": a.name,
-                "role": a.role.title,
-                "department_id": a.department_id,
+        let agents: Vec<Value> = org
+            .agents
+            .iter()
+            .map(|a| {
+                json!({
+                    "id": a.id,
+                    "name": a.name,
+                    "role": a.role.title,
+                    "department_id": a.department_id,
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(ToolResult::success(json!({
             "departments": departments,
@@ -529,17 +546,15 @@ impl FrameworkToolExecutor {
         })))
     }
 
-    async fn execute_org_get_department(
-        &self,
-        params: Value,
-    ) -> Result<ToolResult> {
+    async fn execute_org_get_department(&self, params: Value) -> Result<ToolResult> {
         let dept_id = params["department_id"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("department_id is required"))?;
 
         let org = self.env.organization.read().await;
 
-        let dept = org.find_department(dept_id)
+        let dept = org
+            .find_department(dept_id)
             .ok_or_else(|| anyhow::anyhow!("Department not found: {}", dept_id))?;
 
         let members: Vec<&crate::domain::Agent> = org.get_department_members(dept_id);
@@ -560,17 +575,15 @@ impl FrameworkToolExecutor {
         })))
     }
 
-    async fn execute_org_get_leader(
-        &self,
-        params: Value,
-    ) -> Result<ToolResult> {
+    async fn execute_org_get_leader(&self, params: Value) -> Result<ToolResult> {
         let dept_id = params["department_id"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("department_id is required"))?;
 
         let org = self.env.organization.read().await;
 
-        let leader = org.get_department_leader(dept_id)
+        let leader = org
+            .get_department_leader(dept_id)
             .ok_or_else(|| anyhow::anyhow!("No leader found for department: {}", dept_id))?;
 
         Ok(ToolResult::success(json!({
@@ -581,10 +594,7 @@ impl FrameworkToolExecutor {
         })))
     }
 
-    async fn execute_org_find_agents(
-        &self,
-        params: Value,
-    ) -> Result<ToolResult> {
+    async fn execute_org_find_agents(&self, params: Value) -> Result<ToolResult> {
         let query_type = params["query_type"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("query_type is required"))?;
@@ -596,8 +606,10 @@ impl FrameworkToolExecutor {
         let org = self.env.organization.read().await;
         let query_lower = query_value.to_lowercase();
 
-        let results: Vec<&crate::domain::Agent> = org.agents.iter().filter(|agent| {
-            match query_type {
+        let results: Vec<&crate::domain::Agent> = org
+            .agents
+            .iter()
+            .filter(|agent| match query_type {
                 "id" => {
                     if fuzzy {
                         agent.id.to_lowercase().contains(&query_lower)
@@ -632,24 +644,31 @@ impl FrameworkToolExecutor {
                 }
                 "description" => {
                     if fuzzy {
-                        agent.role.system_prompt.to_lowercase().contains(&query_lower)
+                        agent
+                            .role
+                            .system_prompt
+                            .to_lowercase()
+                            .contains(&query_lower)
                     } else {
                         agent.role.system_prompt.to_lowercase() == query_lower
                     }
                 }
                 _ => false,
-            }
-        }).collect();
-
-        let agents_json: Vec<Value> = results.iter().map(|a| {
-            json!({
-                "id": a.id,
-                "name": a.name,
-                "role": a.role.title,
-                "department_id": a.department_id,
-                "expertise": a.role.expertise,
             })
-        }).collect();
+            .collect();
+
+        let agents_json: Vec<Value> = results
+            .iter()
+            .map(|a| {
+                json!({
+                    "id": a.id,
+                    "name": a.name,
+                    "role": a.role.title,
+                    "department_id": a.department_id,
+                    "expertise": a.role.expertise,
+                })
+            })
+            .collect();
 
         Ok(ToolResult::success(json!({
             "query_type": query_type,
@@ -660,10 +679,7 @@ impl FrameworkToolExecutor {
         })))
     }
 
-    async fn execute_org_get_sub_departments(
-        &self,
-        params: Value,
-    ) -> Result<ToolResult> {
+    async fn execute_org_get_sub_departments(&self, params: Value) -> Result<ToolResult> {
         let dept_id = params["department_id"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("department_id is required"))?;
@@ -672,13 +688,16 @@ impl FrameworkToolExecutor {
 
         let sub_depts = org.get_sub_departments(dept_id);
 
-        let depts_json: Vec<Value> = sub_depts.iter().map(|d| {
-            json!({
-                "id": d.id,
-                "name": d.name,
-                "leader_id": d.leader_id,
+        let depts_json: Vec<Value> = sub_depts
+            .iter()
+            .map(|d| {
+                json!({
+                    "id": d.id,
+                    "name": d.name,
+                    "leader_id": d.leader_id,
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(ToolResult::success(json!({
             "parent_id": dept_id,
@@ -687,10 +706,7 @@ impl FrameworkToolExecutor {
         })))
     }
 
-    async fn execute_org_get_subordinates(
-        &self,
-        params: Value,
-    ) -> Result<ToolResult> {
+    async fn execute_org_get_subordinates(&self, params: Value) -> Result<ToolResult> {
         let agent_id = params["agent_id"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("agent_id is required"))?;
@@ -698,7 +714,8 @@ impl FrameworkToolExecutor {
         let org = self.env.organization.read().await;
 
         // Find the department where this Agent belongs, check if it's a leader
-        let agent = org.find_agent(agent_id)
+        let agent = org
+            .find_agent(agent_id)
             .ok_or_else(|| anyhow::anyhow!("Agent not found: {}", agent_id))?;
 
         let mut subordinates = Vec::new();
@@ -708,7 +725,8 @@ impl FrameworkToolExecutor {
                 // Check if it's a department leader
                 if dept.leader_id.as_ref() == Some(&agent_id.to_string()) {
                     // Get other department members as subordinates
-                    subordinates = org.get_department_members(dept_id)
+                    subordinates = org
+                        .get_department_members(dept_id)
                         .into_iter()
                         .filter(|a| a.id != agent_id)
                         .cloned()
@@ -717,13 +735,16 @@ impl FrameworkToolExecutor {
             }
         }
 
-        let subordinates_json: Vec<Value> = subordinates.iter().map(|a| {
-            json!({
-                "id": a.id,
-                "name": a.name,
-                "role": a.role.title,
+        let subordinates_json: Vec<Value> = subordinates
+            .iter()
+            .map(|a| {
+                json!({
+                    "id": a.id,
+                    "name": a.name,
+                    "role": a.role.title,
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(ToolResult::success(json!({
             "agent_id": agent_id,
@@ -735,7 +756,10 @@ impl FrameworkToolExecutor {
 }
 
 /// 使用 domain::tool::CategoryNodeInfo
-fn find_category_node(tree: &crate::domain::tool::CategoryNodeInfo, path: &str) -> Option<crate::domain::tool::CategoryNodeInfo> {
+fn find_category_node(
+    tree: &crate::domain::tool::CategoryNodeInfo,
+    path: &str,
+) -> Option<crate::domain::tool::CategoryNodeInfo> {
     if tree.path == path {
         return Some(tree.clone());
     }
@@ -751,20 +775,25 @@ fn find_category_node(tree: &crate::domain::tool::CategoryNodeInfo, path: &str) 
 
 // ==================== ToolExecutor Trait Implementation ====================
 
-use async_trait::async_trait;
 use crate::infrastructure::tool::ToolExecutor as ToolExecutorTrait;
+use async_trait::async_trait;
 
 #[async_trait]
 impl ToolExecutorTrait for FrameworkToolExecutor {
-    async fn execute(&self, tool_id: &str, params: Value, context: &ToolCallContext) -> Result<Value> {
+    async fn execute(
+        &self,
+        tool_id: &str,
+        params: Value,
+        context: &ToolCallContext,
+    ) -> Result<Value> {
         let result = Self::execute(self, tool_id, params, context).await?;
 
         if result.success {
             Ok(result.data)
         } else {
-            Err(anyhow::anyhow!(
-                result.error.unwrap_or_else(|| "Unknown error".to_string())
-            ))
+            Err(anyhow::anyhow!(result
+                .error
+                .unwrap_or_else(|| "Unknown error".to_string())))
         }
     }
 

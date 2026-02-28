@@ -1,7 +1,7 @@
 use imitatort::{
+    core::store::{MessageFilter, Store},
     domain::{Message, MessageTarget},
     infrastructure::store::SqliteStore,
-    core::store::{MessageFilter, Store},
 };
 use std::sync::Arc;
 

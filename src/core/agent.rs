@@ -2,9 +2,9 @@
 //!
 //! Responsible for interacting with LLM and executing ReAct decisions
 
-use anyhow::Result;
 use crate::domain::{Agent, Message, MessageTarget};
 use crate::infrastructure::llm::{OpenAIClient, Tool, ToolCall, ToolResponse};
+use anyhow::Result;
 
 /// Agent Runtime - Responsible for ReAct thinking and execution
 pub struct AgentRuntime {
@@ -21,10 +21,7 @@ impl AgentRuntime {
             agent.llm_config.base_url.clone(),
         );
 
-        Ok(Self {
-            agent,
-            llm,
-        })
+        Ok(Self { agent, llm })
     }
 
     /// Get Agent ID
@@ -54,7 +51,10 @@ impl AgentRuntime {
             let reasoning_result = self.reason_step(&current_context, &tools).await?;
 
             match reasoning_result {
-                ReActStepResult::Action { tool_calls, observation } => {
+                ReActStepResult::Action {
+                    tool_calls,
+                    observation,
+                } => {
                     // Step 2: Execute actions and observe results
                     let observations = self.execute_actions(tool_calls, &current_context).await?;
 
@@ -95,25 +95,35 @@ impl AgentRuntime {
                     task: content,
                 }))
             }
-            ToolResponse::ToolCalls { content, tool_calls } => {
+            ToolResponse::ToolCalls {
+                content,
+                tool_calls,
+            } => {
                 // If there are tool calls, execute them
                 Ok(ReActStepResult::Action {
                     tool_calls,
-                    observation: content
+                    observation: content,
                 })
             }
         }
     }
 
     /// Execute multiple actions and return observations
-    async fn execute_actions(&self, tool_calls: Vec<ToolCall>, _context: &Context) -> Result<Vec<String>> {
+    async fn execute_actions(
+        &self,
+        tool_calls: Vec<ToolCall>,
+        _context: &Context,
+    ) -> Result<Vec<String>> {
         let mut observations = Vec::new();
 
         // Execute each tool call sequentially (could be parallelized depending on dependencies)
         for tool_call in tool_calls {
             // In a real implementation, this would look up the actual tool function and execute it
             // For now, we'll simulate the execution and return a placeholder result
-            let observation = format!("Executed tool '{}' with arguments: {}. Result: Tool executed successfully.", tool_call.name, tool_call.arguments);
+            let observation = format!(
+                "Executed tool '{}' with arguments: {}. Result: Tool executed successfully.",
+                tool_call.name, tool_call.arguments
+            );
             observations.push(observation);
         }
 
@@ -124,7 +134,8 @@ impl AgentRuntime {
     fn build_react_prompt(&self, context: &Context, tools: &[Tool]) -> String {
         let mut prompt = format!(
             "You are {}, {}. ",
-            self.agent.name, self.agent.system_prompt()
+            self.agent.name,
+            self.agent.system_prompt()
         );
 
         if let Some(org_info) = &context.organization_info {
@@ -144,9 +155,7 @@ impl AgentRuntime {
                 };
                 prompt.push_str(&format!(
                     "- From {}: {} (to: {})\n",
-                    msg.from,
-                    msg.content,
-                    target_desc
+                    msg.from, msg.content, target_desc
                 ));
             }
         }
@@ -206,7 +215,8 @@ impl AgentRuntime {
     fn build_thinking_prompt(&self, context: &Context) -> String {
         let mut prompt = format!(
             "You are {}, {}. ",
-            self.agent.name, self.agent.system_prompt()
+            self.agent.name,
+            self.agent.system_prompt()
         );
 
         if let Some(org_info) = &context.organization_info {
@@ -226,9 +236,7 @@ impl AgentRuntime {
                 };
                 prompt.push_str(&format!(
                     "- From {}: {} (to: {})\n",
-                    msg.from,
-                    msg.content,
-                    target_desc
+                    msg.from, msg.content, target_desc
                 ));
             }
         }
@@ -251,11 +259,10 @@ impl AgentRuntime {
 enum ReActStepResult {
     Action {
         tool_calls: Vec<ToolCall>,
-        observation: String
+        observation: String,
     },
     FinalDecision(Decision),
 }
-
 
 /// Context for Agent thinking
 #[derive(Debug, Clone, Default)]

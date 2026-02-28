@@ -2,8 +2,8 @@
 //!
 //! 测试重构后的Agent功能，包括工具监听能力
 
-use imitatort::domain::agent::{Agent, TriggerCondition, Role, LLMConfig};
 use imitatort::core::watchdog_agent::{WatchdogAgent, WatchdogRule};
+use imitatort::domain::agent::{Agent, LLMConfig, Role, TriggerCondition};
 use std::sync::Arc;
 
 #[test]
@@ -20,14 +20,22 @@ fn test_agent_creation_with_tool_watching() {
     assert_eq!(agent.trigger_conditions.len(), 0);
 
     // 验证Agent可以通过构建器方法添加工具监听
-    let agent_with_watching = Agent::new("test_agent2", "Test Agent 2",
+    let agent_with_watching = Agent::new(
+        "test_agent2",
+        "Test Agent 2",
         Role::simple("Tester", "Another test agent"),
-        LLMConfig::openai("test-key"))
-        .with_watched_tools(vec!["tool1".to_string(), "tool2".to_string()])
-        .with_trigger_conditions(vec![
-            TriggerCondition::NumericRange { min: 0.0, max: 100.0 },
-            TriggerCondition::StringContains { content: "success".to_string() },
-        ]);
+        LLMConfig::openai("test-key"),
+    )
+    .with_watched_tools(vec!["tool1".to_string(), "tool2".to_string()])
+    .with_trigger_conditions(vec![
+        TriggerCondition::NumericRange {
+            min: 0.0,
+            max: 100.0,
+        },
+        TriggerCondition::StringContains {
+            content: "success".to_string(),
+        },
+    ]);
 
     assert_eq!(agent_with_watching.watched_tools.len(), 2);
     assert_eq!(agent_with_watching.trigger_conditions.len(), 2);
@@ -37,13 +45,21 @@ fn test_agent_creation_with_tool_watching() {
 
 #[test]
 fn test_agent_with_individual_watching_config() {
-    let agent = Agent::new("watch_agent", "Watcher Agent",
+    let agent = Agent::new(
+        "watch_agent",
+        "Watcher Agent",
         Role::simple("Watcher", "An agent that watches tools"),
-        LLMConfig::openai("test-key"))
-        .add_watched_tool("database_query")
-        .add_watched_tool("api_call")
-        .add_trigger_condition(TriggerCondition::NumericRange { min: 10.0, max: 90.0 })
-        .add_trigger_condition(TriggerCondition::StringContains { content: "complete".to_string() });
+        LLMConfig::openai("test-key"),
+    )
+    .add_watched_tool("database_query")
+    .add_watched_tool("api_call")
+    .add_trigger_condition(TriggerCondition::NumericRange {
+        min: 10.0,
+        max: 90.0,
+    })
+    .add_trigger_condition(TriggerCondition::StringContains {
+        content: "complete".to_string(),
+    });
 
     assert_eq!(agent.watched_tools.len(), 2);
     assert_eq!(agent.trigger_conditions.len(), 2);
@@ -53,9 +69,12 @@ fn test_agent_with_individual_watching_config() {
 
 #[tokio::test]
 async fn test_watchdog_agent_creation_and_rule_management() {
-    let agent = Agent::new("watchdog_system", "Watchdog Agent",
+    let agent = Agent::new(
+        "watchdog_system",
+        "Watchdog Agent",
         Role::simple("System Monitor", "System monitoring agent"),
-        LLMConfig::openai("test-key"));
+        LLMConfig::openai("test-key"),
+    );
 
     let watchdog_agent = WatchdogAgent::new(agent);
 
@@ -63,7 +82,10 @@ async fn test_watchdog_agent_creation_and_rule_management() {
     let rule = WatchdogRule::new(
         "test_rule",
         "test_tool",
-        TriggerCondition::NumericRange { min: 10.0, max: 20.0 },
+        TriggerCondition::NumericRange {
+            min: 10.0,
+            max: 20.0,
+        },
         "test_agent",
     );
 
@@ -83,13 +105,16 @@ async fn test_watchdog_agent_creation_and_rule_management() {
 
 #[tokio::test]
 async fn test_watchdog_agent_event_processing() {
-    use imitatort::domain::tool::ToolCallContext;
     use imitatort::core::watchdog_agent::ToolExecutionEvent;
+    use imitatort::domain::tool::ToolCallContext;
     use serde_json::json;
 
-    let agent = Agent::new("watchdog_system", "Watchdog Agent",
+    let agent = Agent::new(
+        "watchdog_system",
+        "Watchdog Agent",
         Role::simple("System Monitor", "System monitoring agent"),
-        LLMConfig::openai("test-key"));
+        LLMConfig::openai("test-key"),
+    );
 
     let watchdog_agent = WatchdogAgent::new(agent);
 
@@ -97,7 +122,10 @@ async fn test_watchdog_agent_event_processing() {
     let rule = WatchdogRule::new(
         "numeric_rule",
         "test_tool",
-        TriggerCondition::NumericRange { min: 10.0, max: 20.0 },
+        TriggerCondition::NumericRange {
+            min: 10.0,
+            max: 20.0,
+        },
         "triggered_agent",
     );
 
@@ -120,7 +148,10 @@ async fn test_watchdog_agent_event_processing() {
         context: ToolCallContext::new("caller".to_string()),
     };
 
-    let triggered_agents = watchdog_agent.process_event(&event_out_of_range).await.unwrap();
+    let triggered_agents = watchdog_agent
+        .process_event(&event_out_of_range)
+        .await
+        .unwrap();
     assert_eq!(triggered_agents.len(), 0);
 }
 

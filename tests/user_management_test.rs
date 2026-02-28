@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use tokio;
 use serde_json::json;
+use tokio;
 
-use imitatort::domain::user::User;
-use imitatort::domain::invitation_code::InvitationCode;
 use imitatort::core::store::Store;
-use imitatort::infrastructure::store::SqliteStore;
+use imitatort::domain::invitation_code::InvitationCode;
+use imitatort::domain::user::User;
 use imitatort::infrastructure::auth::{JwtService, PasswordService};
+use imitatort::infrastructure::store::SqliteStore;
 
 #[tokio::test]
 async fn test_user_registration_flow() {
@@ -24,7 +24,10 @@ async fn test_user_registration_flow() {
     );
 
     assert_eq!(chairman_user.employee_id, "00001");
-    assert!(matches!(chairman_user.position, imitatort::domain::user::Position::Chairman));
+    assert!(matches!(
+        chairman_user.position,
+        imitatort::domain::user::Position::Chairman
+    ));
 
     // 2. 测试邀请码生成和验证
     let invitation_code = InvitationCode::new("chairman_user".to_string(), Some(1));
@@ -41,7 +44,10 @@ async fn test_user_registration_flow() {
     );
 
     assert_eq!(management_user.employee_id, "00002");
-    assert!(matches!(management_user.position, imitatort::domain::user::Position::Management));
+    assert!(matches!(
+        management_user.position,
+        imitatort::domain::user::Position::Management
+    ));
 
     // 4. Test regular employee user creation
     let employee_password_hash = PasswordService::hash_password("password123").unwrap();
@@ -55,7 +61,10 @@ async fn test_user_registration_flow() {
     );
 
     assert_eq!(employee_user.employee_id, "10001");
-    assert!(matches!(employee_user.position, imitatort::domain::user::Position::Employee));
+    assert!(matches!(
+        employee_user.position,
+        imitatort::domain::user::Position::Employee
+    ));
 
     println!("All user registration flow tests passed!");
 }

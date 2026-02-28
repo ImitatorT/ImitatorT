@@ -10,7 +10,10 @@ async fn test_company_creation_from_config() {
     let mut org = Organization::new();
 
     // Add department
-    org.add_department(Department::top_level("engineering", "Engineering Department"));
+    org.add_department(Department::top_level(
+        "engineering",
+        "Engineering Department",
+    ));
     org.add_department(Department::top_level("product", "Product Department"));
     org.add_department(Department::top_level("design", "Design Department"));
 
@@ -18,16 +21,23 @@ async fn test_company_creation_from_config() {
     let ceo = Agent::new(
         "ceo",
         "CEO",
-        Role::simple("Chief Executive Officer", "You are the CEO, responsible for company strategic decisions"),
+        Role::simple(
+            "Chief Executive Officer",
+            "You are the CEO, responsible for company strategic decisions",
+        ),
         LLMConfig::openai("test-key"),
     );
 
     let engineering_manager = Agent::new(
         "eng-manager",
         "Engineering Manager",
-        Role::simple("Engineering Manager", "You are the Engineering Manager, responsible for technical team management"),
+        Role::simple(
+            "Engineering Manager",
+            "You are the Engineering Manager, responsible for technical team management",
+        ),
         LLMConfig::openai("test-key"),
-    ).with_department("engineering");
+    )
+    .with_department("engineering");
 
     let product_manager = Agent::new(
         "prod-manager",
@@ -70,7 +80,10 @@ async fn test_company_creation_from_config() {
     assert!(organization.find_agent("prod-manager").is_some());
 
     // 验证部门存在
-    assert!(organization.departments.iter().any(|d| d.id == "engineering"));
+    assert!(organization
+        .departments
+        .iter()
+        .any(|d| d.id == "engineering"));
     assert!(organization.departments.iter().any(|d| d.id == "product"));
     assert!(organization.departments.iter().any(|d| d.id == "design"));
 }
@@ -85,16 +98,21 @@ async fn test_company_message_flow() {
     let manager = Agent::new(
         "it-manager",
         "IT Manager",
-        Role::simple("IT Manager", "You are the IT Manager, responsible for IT department management"),
+        Role::simple(
+            "IT Manager",
+            "You are the IT Manager, responsible for IT department management",
+        ),
         LLMConfig::openai("test-key"),
-    ).with_department("it");
+    )
+    .with_department("it");
 
     let developer = Agent::new(
         "junior-dev",
         "初级开发",
         Role::simple("Junior Developer", "你是初级开发工程师，负责代码实现"),
         LLMConfig::openai("test-key"),
-    ).with_department("it");
+    )
+    .with_department("it");
 
     org.add_agent(manager);
     org.add_agent(developer);
@@ -143,16 +161,24 @@ async fn test_company_persistence() {
     let hr_director = Agent::new(
         "hr-director",
         "HR Director",
-        Role::simple("HR Director", "You are the HR Director, responsible for human resource management"),
+        Role::simple(
+            "HR Director",
+            "You are the HR Director, responsible for human resource management",
+        ),
         LLMConfig::openai("test-key"),
-    ).with_department("hr");
+    )
+    .with_department("hr");
 
     let hr_specialist = Agent::new(
         "hr-specialist",
         "HR Specialist",
-        Role::simple("HR Specialist", "You are the HR Specialist, responsible for daily HR operations"),
+        Role::simple(
+            "HR Specialist",
+            "You are the HR Specialist, responsible for daily HR operations",
+        ),
         LLMConfig::openai("test-key"),
-    ).with_department("hr");
+    )
+    .with_department("hr");
 
     org.add_agent(hr_director);
     org.add_agent(hr_specialist);
@@ -209,28 +235,38 @@ async fn test_organization_hierarchy() {
         "CEO",
         Role::simple("Chief Executive Officer", "你是CEO，负责公司整体战略"),
         LLMConfig::openai("test-key"),
-    ).with_department("executive");
+    )
+    .with_department("executive");
 
     let cto = Agent::new(
         "cto",
         "CTO",
         Role::simple("Chief Technology Officer", "你是CTO，负责技术战略"),
         LLMConfig::openai("test-key"),
-    ).with_department("engineering");
+    )
+    .with_department("engineering");
 
     let backend_lead = Agent::new(
         "backend-lead",
         "Backend Lead",
-        Role::simple("Backend Lead", "You are the Backend Lead, responsible for backend technology management"),
+        Role::simple(
+            "Backend Lead",
+            "You are the Backend Lead, responsible for backend technology management",
+        ),
         LLMConfig::openai("test-key"),
-    ).with_department("backend");
+    )
+    .with_department("backend");
 
     let frontend_lead = Agent::new(
         "frontend-lead",
         "Frontend Lead",
-        Role::simple("Frontend Lead", "You are the Frontend Lead, responsible for frontend technology management"),
+        Role::simple(
+            "Frontend Lead",
+            "You are the Frontend Lead, responsible for frontend technology management",
+        ),
         LLMConfig::openai("test-key"),
-    ).with_department("frontend");
+    )
+    .with_department("frontend");
 
     org.add_agent(ceo);
     org.add_agent(cto);
@@ -260,7 +296,10 @@ async fn test_organization_hierarchy() {
 
     // 验证部门层级关系（虽然数据结构可能不直接暴露parent-child关系，但我们至少验证部门都存在）
     assert!(organization.departments.iter().any(|d| d.id == "executive"));
-    assert!(organization.departments.iter().any(|d| d.id == "engineering"));
+    assert!(organization
+        .departments
+        .iter()
+        .any(|d| d.id == "engineering"));
     assert!(organization.departments.iter().any(|d| d.id == "backend"));
     assert!(organization.departments.iter().any(|d| d.id == "frontend"));
 
@@ -325,5 +364,9 @@ async fn test_company_config_validation() {
 
     assert_eq!(single_company.name(), "Single Agent Company");
     assert_eq!(single_company.organization().await.agents.len(), 1);
-    assert!(single_company.organization().await.find_agent("single-agent").is_some());
+    assert!(single_company
+        .organization()
+        .await
+        .find_agent("single-agent")
+        .is_some());
 }

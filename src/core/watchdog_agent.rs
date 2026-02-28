@@ -1,13 +1,13 @@
 //! Watchdog Agent - System agent that monitors tool executions and triggers other agents
 
-use std::sync::Arc;
-use dashmap::DashMap;
-use tokio::sync::RwLock;
 use anyhow::Result;
-use tracing::{debug, error, info};
+use dashmap::DashMap;
 use serde_json::Value;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{debug, error, info};
 
-use crate::domain::{Agent, tool::ToolCallContext, TriggerCondition};
+use crate::domain::{tool::ToolCallContext, Agent, TriggerCondition};
 
 /// 工具执行事件
 #[derive(Debug, Clone)]
@@ -80,9 +80,9 @@ impl WatchdogRule {
         }
 
         match event {
-            ToolExecutionEvent::PostExecute { tool_id, result, .. } if tool_id == &self.tool_id => {
-                self.evaluate_condition(result)
-            }
+            ToolExecutionEvent::PostExecute {
+                tool_id, result, ..
+            } if tool_id == &self.tool_id => self.evaluate_condition(result),
             _ => false,
         }
     }
@@ -97,25 +97,25 @@ impl WatchdogRule {
                 } else {
                     false
                 }
-            },
+            }
             TriggerCondition::StringContains { content } => {
                 if let Some(str_val) = result.as_str() {
                     str_val.contains(content.as_str())
                 } else {
                     false
                 }
-            },
+            }
             TriggerCondition::StatusMatches { expected_status } => {
                 if let Some(status_val) = result.as_str() {
                     status_val == expected_status
                 } else {
                     false
                 }
-            },
+            }
             TriggerCondition::CustomExpression { .. } => {
                 // 简单实现，实际应用中可能需要更复杂的表达式解析
                 false
-            },
+            }
         }
     }
 }
@@ -131,11 +131,22 @@ pub struct DefaultEventHandler;
 impl EventHandler for DefaultEventHandler {
     fn handle_event(&self, event: &ToolExecutionEvent) -> Result<()> {
         match event {
-            ToolExecutionEvent::PostExecute { tool_id, result, context: _ } => {
-                debug!("Tool {} executed successfully with result: {:?}", tool_id, result);
+            ToolExecutionEvent::PostExecute {
+                tool_id,
+                result,
+                context: _,
+            } => {
+                debug!(
+                    "Tool {} executed successfully with result: {:?}",
+                    tool_id, result
+                );
                 // 这里可以添加具体的处理逻辑
             }
-            ToolExecutionEvent::Error { tool_id, error, context: _ } => {
+            ToolExecutionEvent::Error {
+                tool_id,
+                error,
+                context: _,
+            } => {
                 error!("Tool {} execution failed: {}", tool_id, error);
             }
             _ => {}
@@ -230,7 +241,11 @@ impl WatchdogAgent {
     pub fn set_rule_enabled(&self, rule_id: &str, enabled: bool) -> bool {
         if let Some(mut rule) = self.rules.get_mut(rule_id) {
             rule.enabled = enabled;
-            info!("Rule {} is now {}", rule_id, if enabled { "enabled" } else { "disabled" });
+            info!(
+                "Rule {} is now {}",
+                rule_id,
+                if enabled { "enabled" } else { "disabled" }
+            );
             true
         } else {
             false
@@ -245,7 +260,10 @@ impl WatchdogAgent {
     /// 启用/禁用整个框架
     pub async fn set_enabled(&self, enabled: bool) {
         *self.enabled.write().await = enabled;
-        info!("Watchdog agent is now {}", if enabled { "enabled" } else { "disabled" });
+        info!(
+            "Watchdog agent is now {}",
+            if enabled { "enabled" } else { "disabled" }
+        );
     }
 
     /// 处理工具执行事件
@@ -258,7 +276,8 @@ impl WatchdogAgent {
         self.event_dispatcher.dispatch(event).await;
 
         // 检查事件是否匹配任何规则
-        let matched_rule_ids: Vec<String> = self.rules
+        let matched_rule_ids: Vec<String> = self
+            .rules
             .iter()
             .filter(|rule| rule.should_trigger(event))
             .map(|rule| rule.id.clone())
@@ -269,7 +288,10 @@ impl WatchdogAgent {
         for rule_id in matched_rule_ids {
             if let Some(rule) = self.rules.get(&rule_id) {
                 triggered_agents.push(rule.target_agent_id.clone());
-                info!("Rule {} triggered for agent {}", rule.id, rule.target_agent_id);
+                info!(
+                    "Rule {} triggered for agent {}",
+                    rule.id, rule.target_agent_id
+                );
             }
         }
 
@@ -288,14 +310,13 @@ impl WatchdogAgent {
 }
 
 impl WatchdogAgent {
-    
     /// 为Agent注册私聊唤醒事件
     pub fn register_direct_message_watcher(&self, agent_id: &str) -> Result<()> {
         let rule = WatchdogRule::new(
             format!("direct_msg_{}", agent_id),
             "message.send_direct".to_string(), // 私聊消息工具
             TriggerCondition::StringContains {
-                content: format!("\"target\":\"{}\"", agent_id) // 当消息目标包含agent_id时触发
+                content: format!("\"target\":\"{}\"", agent_id), // 当消息目标包含agent_id时触发
             },
             agent_id.to_string(),
         );
@@ -309,7 +330,7 @@ impl WatchdogAgent {
             format!("mention_{}", agent_id),
             "message.send_group".to_string(), // 群聊消息工具
             TriggerCondition::StringContains {
-                content: format!("\"mention_agent_ids\":[\"{}\"", agent_id) // 当艾特列表包含agent_id时触发
+                content: format!("\"mention_agent_ids\":[\"{}\"", agent_id), // 当艾特列表包含agent_id时触发
             },
             agent_id.to_string(),
         );
@@ -323,9 +344,7 @@ impl WatchdogAgent {
         self.register_mention_watcher(agent_id)?;
         Ok(())
     }
-
-    
-    }
+}
 
 impl Clone for WatchdogAgent {
     fn clone(&self) -> Self {
@@ -346,9 +365,7 @@ pub struct WatchdogClient {
 impl WatchdogClient {
     /// Create a new client
     pub fn new(watchdog_agent: Arc<WatchdogAgent>) -> Self {
-        Self {
-            watchdog_agent,
-        }
+        Self { watchdog_agent }
     }
 
     /// Register a rule to watch a specific tool

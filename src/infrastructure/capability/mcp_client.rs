@@ -29,11 +29,7 @@ impl McpHttpClient {
             "params": params
         });
 
-        let response = self.client
-            .post(&url)
-            .json(&payload)
-            .send()
-            .await?;
+        let response = self.client.post(&url).json(&payload).send().await?;
 
         let result: Value = response.json().await?;
         Ok(result)
@@ -112,12 +108,8 @@ impl McpWebSocketClient {
                         Ok(response)
                     }
                 }
-                Message::Close(_) => {
-                    Err(anyhow::anyhow!("Connection closed by server"))
-                }
-                _ => {
-                    Err(anyhow::anyhow!("Unexpected message type"))
-                }
+                Message::Close(_) => Err(anyhow::anyhow!("Connection closed by server")),
+                _ => Err(anyhow::anyhow!("Unexpected message type")),
             }
         } else {
             Err(anyhow::anyhow!("No response received"))
@@ -262,7 +254,9 @@ impl McpTransport {
         match self {
             McpTransport::Http(client) => client.call_capability(method, params).await,
             McpTransport::WebSocket(client) => client.call_capability(method, params).await,
-            McpTransport::Sse(_) => Err(anyhow::anyhow!("SSE transport doesn't support direct calls")),
+            McpTransport::Sse(_) => Err(anyhow::anyhow!(
+                "SSE transport doesn't support direct calls"
+            )),
             McpTransport::Stdio(client) => client.call_capability_sync(method, params),
         }
     }
@@ -270,18 +264,28 @@ impl McpTransport {
     pub async fn list_capabilities(&self) -> Result<Value> {
         match self {
             McpTransport::Http(client) => client.list_capabilities().await,
-            McpTransport::WebSocket(_) => Err(anyhow::anyhow!("WebSocket transport doesn't support listing capabilities directly")),
-            McpTransport::Sse(_) => Err(anyhow::anyhow!("SSE transport doesn't support listing capabilities")),
-            McpTransport::Stdio(_) => Err(anyhow::anyhow!("Stdio transport doesn't support listing capabilities")),
+            McpTransport::WebSocket(_) => Err(anyhow::anyhow!(
+                "WebSocket transport doesn't support listing capabilities directly"
+            )),
+            McpTransport::Sse(_) => Err(anyhow::anyhow!(
+                "SSE transport doesn't support listing capabilities"
+            )),
+            McpTransport::Stdio(_) => Err(anyhow::anyhow!(
+                "Stdio transport doesn't support listing capabilities"
+            )),
         }
     }
 
     pub async fn discover_capabilities(&self, requested: Option<Vec<String>>) -> Result<Value> {
         match self {
             McpTransport::Http(client) => client.discover_capabilities(requested).await,
-            McpTransport::WebSocket(_) => Err(anyhow::anyhow!("WebSocket transport doesn't support discovery directly")),
+            McpTransport::WebSocket(_) => Err(anyhow::anyhow!(
+                "WebSocket transport doesn't support discovery directly"
+            )),
             McpTransport::Sse(_) => Err(anyhow::anyhow!("SSE transport doesn't support discovery")),
-            McpTransport::Stdio(_) => Err(anyhow::anyhow!("Stdio transport doesn't support discovery")),
+            McpTransport::Stdio(_) => {
+                Err(anyhow::anyhow!("Stdio transport doesn't support discovery"))
+            }
         }
     }
 

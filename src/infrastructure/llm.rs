@@ -9,8 +9,8 @@ use async_openai::types::chat::{
     ChatCompletionMessageToolCall, ChatCompletionMessageToolCalls,
     ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
-    ChatCompletionRequestUserMessageArgs, ChatCompletionTool, ChatCompletionTools,
-    ChatCompletionToolChoiceOption, CreateChatCompletionRequestArgs, ToolChoiceOptions,
+    ChatCompletionRequestUserMessageArgs, ChatCompletionTool, ChatCompletionToolChoiceOption,
+    ChatCompletionTools, CreateChatCompletionRequestArgs, ToolChoiceOptions,
 };
 use async_openai::types::chat::{FunctionCall, FunctionObject};
 use async_openai::Client;
@@ -92,7 +92,11 @@ impl OpenAIClient {
     ///
     /// # Returns
     /// * `ToolResponse` - 包含 assistant 的回复或 tool 调用请求
-    pub async fn chat_with_tools(&self, messages: Vec<Message>, tools: Vec<Tool>) -> Result<ToolResponse> {
+    pub async fn chat_with_tools(
+        &self,
+        messages: Vec<Message>,
+        tools: Vec<Tool>,
+    ) -> Result<ToolResponse> {
         let request_messages = self.build_request_messages(messages)?;
         let chat_tools = self.build_chat_tools(tools)?;
 
@@ -100,7 +104,9 @@ impl OpenAIClient {
             .model(&self.model)
             .messages(request_messages)
             .tools(chat_tools)
-            .tool_choice(ChatCompletionToolChoiceOption::Mode(ToolChoiceOptions::Auto))
+            .tool_choice(ChatCompletionToolChoiceOption::Mode(
+                ToolChoiceOptions::Auto,
+            ))
             .build()
             .context("构建请求失败")?;
 
@@ -125,7 +131,8 @@ impl OpenAIClient {
                 .into_iter()
                 .filter_map(|tc| match tc {
                     ChatCompletionMessageToolCalls::Function(func_call) => {
-                        let args = serde_json::from_str(&func_call.function.arguments).unwrap_or(Value::Null);
+                        let args = serde_json::from_str(&func_call.function.arguments)
+                            .unwrap_or(Value::Null);
                         Some(ToolCall {
                             id: func_call.id,
                             name: func_call.function.name,
@@ -145,13 +152,14 @@ impl OpenAIClient {
         }
 
         // 返回普通文本回复
-        Ok(ToolResponse::Message(
-            message.content.unwrap_or_default(),
-        ))
+        Ok(ToolResponse::Message(message.content.unwrap_or_default()))
     }
 
     /// 构建请求消息
-    fn build_request_messages(&self, messages: Vec<Message>) -> Result<Vec<ChatCompletionRequestMessage>> {
+    fn build_request_messages(
+        &self,
+        messages: Vec<Message>,
+    ) -> Result<Vec<ChatCompletionRequestMessage>> {
         messages
             .into_iter()
             .map(|msg| match msg.role.as_str() {
@@ -174,13 +182,15 @@ impl OpenAIClient {
                         let tool_calls: Vec<ChatCompletionMessageToolCalls> = calls
                             .into_iter()
                             .map(|c| {
-                                ChatCompletionMessageToolCalls::Function(ChatCompletionMessageToolCall {
-                                    id: c.id,
-                                    function: FunctionCall {
-                                        name: c.name,
-                                        arguments: c.arguments.to_string(),
+                                ChatCompletionMessageToolCalls::Function(
+                                    ChatCompletionMessageToolCall {
+                                        id: c.id,
+                                        function: FunctionCall {
+                                            name: c.name,
+                                            arguments: c.arguments.to_string(),
+                                        },
                                     },
-                                })
+                                )
                             })
                             .collect();
                         args.tool_calls(tool_calls);

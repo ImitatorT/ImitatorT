@@ -23,7 +23,11 @@ pub struct Message {
 
 impl Message {
     /// Create private message
-    pub fn private(from: impl Into<String>, to: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn private(
+        from: impl Into<String>,
+        to: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             from: from.into(),
@@ -36,7 +40,11 @@ impl Message {
     }
 
     /// Create group message
-    pub fn group(from: impl Into<String>, group_id: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn group(
+        from: impl Into<String>,
+        group_id: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             from: from.into(),

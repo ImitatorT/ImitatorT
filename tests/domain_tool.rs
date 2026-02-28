@@ -1,6 +1,6 @@
 //! Tool 领域实体测试
 
-use imitatort::domain::tool::{CategoryPath, Tool, JsonSchema, ReturnType};
+use imitatort::domain::tool::{CategoryPath, JsonSchema, ReturnType, Tool};
 use serde_json::json;
 
 #[test]
@@ -53,10 +53,8 @@ fn test_tool_creation() {
         JsonSchema::object()
             .property("path", JsonSchema::string().description("文件路径"))
             .build(),
-    ).with_returns(ReturnType::new(
-        "文件内容",
-        json!({"type": "string"}),
-    ));
+    )
+    .with_returns(ReturnType::new("文件内容", json!({"type": "string"})));
 
     assert_eq!(tool.id, "file.read");
     assert_eq!(tool.name, "读取文件");

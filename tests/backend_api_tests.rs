@@ -6,8 +6,8 @@ use tokio::sync::broadcast;
 use tokio::time::Duration;
 
 use imitatort::domain::{Agent, LLMConfig, Message, MessageTarget, Organization, Role};
-use imitatort::infrastructure::web::{create_router, AppState};
 use imitatort::infrastructure::auth::JwtService;
+use imitatort::infrastructure::web::{create_router, AppState};
 
 // 创建测试用的app状态
 fn create_test_app_state() -> Arc<AppState> {

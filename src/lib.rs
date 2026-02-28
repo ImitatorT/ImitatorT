@@ -51,14 +51,14 @@ pub mod domain;
 /// 核心层 - 提供运行时能力和基础服务
 pub mod core {
     pub mod agent;
+    pub mod capability;
+    pub mod capability_provider;
     pub mod config;
     pub mod messaging;
     pub mod skill;
     pub mod store;
     pub mod tool;
     pub mod tool_provider;
-    pub mod capability;
-    pub mod capability_provider;
     pub mod watchdog;
     pub mod watchdog_agent;
 }
@@ -73,13 +73,13 @@ pub mod application {
 
 /// 基础设施层 - 外部集成和服务
 pub mod infrastructure {
+    pub mod auth;
+    pub mod capability;
     pub mod llm;
     pub mod logger;
     pub mod store;
-    pub mod web;
     pub mod tool;
-    pub mod capability;
-    pub mod auth;
+    pub mod web;
 }
 
 // ================================
@@ -107,8 +107,10 @@ pub use infrastructure::web::start_web_server;
 // ================================
 
 /// Agent Entity - Core representation of virtual employees
-pub use domain::{Agent, AgentId, Department, Group, GroupVisibility, LLMConfig, Message, MessageTarget, Organization, Role, TriggerCondition};
-
+pub use domain::{
+    Agent, AgentId, Department, Group, GroupVisibility, LLMConfig, Message, MessageTarget,
+    Organization, Role, TriggerCondition,
+};
 
 /// 用户实体 - 系统用户
 pub use domain::user::User;
@@ -117,22 +119,38 @@ pub use domain::user::User;
 // 工具和能力系统 - 扩展功能
 // ================================
 
-/// 工具系统相关类型
-pub use domain::tool::{Tool, CategoryPath, ReturnType, ToolProvider, MatchType, CategoryNodeInfo, ToolCallContext, JsonSchema};
 pub use core::tool::ToolRegistry;
-pub use infrastructure::tool::{ToolExecutor, ToolResult, ToolExecutorRegistry, FrameworkToolExecutor, ToolEnvironment};
 pub use core::tool_provider::{CompositeToolProvider, FrameworkToolProvider, RegistryToolProvider};
+/// 工具系统相关类型
+pub use domain::tool::{
+    CategoryNodeInfo, CategoryPath, JsonSchema, MatchType, ReturnType, Tool, ToolCallContext,
+    ToolProvider,
+};
+pub use infrastructure::tool::{
+    FrameworkToolExecutor, ToolEnvironment, ToolExecutor, ToolExecutorRegistry, ToolResult,
+};
 
-/// 能力系统相关类型
-pub use domain::capability::{Capability, CapabilityPath, CapabilityProvider, CapabilityAccessType, SkillCapabilityBinding, CapabilityCallContext};
 pub use core::capability::CapabilityRegistry;
-pub use infrastructure::capability::{CapabilityExecutor, CapabilityResult, CapabilityExecutorRegistry, McpServer, McpClient, McpProtocolHandler};
-pub use core::capability_provider::{CompositeCapabilityProvider, FrameworkCapabilityProvider, RegistryCapabilityProvider};
+pub use core::capability_provider::{
+    CompositeCapabilityProvider, FrameworkCapabilityProvider, RegistryCapabilityProvider,
+};
+/// 能力系统相关类型
+pub use domain::capability::{
+    Capability, CapabilityAccessType, CapabilityCallContext, CapabilityPath, CapabilityProvider,
+    SkillCapabilityBinding,
+};
+pub use infrastructure::capability::{
+    CapabilityExecutor, CapabilityExecutorRegistry, CapabilityResult, McpClient,
+    McpProtocolHandler, McpServer,
+};
 
-/// 技能系统相关类型
-pub use domain::skill::{Skill, SkillToolBinding, BindingType, ToolAccessType};
-pub use domain::skill::{Skill as DomainSkill, SkillToolBinding as DomainSkillToolBinding, BindingType as DomainBindingType, ToolAccessType as DomainToolAccessType};
 pub use core::skill::SkillManager;
+/// 技能系统相关类型
+pub use domain::skill::{BindingType, Skill, SkillToolBinding, ToolAccessType};
+pub use domain::skill::{
+    BindingType as DomainBindingType, Skill as DomainSkill,
+    SkillToolBinding as DomainSkillToolBinding, ToolAccessType as DomainToolAccessType,
+};
 
 // ================================
 // 存储和基础设施
@@ -146,8 +164,7 @@ pub use infrastructure::store::SqliteStore;
 pub use config::AppConfig;
 
 /// Watchdog Agent相关类型
-pub use core::watchdog_agent::{WatchdogAgent, WatchdogRule, ToolExecutionEvent, WatchdogClient};
+pub use core::watchdog_agent::{ToolExecutionEvent, WatchdogAgent, WatchdogClient, WatchdogRule};
 
 /// 错误类型定义
 pub use errors::{ImitatorError, Result as ImitatorResult};
-

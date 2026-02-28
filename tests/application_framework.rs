@@ -133,5 +133,13 @@ async fn test_company_load_from_sqlite() {
     // 使用 VirtualCompany::from_sqlite 加载
     let company2 = VirtualCompany::from_sqlite(&db_path).await.unwrap();
     assert_eq!(company2.organization().await.agents.len(), 1);
-    assert_eq!(company2.organization().await.find_agent("dev1").unwrap().name, "开发者");
+    assert_eq!(
+        company2
+            .organization()
+            .await
+            .find_agent("dev1")
+            .unwrap()
+            .name,
+        "开发者"
+    );
 }

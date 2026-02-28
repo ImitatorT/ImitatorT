@@ -23,28 +23,26 @@ pub mod condition {
                     } else {
                         false
                     }
-                },
+                }
                 TriggerCondition::StringContains { content } => {
                     if let Some(str_val) = result.as_str() {
                         str_val.contains(content)
                     } else {
                         false
                     }
-                },
+                }
                 TriggerCondition::StatusMatches { expected_status } => {
                     if let Some(status_val) = result.as_str() {
                         status_val == expected_status
                     } else {
                         false
                     }
-                },
+                }
                 TriggerCondition::CustomExpression { .. } => {
                     // 简单实现，实际应用中可能需要更复杂的表达式解析
                     false
-                },
+                }
             }
         }
     }
 }
-
-

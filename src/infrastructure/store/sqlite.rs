@@ -10,9 +10,12 @@ use async_trait::async_trait;
 use rusqlite::Connection;
 
 use crate::core::store::{MessageFilter, Store};
-use crate::domain::{Agent, Department, Group, GroupVisibility, LLMConfig, Message, MessageTarget, Organization, Role};
-use crate::domain::user::User;
 use crate::domain::invitation_code::InvitationCode;
+use crate::domain::user::User;
+use crate::domain::{
+    Agent, Department, Group, GroupVisibility, LLMConfig, Message, MessageTarget, Organization,
+    Role,
+};
 
 /// SQLite Storage
 pub struct SqliteStore {
@@ -44,7 +47,9 @@ impl SqliteStore {
 
     /// Initialize database table structure
     fn init_schema(&self) -> Result<()> {
-        let conn = self.conn.lock()
+        let conn = self
+            .conn
+            .lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire database lock: {}", e))?;
 
         conn.execute_batch(
@@ -132,7 +137,7 @@ impl SqliteStore {
             CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
             PRAGMA foreign_keys = ON;
-            "
+            ",
         )?;
 
         Ok(())
@@ -146,7 +151,8 @@ impl SqliteStore {
     {
         let conn = self.conn.clone();
         tokio::task::spawn_blocking(move || {
-            let mut conn = conn.lock()
+            let mut conn = conn
+                .lock()
                 .map_err(|e| anyhow::anyhow!("Failed to acquire database lock: {}", e))?;
             f(&mut conn)
         })
@@ -172,19 +178,15 @@ impl Store for SqliteStore {
                 conn.execute(
                     "INSERT INTO departments (id, name, parent_id, leader_id)
                      VALUES (?1, ?2, ?3, ?4)",
-                    rusqlite::params![
-                        &dept.id,
-                        &dept.name,
-                        parent_id,
-                        leader_id,
-                    ],
+                    rusqlite::params![&dept.id, &dept.name, parent_id, leader_id,],
                 )?;
             }
 
             // 插入 Agent
             for agent in &org.agents {
                 let dept_id = agent.department_id.as_deref();
-                let resp_json = serde_json::to_string(&agent.role.responsibilities).unwrap_or_default();
+                let resp_json =
+                    serde_json::to_string(&agent.role.responsibilities).unwrap_or_default();
                 let exp_json = serde_json::to_string(&agent.role.expertise).unwrap_or_default();
 
                 conn.execute(
@@ -209,7 +211,8 @@ impl Store for SqliteStore {
             }
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     async fn load_organization(&self) -> Result<Organization> {
@@ -217,9 +220,8 @@ impl Store for SqliteStore {
             let mut org = Organization::new();
 
             // Load departments
-            let mut stmt = conn.prepare(
-                "SELECT id, name, parent_id, leader_id FROM departments"
-            )?;
+            let mut stmt =
+                conn.prepare("SELECT id, name, parent_id, leader_id FROM departments")?;
 
             let dept_iter = stmt.query_map([], |row| {
                 Ok(Department {
@@ -240,7 +242,7 @@ impl Store for SqliteStore {
                     id, name, department_id,
                     role_title, role_responsibilities, role_expertise, role_system_prompt,
                     llm_model, llm_api_key, llm_base_url
-                 FROM agents"
+                 FROM agents",
             )?;
 
             let agent_iter = stmt.query_map([], |row| {
@@ -253,7 +255,8 @@ impl Store for SqliteStore {
                     department_id: row.get(2)?,
                     role: Role {
                         title: row.get(3)?,
-                        responsibilities: serde_json::from_str(&responsibilities).unwrap_or_default(),
+                        responsibilities: serde_json::from_str(&responsibilities)
+                            .unwrap_or_default(),
                         expertise: serde_json::from_str(&expertise).unwrap_or_default(),
                         system_prompt: row.get(6)?,
                     },
@@ -272,7 +275,8 @@ impl Store for SqliteStore {
             }
 
             Ok(org)
-        }).await
+        })
+        .await
     }
 
     async fn save_group(&self, group: &Group) -> Result<()> {
@@ -303,7 +307,7 @@ impl Store for SqliteStore {
     async fn load_groups(&self) -> Result<Vec<Group>> {
         self.execute(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT id, name, creator_id, members, created_at, visibility FROM groups"
+                "SELECT id, name, creator_id, members, created_at, visibility FROM groups",
             )?;
 
             let group_iter = stmt.query_map([], |row| {
@@ -332,7 +336,8 @@ impl Store for SqliteStore {
             }
 
             Ok(groups)
-        }).await
+        })
+        .await
     }
 
     async fn delete_group(&self, group_id: &str) -> Result<()> {
@@ -340,7 +345,8 @@ impl Store for SqliteStore {
         self.execute(move |conn| {
             conn.execute("DELETE FROM groups WHERE id = ?1", [group_id])?;
             Ok(())
-        }).await
+        })
+        .await
     }
 
     async fn save_message(&self, message: &Message) -> Result<()> {
@@ -687,13 +693,21 @@ impl Store for SqliteStore {
         self.execute(move |conn| {
             conn.execute(
                 "UPDATE invitation_codes SET is_used = ?1, current_usage = ?2 WHERE id = ?3",
-                rusqlite::params![&code_clone.is_used, &code_clone.current_usage, &code_clone.id],
+                rusqlite::params![
+                    &code_clone.is_used,
+                    &code_clone.current_usage,
+                    &code_clone.id
+                ],
             )?;
             Ok(())
-        }).await
+        })
+        .await
     }
 
-    async fn load_invitation_codes_by_creator(&self, creator_id: &str) -> Result<Vec<InvitationCode>> {
+    async fn load_invitation_codes_by_creator(
+        &self,
+        creator_id: &str,
+    ) -> Result<Vec<InvitationCode>> {
         let creator_id_str = creator_id.to_string();
         self.execute(move |conn| {
             let mut stmt = conn.prepare(

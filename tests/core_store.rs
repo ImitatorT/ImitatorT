@@ -1,8 +1,8 @@
 //! 存储接口定义测试
 
 use imitatort::core::store::{MessageFilter, Store};
-use imitatort::infrastructure::store::SqliteStore;
 use imitatort::domain::{Agent, Department, LLMConfig, Message, Organization, Role};
+use imitatort::infrastructure::store::SqliteStore;
 
 fn create_test_organization() -> Organization {
     let mut org = Organization::new();

@@ -36,9 +36,16 @@ impl AutonomousAgent {
         // 如果提供了WatchdogAgent，则自动注册默认唤醒机制
         if let Some(wa) = &watchdog_agent {
             if let Err(e) = wa.register_default_watchers(runtime.id()) {
-                error!("Failed to register default watchers for agent {}: {}", runtime.id(), e);
+                error!(
+                    "Failed to register default watchers for agent {}: {}",
+                    runtime.id(),
+                    e
+                );
             } else {
-                info!("Successfully registered default watchers for agent {}", runtime.id());
+                info!(
+                    "Successfully registered default watchers for agent {}",
+                    runtime.id()
+                );
             }
         }
 
@@ -61,7 +68,6 @@ impl AutonomousAgent {
         self.runtime.name()
     }
 
-    
     /// 激活Agent处理指定上下文
     pub async fn activate(&self, context: Context) -> Result<()> {
         info!("Agent {} activated with context", self.id());
@@ -94,18 +100,25 @@ impl AutonomousAgent {
             Decision::SendMessage { target, content } => {
                 let msg = match target {
                     MessageTarget::Direct(to) => Message::private(self.id(), to, content),
-                    MessageTarget::Group(group_id) => {
-                        Message::group(self.id(), group_id, content)
-                    }
+                    MessageTarget::Group(group_id) => Message::group(self.id(), group_id, content),
                 };
 
                 let _ = self.message_tx.send(msg.clone());
                 info!("Agent {} sent message: {:?}", self.id(), msg);
             }
             Decision::CreateGroup { name, members } => {
-                info!("Agent {} wants to create group: {} with members: {:?}", self.id(), name, members);
+                info!(
+                    "Agent {} wants to create group: {} with members: {:?}",
+                    self.id(),
+                    name,
+                    members
+                );
                 // 使用当前时间戳作为群组ID的一部分，确保唯一性
-                let group_id = format!("group_{}_{}", name.replace(" ", "_"), chrono::Utc::now().timestamp());
+                let group_id = format!(
+                    "group_{}_{}",
+                    name.replace(" ", "_"),
+                    chrono::Utc::now().timestamp()
+                );
 
                 // 将发起创建的Agent也加入群组
                 let mut all_members = members;
@@ -113,17 +126,25 @@ impl AutonomousAgent {
                     all_members.push(self.id().to_string());
                 }
 
-                match self.message_bus.create_group(
-                    &group_id,
-                    &name,
-                    self.id(),
-                    all_members
-                ).await {
+                match self
+                    .message_bus
+                    .create_group(&group_id, &name, self.id(), all_members)
+                    .await
+                {
                     Ok(()) => {
-                        info!("Agent {} successfully created group: {}", self.id(), group_id);
+                        info!(
+                            "Agent {} successfully created group: {}",
+                            self.id(),
+                            group_id
+                        );
                     }
                     Err(e) => {
-                        error!("Agent {} failed to create group {}: {}", self.id(), group_id, e);
+                        error!(
+                            "Agent {} failed to create group {}: {}",
+                            self.id(),
+                            group_id,
+                            e
+                        );
                     }
                 }
             }

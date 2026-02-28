@@ -44,7 +44,11 @@ impl ToolRegistry {
         let mut root = self.category_root.write().await;
         root.add_tool(&category, &tool_id);
 
-        debug!("Registered tool: {} in category: {}", tool_id, category.to_path_string());
+        debug!(
+            "Registered tool: {} in category: {}",
+            tool_id,
+            category.to_path_string()
+        );
         Ok(())
     }
 

@@ -40,7 +40,10 @@ impl Default for AppConfig {
             web_bind: get_env_or_default("WEB_BIND", "0.0.0.0:8080".to_string()),
             output_mode: get_env_or_default("OUTPUT_MODE", "cli".to_string()),
             message_channel_capacity: get_env_or_default("MESSAGE_CHANNEL_CAPACITY", 1000usize),
-            default_api_base_url: get_env_or_default("DEFAULT_API_BASE_URL", "https://api.openai.com/v1".to_string()),
+            default_api_base_url: get_env_or_default(
+                "DEFAULT_API_BASE_URL",
+                "https://api.openai.com/v1".to_string(),
+            ),
             default_model: get_env_or_default("DEFAULT_MODEL", "gpt-4o-mini".to_string()),
             log_level: get_env_or_default("LOG_LEVEL", "info".to_string()),
             run_agent_loops: get_env_or_default("RUN_AGENT_LOOPS", true), // Default to run agent loops, maintaining backward compatibility
@@ -71,8 +74,7 @@ impl AppConfig {
 }
 
 /// Helper function: get value from environment variable, return default if not exists
-fn get_env_or_default<T: std::str::FromStr + Default>(key: &str, default: T) -> T
-{
+fn get_env_or_default<T: std::str::FromStr + Default>(key: &str, default: T) -> T {
     env::var(key)
         .ok()
         .and_then(|val| val.parse().ok())
