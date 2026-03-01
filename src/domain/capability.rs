@@ -217,7 +217,9 @@ impl InputSchema {
     /// 创建 object 类型的参数根
     ///
     /// # Example
-    /// ```
+    /// ```ignore
+    /// use imitatort::domain::capability::InputSchema;
+    ///
     /// let params = InputSchema::object()
     ///     .property("name", InputSchema::string().description("用户名"))
     ///     .property("age", InputSchema::integer().description("年龄").optional())

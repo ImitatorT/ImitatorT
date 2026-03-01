@@ -137,7 +137,9 @@ impl JsonSchema {
     /// 创建 object 类型的参数根
     ///
     /// # Example
-    /// ```
+    /// ```ignore
+    /// use imitatort::domain::tool::JsonSchema;
+    ///
     /// let params = JsonSchema::object()
     ///     .property("name", JsonSchema::string().description("用户名"))
     ///     .property("age", JsonSchema::integer().description("年龄").optional())

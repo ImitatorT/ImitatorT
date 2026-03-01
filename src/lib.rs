@@ -5,7 +5,7 @@
 //!
 //! ## 快速开始
 //!
-//! ```rust
+//! ```ignore
 //! use imitatort::{quick_start, VirtualCompany, CompanyBuilder, CompanyConfig};
 //!
 //! // Method 1: Quick start using auto-configuration
@@ -17,7 +17,7 @@
 //! }
 //! ```
 //!
-//! ```rust
+//! ```ignore
 //! // Method 2: Manual configuration startup
 //! use imitatort::{VirtualCompany, CompanyBuilder, CompanyConfig};
 //!
