@@ -53,7 +53,8 @@ jobs:
       - name: Check syntax and dependencies
         run: |
           cargo check --release
-          cargo test --release --no-run
+          cargo clippy --release
+          cargo test --release
 
   build:
     name: Build for ${{ matrix.target }}
