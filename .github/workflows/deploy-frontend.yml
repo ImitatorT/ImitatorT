@@ -122,6 +122,10 @@ jobs:
             echo "window.IMITATOR_CONFIG = { defaultBackendUrl: 'https://imitatort.zeyuan.site' };" >> frontend/public/config.js
           fi
 
+      - name: Build
+        run: npm run build
+        working-directory: frontend
+
       - name: Restore vite.config.ts
         if: always()
         run: |
@@ -130,33 +134,14 @@ jobs:
             mv frontend/vite.config.ts.bak frontend/vite.config.ts
           fi
 
-      - name: Build
-        run: npm run build
-        working-directory: frontend
-
-      - name: Adjust output directory for subdirectories
-        run: |
-          BASE_PATH="${{ needs.check-changes.outputs.base_path }}"
-          if [ "$BASE_PATH" = "/dev/" ]; then
-            mkdir -p ../adjusted_dist_root/dev
-            cp -r frontend/dist/* ../adjusted_dist_root/dev/
-            echo "Publish dir: ../adjusted_dist_root"
-          elif [ "$BASE_PATH" = "/daily/" ]; then
-            mkdir -p ../adjusted_dist_root/daily
-            cp -r frontend/dist/* ../adjusted_dist_root/daily/
-            echo "Publish dir: ../adjusted_dist_root"
-          else
-            echo "Publish dir: ./frontend/dist"
-          fi
-
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           personal_token: ${{ secrets.PAT }}
           external_repository: ImitatorT/ImitatorT.github.io
           publish_branch: main
-          publish_dir: ${{ needs.check-changes.outputs.base_path == '/' && './frontend/dist' || '../adjusted_dist_root' }}
-          destination_dir: ${{ needs.check-changes.outputs.base_path == '/dev/' && 'dev' || (needs.check-changes.outputs.base_path == '/daily/' && 'daily' || '.') }}
+          publish_dir: frontend/dist
+          destination_dir: ${{ needs.check-changes.outputs.base_path == '/' && '.' || (needs.check-changes.outputs.base_path == '/dev/' && 'dev' || 'daily') }}
 
   skip-deployment:
     needs: check-changes
