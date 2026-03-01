@@ -34,7 +34,7 @@ export default function BoardManagement() {
   }, [authUser, fetchMembers]);
 
   // Check if user is chairman
-  const is_chairman = authUser?.is_director && authUser?.username === 'chairman';
+  const is_chairman = authUser?.position === 'Chairman';
 
   const handleAddMember = async () => {
     if (!newUsername || !newPassword || !newName) {
