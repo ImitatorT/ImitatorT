@@ -99,11 +99,36 @@ impl WatchdogRule {
                 }
             }
             TriggerCondition::StringContains { content } => {
+                // 检查字符串值
                 if let Some(str_val) = result.as_str() {
-                    str_val.contains(content.as_str())
-                } else {
-                    false
+                    return str_val.contains(content.as_str());
                 }
+
+                // 检查JSON对象中是否包含指定内容
+                if let Value::Object(obj) = result {
+                    for (_, val) in obj {
+                        if let Some(str_val) = val.as_str() {
+                            if str_val.contains(content) {
+                                return true;
+                            }
+                        }
+
+                        // 如果值是数组，检查数组元素
+                        if let Value::Array(arr) = val {
+                            for arr_val in arr {
+                                if let Some(arr_str) = arr_val.as_str() {
+                                    if arr_str.contains(content) {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 将整个JSON序列化为字符串再检查
+                let json_str = result.to_string();
+                json_str.contains(content)
             }
             TriggerCondition::StatusMatches { expected_status } => {
                 if let Some(status_val) = result.as_str() {
@@ -316,7 +341,7 @@ impl WatchdogAgent {
             format!("direct_msg_{}", agent_id),
             "message.send_direct".to_string(), // 私聊消息工具
             TriggerCondition::StringContains {
-                content: format!("\"target\":\"{}\"", agent_id), // 当消息目标包含agent_id时触发
+                content: agent_id.to_string(), // 当结果包含agent_id时触发
             },
             agent_id.to_string(),
         );
@@ -330,7 +355,7 @@ impl WatchdogAgent {
             format!("mention_{}", agent_id),
             "message.send_group".to_string(), // 群聊消息工具
             TriggerCondition::StringContains {
-                content: format!("\"mention_agent_ids\":[\"{}\"", agent_id), // 当艾特列表包含agent_id时触发
+                content: agent_id.to_string(), // 当结果包含agent_id时触发
             },
             agent_id.to_string(),
         );
