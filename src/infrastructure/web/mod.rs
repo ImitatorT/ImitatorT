@@ -916,10 +916,10 @@ async fn get_invite_codes(
                                     "code": code.code,
                                     "created_by": code.created_by,
                                     "created_at": code.created_at,
-                                    "expires_at": code.expiry_time,
+                                    "expiry_time": code.expiry_time,
+                                    "is_used": !code.is_valid(),
                                     "usage_count": code.current_usage,
                                     "max_usage": code.max_usage,
-                                    "is_active": code.is_valid(),
                                 })
                             })
                             .collect();
