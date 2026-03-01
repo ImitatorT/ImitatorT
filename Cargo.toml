@@ -12,6 +12,10 @@ license = "MIT"
 keywords = ["ai", "agents", "simulation", "multi-agent", "framework"]
 categories = ["development-tools", "simulation", "api-bindings"]
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.tar.gz"
+bin-dir = "{ name }-{ target }/{ bin }{ binary-ext }"
+
 exclude = [
     "/frontend/",
     "/.github/",
