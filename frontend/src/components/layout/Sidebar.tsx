@@ -46,7 +46,7 @@ export default function Sidebar({ isOpen, onClose, onShowAuth }: SidebarProps) {
     created_at: authUser.created_at || Date.now(),
   } : null);
   const isDirector = authUser?.is_director || false;
-  const isChairman = boardUser?.is_chairman || false;
+  const isChairman = boardUser?.is_chairman || authUser?.position === 'Chairman' || false;
 
   const handleLogout = () => {
     boardLogout();
