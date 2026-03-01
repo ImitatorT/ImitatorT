@@ -44,7 +44,11 @@ impl ToolRegistry {
         let mut root = self.category_root.write().await;
         root.add_tool(&category, &tool_id);
 
-        debug!("Registered tool: {} in category: {}", tool_id, category.to_path_string());
+        debug!(
+            "Registered tool: {} in category: {}",
+            tool_id,
+            category.to_path_string()
+        );
         Ok(())
     }
 
@@ -62,7 +66,7 @@ impl ToolRegistry {
     /// - "file" -> 所有file分类下的工具（包括子分类）
     /// - "file/read" -> 仅file/read分类下的工具
     pub async fn find_by_category(&self, path: &str) -> Vec<Tool> {
-        let path = CategoryPath::from_str(path);
+        let path = CategoryPath::from_string(path);
         let root = self.category_root.read().await;
 
         // 查找目标分类节点
@@ -95,7 +99,7 @@ impl ToolRegistry {
 
     /// 获取直接属于某分类的工具（不包括子分类）
     pub async fn find_direct_by_category(&self, path: &str) -> Vec<Tool> {
-        let path = CategoryPath::from_str(path);
+        let path = CategoryPath::from_string(path);
         let root = self.category_root.read().await;
 
         let mut node = &*root;
@@ -114,7 +118,7 @@ impl ToolRegistry {
 
     /// 列出某分类下的子分类
     pub async fn list_subcategories(&self, path: &str) -> Vec<String> {
-        let path = CategoryPath::from_str(path);
+        let path = CategoryPath::from_string(path);
         let root = self.category_root.read().await;
 
         let mut node = &*root;
@@ -148,7 +152,7 @@ impl ToolRegistry {
     pub async fn list_all_categories(&self) -> Vec<String> {
         let root = self.category_root.read().await;
         let mut paths = Vec::new();
-        Self::collect_category_paths(&*root, String::new(), &mut paths);
+        Self::collect_category_paths(&root, String::new(), &mut paths);
         paths
     }
 

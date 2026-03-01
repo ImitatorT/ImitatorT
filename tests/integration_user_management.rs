@@ -1,5 +1,5 @@
-use imitatort::domain::user::{User, Position};
 use imitatort::domain::invitation_code::InvitationCode;
+use imitatort::domain::user::{Position, User};
 use imitatort::infrastructure::auth::PasswordService;
 
 #[test]

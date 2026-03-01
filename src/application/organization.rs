@@ -5,9 +5,9 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use crate::domain::{Group, Organization};
 use crate::core::store::Store;
-use crate::domain::user::{User, Position};
+use crate::domain::user::{Position, User};
+use crate::domain::{Group, GroupVisibility, Organization};
 
 /// 组织架构管理器
 pub struct OrganizationManager {
@@ -27,7 +27,11 @@ impl OrganizationManager {
     /// - Management directly joins Cliff of Contemplation Line
     /// - Create "Cliff of Contemplation Line" group chat
     /// - Automatically add highest level members of user-defined architecture to group chat
-    pub async fn initialize_guilty_cliff_line(&self, _org: &mut Organization, users: &[User]) -> Result<()> {
+    pub async fn initialize_guilty_cliff_line(
+        &self,
+        _org: &mut Organization,
+        users: &[User],
+    ) -> Result<()> {
         // Create Cliff of Contemplation Line group chat
         let guilty_cliff_group = Group {
             id: "guilty-cliff-line".to_string(),
@@ -35,10 +39,13 @@ impl OrganizationManager {
             creator_id: String::new(), // Will be set below
             members: Vec::new(),
             created_at: chrono::Utc::now().timestamp(),
+            visibility: GroupVisibility::Hidden,
         };
 
         // Find corporate chairman
-        let chairman = users.iter().find(|user| matches!(user.position, Position::Chairman));
+        let chairman = users
+            .iter()
+            .find(|user| matches!(user.position, Position::Chairman));
 
         if let Some(chairman_user) = chairman {
             // Add corporate chairman as group chat creator and member
@@ -48,10 +55,10 @@ impl OrganizationManager {
 
             // 添加所有管理层成员
             for user in users.iter() {
-                if matches!(user.position, Position::Management) {
-                    if !updated_group.members.contains(&user.id) {
-                        updated_group.members.push(user.id.clone());
-                    }
+                if matches!(user.position, Position::Management)
+                    && !updated_group.members.contains(&user.id)
+                {
+                    updated_group.members.push(user.id.clone());
                 }
             }
 
@@ -82,6 +89,7 @@ impl OrganizationManager {
                 creator_id: user_id.to_string(),
                 members: vec![user_id.to_string()],
                 created_at: chrono::Utc::now().timestamp(),
+                visibility: GroupVisibility::Hidden,
             };
             self.store.save_group(&new_group).await?;
         }
@@ -128,14 +136,28 @@ impl OrganizationManager {
 
         // Define high-level position keywords
         let high_level_titles = [
-            "CEO", "President", "General Manager", "Chief Executive Officer", "President",
-            "Director", "Supervisor", "Leader", "Founder", "Chairman", "Board Chairman"
+            "CEO",
+            "President",
+            "General Manager",
+            "Chief Executive Officer",
+            "President",
+            "Director",
+            "Supervisor",
+            "Leader",
+            "Founder",
+            "Chairman",
+            "Board Chairman",
         ];
 
         for agent in &org.agents {
             for title in &high_level_titles {
-                if agent.role.title.to_uppercase().contains(&title.to_uppercase()) ||
-                   agent.name.to_uppercase().contains(&title.to_uppercase()) {
+                if agent
+                    .role
+                    .title
+                    .to_uppercase()
+                    .contains(&title.to_uppercase())
+                    || agent.name.to_uppercase().contains(&title.to_uppercase())
+                {
                     highest_level_agents.push(agent.id.clone());
                     break;
                 }
@@ -146,7 +168,10 @@ impl OrganizationManager {
     }
 
     /// Add highest level members of organization structure to Cliff of Contemplation Line
-    pub async fn add_highest_level_agents_to_guilty_cliff_line(&self, org: &Organization) -> Result<()> {
+    pub async fn add_highest_level_agents_to_guilty_cliff_line(
+        &self,
+        org: &Organization,
+    ) -> Result<()> {
         let highest_level_agents = self.find_highest_level_agents(org);
 
         for agent_id in &highest_level_agents {

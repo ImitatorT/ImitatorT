@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - dev
+      - '**'
     paths:
       - 'frontend/**'
       - '.github/workflows/deploy-frontend.yml'
@@ -14,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_deploy: ${{ steps.changes.outputs.should_deploy }}
+      branch_name: ${{ steps.determine_branch.outputs.branch_name }}
+      base_path: ${{ steps.determine_branch.outputs.base_path }}
     steps:
       - name: Checkout source repo
         uses: actions/checkout@v4
@@ -32,13 +36,27 @@ jobs:
             echo "should_deploy=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Determine branch and base path
+        id: determine_branch
+        run: |
+          BRANCH_NAME="${GITHUB_REF##*/}"
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            BASE_PATH="/"
+          elif [ "$BRANCH_NAME" = "dev" ]; then
+            BASE_PATH="/dev/"
+          else
+            BASE_PATH="/daily/"
+          fi
+
+          echo "Branch: $BRANCH_NAME, Base path: $BASE_PATH"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "base_path=$BASE_PATH" >> $GITHUB_OUTPUT
+
   build-and-deploy:
     needs: check-changes
     if: needs.check-changes.outputs.should_deploy == 'true'
-    runs-on: ubuntu-latest  # Using ubuntu-latest as it's already optimized for Node.js workflows
-    defaults:
-      run:
-        working-directory: frontend
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout source repo
         uses: actions/checkout@v4
@@ -50,22 +68,95 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Cache Node modules
+        uses: actions/cache@v4
+        with:
+          path: frontend/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Cache build output
+        uses: actions/cache@v4
+        with:
+          path: frontend/dist
+          key: ${{ runner.os }}-node-build-${{ hashFiles('frontend/package-lock.json') }}-${{ hashFiles('frontend/src/**', 'frontend/vite.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-node-build-${{ hashFiles('frontend/package-lock.json') }}-
+            ${{ runner.os }}-node-build-
+
       - name: Install dependencies
         run: npm ci
-
-      - name: Build
-        run: npm run build
+        working-directory: frontend
 
       - name: Run frontend unit tests
         run: npm run test:unit
+        working-directory: frontend
 
-      - name: Deploy to User Pages
+      - name: Run frontend linting
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Configure base path based on branch
+        run: |
+          BASE_PATH="${{ needs.check-changes.outputs.base_path }}"
+          if [ "$BASE_PATH" != "/" ]; then
+            echo "Updating vite.config.ts to use base path: $BASE_PATH"
+            sed -i.bak "s|base: '/'|base: '$BASE_PATH'|g" frontend/vite.config.ts
+          fi
+
+      - name: Configure API endpoint for deployment
+        run: |
+          BASE_PATH="${{ needs.check-changes.outputs.base_path }}"
+
+          # Create a config file to inject the API endpoint
+          mkdir -p frontend/public
+
+          if [ "$BASE_PATH" != "/" ]; then
+            # For subdirectory deployments, use production API endpoint
+            echo "// Production API configuration" > frontend/public/config.js
+            echo "window.IMITATOR_CONFIG = { defaultBackendUrl: 'https://imitatort.zeyuan.site' };" >> frontend/public/config.js
+          else
+            # For main branch, could use a different endpoint if needed
+            echo "// Production API configuration" > frontend/public/config.js
+            echo "window.IMITATOR_CONFIG = { defaultBackendUrl: 'https://imitatort.zeyuan.site' };" >> frontend/public/config.js
+          fi
+
+      - name: Restore vite.config.ts
+        if: always()
+        run: |
+          # Restore the original vite.config.ts if backup exists
+          if [ -f "frontend/vite.config.ts.bak" ]; then
+            mv frontend/vite.config.ts.bak frontend/vite.config.ts
+          fi
+
+      - name: Build
+        run: npm run build
+        working-directory: frontend
+
+      - name: Adjust output directory for subdirectories
+        run: |
+          BASE_PATH="${{ needs.check-changes.outputs.base_path }}"
+          if [ "$BASE_PATH" = "/dev/" ]; then
+            mkdir -p ../adjusted_dist_root/dev
+            cp -r frontend/dist/* ../adjusted_dist_root/dev/
+            echo "Publish dir: ../adjusted_dist_root"
+          elif [ "$BASE_PATH" = "/daily/" ]; then
+            mkdir -p ../adjusted_dist_root/daily
+            cp -r frontend/dist/* ../adjusted_dist_root/daily/
+            echo "Publish dir: ../adjusted_dist_root"
+          else
+            echo "Publish dir: ./frontend/dist"
+          fi
+
+      - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           personal_token: ${{ secrets.PAT }}
           external_repository: ImitatorT/ImitatorT.github.io
           publish_branch: main
-          publish_dir: ./frontend/dist
+          publish_dir: ${{ needs.check-changes.outputs.base_path == '/' && './frontend/dist' || '../adjusted_dist_root' }}
+          destination_dir: ${{ needs.check-changes.outputs.base_path == '/dev/' && 'dev' || (needs.check-changes.outputs.base_path == '/daily/' && 'daily' || '.') }}
 
   skip-deployment:
     needs: check-changes

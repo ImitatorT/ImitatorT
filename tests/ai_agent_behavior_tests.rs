@@ -11,7 +11,10 @@ async fn test_agent_initialization() {
     let agent = Agent::new(
         "test-developer",
         "Test Developer",
-        Role::simple("Developer", "You are a developer, responsible for writing high-quality code"),
+        Role::simple(
+            "Developer",
+            "You are a developer, responsible for writing high-quality code",
+        ),
         LLMConfig::openai("test-key"),
     );
 
@@ -31,7 +34,10 @@ async fn test_agent_responds_to_message() {
     let agent = Agent::new(
         "test-manager",
         "Test Manager",
-        Role::simple("Manager", "You are a manager, responsible for managing teams and assigning tasks"),
+        Role::simple(
+            "Manager",
+            "You are a manager, responsible for managing teams and assigning tasks",
+        ),
         LLMConfig::openai("test-key"),
     );
 
@@ -59,21 +65,30 @@ async fn test_multi_agent_interaction() {
     let manager = Agent::new(
         "team-manager",
         "Team Manager",
-        Role::simple("Team Manager", "You are the team manager, responsible for coordinating team members"),
+        Role::simple(
+            "Team Manager",
+            "You are the team manager, responsible for coordinating team members",
+        ),
         LLMConfig::openai("test-key"),
     );
 
     let developer = Agent::new(
         "senior-dev",
         "Senior Developer",
-        Role::simple("Senior Developer", "You are a senior developer engineer, responsible for technical implementation"),
+        Role::simple(
+            "Senior Developer",
+            "You are a senior developer engineer, responsible for technical implementation",
+        ),
         LLMConfig::openai("test-key"),
     );
 
     let designer = Agent::new(
         "ui-designer",
         "UI Designer",
-        Role::simple("UI Designer", "You are a UI designer, responsible for interface design"),
+        Role::simple(
+            "UI Designer",
+            "You are a UI designer, responsible for interface design",
+        ),
         LLMConfig::openai("test-key"),
     );
 
@@ -111,7 +126,10 @@ async fn test_agent_role_based_behavior() {
     let qa_engineer = Agent::new(
         "qa",
         "QA Engineer",
-        Role::simple("QA Engineer", "You are a quality assurance engineer, responsible for testing and quality control"),
+        Role::simple(
+            "QA Engineer",
+            "You are a quality assurance engineer, responsible for testing and quality control",
+        ),
         LLMConfig::openai("test-key"),
     );
 
@@ -169,7 +187,10 @@ async fn test_agent_conversation_flow() {
     let agent = Agent::new(
         "conversation-agent",
         "Conversation Assistant",
-        Role::simple("Conversation Agent", "You are a conversation assistant, responsible for natural conversations with users"),
+        Role::simple(
+            "Conversation Agent",
+            "You are a conversation assistant, responsible for natural conversations with users",
+        ),
         LLMConfig::openai("test-key"),
     );
 

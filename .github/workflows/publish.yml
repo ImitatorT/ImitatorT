@@ -1,0 +1,146 @@
+# .github/workflows/publish.yml
+name: Publish to Crates.io
+
+on:
+  release:
+    types: [published]
+  push:
+    branches:
+      - main
+      - dev
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write  # Required for trusted publishing
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only run on release tags or if manually triggered
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-deps-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-deps-
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: target/
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs', '**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-build-
+
+      - name: Verify version matches tag
+        run: |
+          cargo_version=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[0].version')
+          tag_version="${GITHUB_REF#refs/tags/v}"
+          if [ "$cargo_version" != "$tag_version" ]; then
+            echo "Version mismatch: Cargo.toml ($cargo_version) vs tag ($tag_version)"
+            exit 1
+          fi
+
+      # Run comprehensive backend tests before publishing
+      - name: Run backend tests
+        run: |
+          # First run unit tests
+          cargo test --release
+          # Then run clippy for syntax checking
+          cargo clippy --release -- -D warnings
+
+      - name: Publish to crates.io
+        uses: katyo/publish-crates@v2
+        with:
+          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          args: --allow-dirty
+
+  publish-dev-snapshot:
+    name: Publish Dev/Snapshot Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Run on dev branch or other branches (but not main or release)
+    if: github.ref_name == 'dev' || (github.ref_name != 'main' && github.event_name == 'push')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-deps-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-deps-
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: target/
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs', '**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-build-
+
+      - name: Determine version suffix
+        id: version
+        run: |
+          ORIGINAL_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[0].version')
+
+          if [ "${{ github.ref_name }}" = "dev" ]; then
+            NEW_VERSION="${ORIGINAL_VERSION}-dev"
+          else
+            # For other branches, use SNAPSHOT versioning
+            NEW_VERSION="${ORIGINAL_VERSION}-SNAPSHOT"
+          fi
+
+          echo "Original version: $ORIGINAL_VERSION"
+          echo "New version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+          # Update Cargo.toml with new version
+          sed -i.bak "s/^version = \".*\"$/version = \"$NEW_VERSION\"/" Cargo.toml
+
+      # Run comprehensive backend tests before publishing
+      - name: Run backend tests
+        run: |
+          # First run unit tests
+          cargo test --release
+          # Then run clippy for syntax checking
+          cargo clippy --release -- -D warnings
+
+      # Only publish to crates.io if manual trigger or dev branch (requires special handling for SNAPSHOT versions)
+      # Note: Crates.io doesn't allow re-publishing same version, so SNAPSHOT would need to use timestamp
+      - name: Prepare for publishing dev version
+        run: |
+          echo "Publishing development version: ${{ steps.version.outputs.new_version }}"
+          cargo package --allow-dirty
+          echo "Package created, but skipping actual publish to crates.io for dev/SNAPSHOT versions to avoid conflicts"

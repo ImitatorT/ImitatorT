@@ -7,40 +7,17 @@ use serde::{Deserialize, Serialize};
 /// Agent Unique Identifier
 pub type AgentId = String;
 
-/// Agent Mode
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AgentMode {
-    /// Active mode: Actively monitor specific tools and work autonomously based on results
-    Active {
-        // List of monitored tool IDs
-        watched_tools: Vec<String>,
-        // Trigger condition configuration
-        trigger_conditions: Vec<TriggerCondition>,
-    },
-    /// Passive mode: Only work when mentioned or receives messages
-    Passive,
-}
-
 /// Trigger Condition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TriggerCondition {
     /// Numeric range condition: Trigger when tool returns value within specified range
-    NumericRange {
-        min: f64,
-        max: f64,
-    },
+    NumericRange { min: f64, max: f64 },
     /// String matching condition: Trigger when tool returns string containing specified content
-    StringContains {
-        content: String,
-    },
+    StringContains { content: String },
     /// Status matching condition: Trigger when tool returns specific status
-    StatusMatches {
-        expected_status: String,
-    },
+    StatusMatches { expected_status: String },
     /// Custom expression condition: Define complex conditions using expression language
-    CustomExpression {
-        expression: String,
-    },
+    CustomExpression { expression: String },
 }
 
 /// Agent Entity - Unified Agent definition, single source of truth
@@ -51,8 +28,10 @@ pub struct Agent {
     pub role: Role,
     pub department_id: Option<String>,
     pub llm_config: LLMConfig,
-    /// Agent mode, defaults to passive mode
-    pub mode: AgentMode,
+    /// List of monitored tool IDs
+    pub watched_tools: Vec<String>,
+    /// Trigger condition configuration
+    pub trigger_conditions: Vec<TriggerCondition>,
 }
 
 impl Agent {
@@ -69,17 +48,19 @@ impl Agent {
             role,
             department_id: None,
             llm_config,
-            mode: AgentMode::Passive, // Default to passive mode
+            watched_tools: vec![],
+            trigger_conditions: vec![],
         }
     }
 
-    /// Create a new Agent with mode
-    pub fn new_with_mode(
+    /// Create a new Agent with tool watching capability
+    pub fn new_with_watching(
         id: impl Into<String>,
         name: impl Into<String>,
         role: Role,
         llm_config: LLMConfig,
-        mode: AgentMode,
+        watched_tools: Vec<String>,
+        trigger_conditions: Vec<TriggerCondition>,
     ) -> Self {
         Self {
             id: id.into(),
@@ -87,7 +68,8 @@ impl Agent {
             role,
             department_id: None,
             llm_config,
-            mode,
+            watched_tools,
+            trigger_conditions,
         }
     }
 
@@ -97,9 +79,27 @@ impl Agent {
         self
     }
 
-    /// Set mode
-    pub fn with_mode(mut self, mode: AgentMode) -> Self {
-        self.mode = mode;
+    /// Set watched tools
+    pub fn with_watched_tools(mut self, watched_tools: Vec<String>) -> Self {
+        self.watched_tools = watched_tools;
+        self
+    }
+
+    /// Set trigger conditions
+    pub fn with_trigger_conditions(mut self, trigger_conditions: Vec<TriggerCondition>) -> Self {
+        self.trigger_conditions = trigger_conditions;
+        self
+    }
+
+    /// Add a tool to watch
+    pub fn add_watched_tool(mut self, tool_id: impl Into<String>) -> Self {
+        self.watched_tools.push(tool_id.into());
+        self
+    }
+
+    /// Add a trigger condition
+    pub fn add_trigger_condition(mut self, condition: TriggerCondition) -> Self {
+        self.trigger_conditions.push(condition);
         self
     }
 

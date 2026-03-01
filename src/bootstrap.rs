@@ -8,11 +8,10 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{info, warn};
 
-use crate::{
-    Agent, AppConfig, CompanyBuilder, CompanyConfig, VirtualCompany, start_web_server,
-};
+use crate::{start_web_server, Agent, AppConfig, CompanyBuilder, CompanyConfig, VirtualCompany};
 
 /// Framework Launcher - Provides auto-configured startup functionality
+#[derive(Default)]
 pub struct FrameworkLauncher {
     config: AppConfig,
 }
@@ -36,6 +35,9 @@ impl FrameworkLauncher {
 
         // Initialize multi-Agent system
         let company = self.initialize_multi_agent_system().await?;
+
+        // Initialize framework skills and permissions
+        self.initialize_framework_skills(&company).await?;
 
         // Start services
         self.start_services(company).await?;
@@ -97,7 +99,9 @@ impl FrameworkLauncher {
             let message_tx_for_agents = message_tx.clone();
 
             tokio::spawn(async move {
-                if let Err(e) = Self::start_agent_loops(company_for_agents, message_tx_for_agents).await {
+                if let Err(e) =
+                    Self::start_agent_loops(company_for_agents, message_tx_for_agents).await
+                {
                     tracing::error!("Agent loops error: {}", e);
                 }
             });
@@ -107,24 +111,32 @@ impl FrameworkLauncher {
 
         // Start Web service
         if self.config.output_mode == "web" {
-            info!("🌐 Starting embedded web server on {}", self.config.web_bind);
+            info!(
+                "🌐 Starting embedded web server on {}",
+                self.config.web_bind
+            );
 
             start_web_server(
                 &self.config.web_bind,
                 agents,
                 message_tx,
-                company_arc.store().clone()
-            ).await?;
+                company_arc.store().clone(),
+            )
+            .await?;
 
             info!("✅ Web server started successfully");
 
             // Wait until terminated by interrupt signal
-            tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl+c");
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Failed to listen for ctrl+c");
             info!("🛑 Received shutdown signal");
         } else {
             info!("ℹ️  Running in console mode");
             // Wait for interrupt signal in console mode
-            tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl+c");
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Failed to listen for ctrl+c");
             info!("🛑 Received shutdown signal");
         }
 
@@ -149,8 +161,40 @@ impl FrameworkLauncher {
     ) -> Result<()> {
         info!("🤖 Starting agent autonomous operations...");
 
-        // Start loops for all Agents via framework API
+        // 启动事件驱动的Agent系统
         company.run().await
+    }
+
+    /// 初始化框架特定的技能和权限
+    async fn initialize_framework_skills(&self, company: &VirtualCompany) -> Result<()> {
+        use crate::domain::skill::{BindingType, Skill, SkillToolBinding, ToolAccessType};
+
+        // 注册访问思过崖线群聊的技能
+        let guilty_line_access_skill = Skill::new(
+            "guilty_line_access".to_string(),
+            "Guilty Line Access".to_string(),
+            "Permission to access the hidden Guilty Line group".to_string(),
+            "communication".to_string(),
+            "1.0".to_string(),
+            "system".to_string(),
+        );
+
+        company.register_skill(guilty_line_access_skill)?;
+
+        // 将技能绑定到发送到思过崖线群聊的工具
+        let binding = SkillToolBinding::new(
+            "guilty_line_access".to_string(),
+            "message.send_to_guilty_line".to_string(),
+            BindingType::Required,
+        );
+
+        company.bind_skill_tool(binding)?;
+
+        // 设置工具访问类型为私有，需要特定技能才能访问
+        company.set_tool_access("message.send_to_guilty_line", ToolAccessType::Private)?;
+
+        tracing::info!("✅ Framework skills initialized successfully");
+        Ok(())
     }
 }
 

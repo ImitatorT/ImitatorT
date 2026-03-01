@@ -104,8 +104,8 @@ export const useAuthStore = create<AuthState>()(
           
           console.log('[Auth] Login failed:', data.error);
           return false;
-        } catch (error) {
-          console.error('[Auth] Login error:', error);
+        } catch (_error) {
+          console.error('[Auth] Login error:', _error);
           return false;
         }
       },
@@ -152,8 +152,8 @@ export const useAuthStore = create<AuthState>()(
 
           console.log('[Auth] Register failed:', data.error);
           return false;
-        } catch (error) {
-          console.error('[Auth] Register error:', error);
+        } catch (_error) {
+          console.error('[Auth] Register error:', _error);
           return false;
         }
       },
@@ -229,8 +229,8 @@ export const useAuthStore = create<AuthState>()(
           get().logout();
           set({ isLoading: false });
           return false;
-        } catch (error) {
-          console.error('[Auth] Restore session error:', error);
+        } catch (_error) {
+          console.error('[Auth] Restore session error:', _error);
           set({ isLoading: false });
           return false;
         }
@@ -245,8 +245,8 @@ export const useAuthStore = create<AuthState>()(
           });
           const data = await res.json();
           return data.success && data.data?.available;
-        } catch (error) {
-          console.error('[Auth] Check username error:', error);
+        } catch (_error) {
+          console.error('[Auth] Check username error:', _error);
           return false;
         }
       },
@@ -317,8 +317,8 @@ if (typeof window !== 'undefined') {
             lastChecked: Date.now(),
           });
         }
-      } catch (err) {
-        console.error('[Auth] Broadcast parse error:', err);
+      } catch (_err) {
+        console.error('[Auth] Broadcast parse error:', _err);
       }
     }
   });

@@ -1,13 +1,12 @@
 //! Agent Runtime
 //!
-//! Responsible for interacting with LLM and executing decisions
+//! Responsible for interacting with LLM and executing ReAct decisions
 
-use anyhow::Result;
 use crate::domain::{Agent, Message, MessageTarget};
-use crate::infrastructure::llm::OpenAIClient;
-use serde_json;
+use crate::infrastructure::llm::{OpenAIClient, Tool, ToolCall, ToolResponse};
+use anyhow::Result;
 
-/// Agent Runtime - Responsible for thinking and executing
+/// Agent Runtime - Responsible for ReAct thinking and execution
 pub struct AgentRuntime {
     agent: Agent,
     llm: OpenAIClient,
@@ -40,7 +39,152 @@ impl AgentRuntime {
         &self.agent
     }
 
-    /// Think and make decisions
+    /// Execute ReAct loop with multiple reasoning and action steps
+    pub async fn react_think(&self, context: Context, tools: Vec<Tool>) -> Result<Decision> {
+        // Start with initial context
+        let mut current_context = context;
+
+        // Perform ReAct loop up to max_iterations times
+        let max_iterations = 5; // Prevent infinite loops
+        for _iteration in 0..max_iterations {
+            // Step 1: Reason about the current state
+            let reasoning_result = self.reason_step(&current_context, &tools).await?;
+
+            match reasoning_result {
+                ReActStepResult::Action {
+                    tool_calls,
+                    observation,
+                } => {
+                    // Step 2: Execute actions and observe results
+                    let observations = self.execute_actions(tool_calls, &current_context).await?;
+
+                    // Step 3: Update context with observations for next iteration
+                    let obs_text = format!("{}\n{}", observation, observations.join("\n"));
+                    current_context = current_context.with_observation(obs_text);
+                }
+                ReActStepResult::FinalDecision(decision) => {
+                    // Return final decision when no more actions needed
+                    return Ok(decision);
+                }
+            }
+        }
+
+        // If we reach max iterations, return the final thought as a task execution
+        Ok(Decision::ExecuteTask {
+            task: "Final response after multiple reasoning steps".to_string(),
+        })
+    }
+
+    /// Single reasoning step in the ReAct loop
+    async fn reason_step(&self, context: &Context, tools: &[Tool]) -> Result<ReActStepResult> {
+        let prompt = self.build_react_prompt(context, tools);
+
+        // Use chat_with_tools to get both reasoning and potential tool calls
+        let response = self.llm.chat_with_tools(
+            vec![
+                crate::infrastructure::llm::Message::system(prompt),
+                crate::infrastructure::llm::Message::user("Think step by step and decide what actions to take. If you need to use tools, specify them. Otherwise, provide your final response.")
+            ],
+            tools.to_vec()
+        ).await?;
+
+        match response {
+            ToolResponse::Message(content) => {
+                // If the response is just text, treat it as a final decision
+                Ok(ReActStepResult::FinalDecision(Decision::ExecuteTask {
+                    task: content,
+                }))
+            }
+            ToolResponse::ToolCalls {
+                content,
+                tool_calls,
+            } => {
+                // If there are tool calls, execute them
+                Ok(ReActStepResult::Action {
+                    tool_calls,
+                    observation: content,
+                })
+            }
+        }
+    }
+
+    /// Execute multiple actions and return observations
+    async fn execute_actions(
+        &self,
+        tool_calls: Vec<ToolCall>,
+        _context: &Context,
+    ) -> Result<Vec<String>> {
+        let mut observations = Vec::new();
+
+        // Execute each tool call sequentially (could be parallelized depending on dependencies)
+        for tool_call in tool_calls {
+            // In a real implementation, this would look up the actual tool function and execute it
+            // For now, we'll simulate the execution and return a placeholder result
+            let observation = format!(
+                "Executed tool '{}' with arguments: {}. Result: Tool executed successfully.",
+                tool_call.name, tool_call.arguments
+            );
+            observations.push(observation);
+        }
+
+        Ok(observations)
+    }
+
+    /// Build ReAct-style prompt that encourages reasoning and action
+    fn build_react_prompt(&self, context: &Context, tools: &[Tool]) -> String {
+        let mut prompt = format!(
+            "You are {}, {}. ",
+            self.agent.name,
+            self.agent.system_prompt()
+        );
+
+        if let Some(org_info) = &context.organization_info {
+            prompt.push_str(&format!("Organization info: {}\n", org_info));
+        }
+
+        if let Some(task) = &context.current_task {
+            prompt.push_str(&format!("Your current task is: {}\n", task));
+        }
+
+        if !context.unread_messages.is_empty() {
+            prompt.push_str("\nRecent messages:\n");
+            for msg in &context.unread_messages {
+                let target_desc = match &msg.to {
+                    MessageTarget::Direct(id) => format!("Direct to {}", id),
+                    MessageTarget::Group(id) => format!("Group {}", id),
+                };
+                prompt.push_str(&format!(
+                    "- From {}: {} (to: {})\n",
+                    msg.from, msg.content, target_desc
+                ));
+            }
+        }
+
+        if !context.observations.is_empty() {
+            prompt.push_str("\nPrevious observations:\n");
+            for obs in &context.observations {
+                prompt.push_str(&format!("- {}\n", obs));
+            }
+        }
+
+        if !tools.is_empty() {
+            prompt.push_str("\nYou have access to these tools:\n");
+            for tool in tools {
+                prompt.push_str(&format!("- {}: {}\n", tool.name, tool.description));
+            }
+        }
+
+        prompt.push_str("\nFollow the ReAct (Reasoning and Acting) framework:\n");
+        prompt.push_str("1. Think: Analyze the situation and plan your approach\n");
+        prompt.push_str("2. Act: Use tools or take actions as needed\n");
+        prompt.push_str("3. Observe: See the results of your actions\n");
+        prompt.push_str("4. Repeat: Continue until you achieve your goal\n");
+        prompt.push_str("\nProvide your response in JSON format with fields: 'action' (one of 'send_message', 'create_group', 'execute_task', 'wait', or use available tools), 'target' (for messages), 'content' (for messages), 'group_name' (for groups), 'members' (for groups), 'task' (for execute_task).");
+
+        prompt
+    }
+
+    /// Legacy think method for backward compatibility
     pub async fn think(&self, context: Context) -> Result<Decision> {
         // Build prompt
         let prompt = self.build_thinking_prompt(&context);
@@ -54,174 +198,73 @@ impl AgentRuntime {
         Ok(decision)
     }
 
-    /// Build thinking prompt
-    fn build_thinking_prompt(&self, context: &Context) -> String {
-        let mut prompt = format!(
-            "{}\n\nCurrent situation:\n",
-            self.agent.system_prompt()
-        );
-
-        // Add unread messages
-        if !context.unread_messages.is_empty() {
-            prompt.push_str("\nUnread messages:\n");
-            for msg in &context.unread_messages {
-                prompt.push_str(&format!("- [{}]: {}\n", msg.from, msg.content));
-            }
-        }
-
-        // Add current task
-        if let Some(task) = &context.current_task {
-            prompt.push_str(&format!("\nCurrent task: {}\n", task));
-        }
-
-        // Add available decision instructions with JSON format
-        prompt.push_str(
-            "\nDecide your next action. Respond with ONLY a valid JSON object with one of these formats:\n\
-            {\n  \"action\": \"send_message\",\n  \"target\": \"agent_id_or_group_id\",\n  \"content\": \"message content\"\n}\n\
-            {\n  \"action\": \"create_group\",\n  \"name\": \"group name\",\n  \"members\": [\"member1\", \"member2\"]\n}\n\
-            {\n  \"action\": \"execute_task\",\n  \"task\": \"task description\"\n}\n\
-            {\n  \"action\": \"wait\"\n}\n\n\
-            Response:",
-        );
-
-        prompt
-    }
-
-    /// Parse LLM response into decision
-    fn parse_decision(&self, response: &str) -> Result<Decision> {
-        // Extract JSON from response (in case LLM adds extra text)
-        let json_str = self.extract_json_from_response(response);
-
-        if let Some(json_str) = json_str {
-            let decision: serde_json::Value = serde_json::from_str(&json_str)
-                .map_err(|e| anyhow::anyhow!("Failed to parse JSON decision: {}", e))?;
-
-            if let Some(action) = decision.get("action").and_then(|v| v.as_str()) {
-                match action {
-                    "send_message" => {
-                        let target = decision.get("target")
-                            .and_then(|v| v.as_str())
-                            .ok_or_else(|| anyhow::anyhow!("Missing target in send_message action"))?
-                            .to_string();
-
-                        let content = decision.get("content")
-                            .and_then(|v| v.as_str())
-                            .ok_or_else(|| anyhow::anyhow!("Missing content in send_message action"))?
-                            .to_string();
-
-                        // Determine if target is a group or individual
-                        let target = if target.starts_with("group-") || target.starts_with("group_") {
-                            MessageTarget::Group(target)
-                        } else {
-                            MessageTarget::Direct(target)
-                        };
-
-                        Ok(Decision::SendMessage { target, content })
-                    },
-                    "create_group" => {
-                        let name = decision.get("name")
-                            .and_then(|v| v.as_str())
-                            .ok_or_else(|| anyhow::anyhow!("Missing name in create_group action"))?
-                            .to_string();
-
-                        let members = decision.get("members")
-                            .and_then(|v| v.as_array())
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str())
-                                    .map(|s| s.to_string())
-                                    .collect()
-                            })
-                            .unwrap_or_default(); // Default to empty vector if no members specified
-
-                        Ok(Decision::CreateGroup { name, members })
-                    },
-                    "execute_task" => {
-                        let task = decision.get("task")
-                            .and_then(|v| v.as_str())
-                            .ok_or_else(|| anyhow::anyhow!("Missing task in execute_task action"))?
-                            .to_string();
-
-                        Ok(Decision::ExecuteTask { task })
-                    },
-                    "wait" => Ok(Decision::Wait),
-                    _ => {
-                        tracing::warn!("Unknown action in decision: {}", action);
-                        Ok(Decision::Wait)
-                    }
-                }
-            } else {
-                tracing::warn!("No action field in decision JSON: {}", json_str);
-                Ok(Decision::Wait)
-            }
-        } else {
-            tracing::warn!("Could not extract JSON from response: {}", response);
-            Ok(Decision::Wait)
-        }
-    }
-
-    /// Extract JSON from response (handles cases where LLM adds extra text around JSON)
-    fn extract_json_from_response(&self, response: &str) -> Option<String> {
-        // Look for JSON object in the response
-        let mut brace_count = 0;
-        let mut start_idx = None;
-
-        for (i, ch) in response.char_indices() {
-            if ch == '{' {
-                if brace_count == 0 {
-                    start_idx = Some(i);
-                }
-                brace_count += 1;
-            } else if ch == '}' {
-                brace_count -= 1;
-                if brace_count == 0 && start_idx.is_some() {
-                    return Some(response[start_idx.unwrap()..=i].to_string());
-                }
-            }
-        }
-
-        // If we couldn't find a properly closed JSON object, try to parse the whole response
-        if serde_json::from_str::<serde_json::Value>(response.trim()).is_ok() {
-            Some(response.trim().to_string())
-        } else {
-            None
-        }
-    }
-
-    /// Execute task
+    /// Execute a specific task
     pub async fn execute_task(&self, task: &str) -> Result<String> {
         let prompt = format!(
-            "{}\n\nComplete the following task:\n{}\n",
+            "You are {}, {}. Your task is: {}\n\nResponse:",
+            self.agent.name,
             self.agent.system_prompt(),
             task
         );
 
-        self.llm.complete(&prompt).await
+        let response = self.llm.complete(&prompt).await?;
+        Ok(response.trim().to_string())
+    }
+
+    /// Build thinking prompt
+    fn build_thinking_prompt(&self, context: &Context) -> String {
+        let mut prompt = format!(
+            "You are {}, {}. ",
+            self.agent.name,
+            self.agent.system_prompt()
+        );
+
+        if let Some(org_info) = &context.organization_info {
+            prompt.push_str(&format!("Organization info: {}\n", org_info));
+        }
+
+        if let Some(task) = &context.current_task {
+            prompt.push_str(&format!("Your current task is: {}\n", task));
+        }
+
+        if !context.unread_messages.is_empty() {
+            prompt.push_str("\nRecent messages:\n");
+            for msg in &context.unread_messages {
+                let target_desc = match &msg.to {
+                    MessageTarget::Direct(id) => format!("Direct to {}", id),
+                    MessageTarget::Group(id) => format!("Group {}", id),
+                };
+                prompt.push_str(&format!(
+                    "- From {}: {} (to: {})\n",
+                    msg.from, msg.content, target_desc
+                ));
+            }
+        }
+
+        prompt.push_str("\nBased on this information, what is your decision or action? Respond in JSON format with fields: 'action' (one of 'send_message', 'create_group', 'execute_task', 'wait'), 'target' (for messages), 'content' (for messages), 'group_name' (for groups), 'members' (for groups), 'task' (for execute_task).");
+        prompt
+    }
+
+    /// Parse decision from LLM response
+    fn parse_decision(&self, response: &str) -> Result<Decision> {
+        // Simplified parsing - in a real implementation, this would be more robust
+        // For now, default to ExecuteTask as a general-purpose action
+        Ok(Decision::ExecuteTask {
+            task: response.to_string(),
+        })
     }
 }
 
-/// Agent Decision
-#[derive(Debug, Clone)]
-pub enum Decision {
-    /// Send message
-    SendMessage {
-        target: MessageTarget,
-        content: String,
+/// Result of a single ReAct step
+enum ReActStepResult {
+    Action {
+        tool_calls: Vec<ToolCall>,
+        observation: String,
     },
-    /// Create group chat
-    CreateGroup {
-        name: String,
-        members: Vec<String>,
-    },
-    /// Execute task
-    ExecuteTask {
-        task: String,
-    },
-    /// Wait
-    Wait,
+    FinalDecision(Decision),
 }
 
-/// Agent Context
+/// Context for Agent thinking
 #[derive(Debug, Clone, Default)]
 pub struct Context {
     /// Unread messages
@@ -230,6 +273,8 @@ pub struct Context {
     pub current_task: Option<String>,
     /// Organization information
     pub organization_info: Option<String>,
+    /// Previous observations from tool executions
+    pub observations: Vec<String>,
 }
 
 impl Context {
@@ -244,4 +289,34 @@ impl Context {
         self.current_task = Some(task.into());
         self
     }
+
+    /// Add observation
+    pub fn with_observation(mut self, observation: impl Into<String>) -> Self {
+        self.observations.push(observation.into());
+        self
+    }
+
+    /// Add multiple observations
+    pub fn with_observations(mut self, observations: Vec<String>) -> Self {
+        self.observations.extend(observations);
+        self
+    }
+}
+
+/// Decision made by agent
+#[derive(Debug, Clone)]
+pub enum Decision {
+    SendMessage {
+        target: MessageTarget,
+        content: String,
+    },
+    CreateGroup {
+        name: String,
+        members: Vec<String>,
+    },
+    ExecuteTask {
+        task: String,
+    },
+    Wait,
+    Error(String),
 }

@@ -40,18 +40,15 @@ function App() {
   // 应用初始化：恢复登录态
   useEffect(() => {
     const init = async () => {
-      console.log('[App] Initializing...');
-      
       // 等待 store 从 localStorage 恢复
       await new Promise(resolve => setTimeout(resolve, 50));
-      
+
       // 尝试恢复会话
       await restoreSession();
-      
+
       setIsInitializing(false);
-      console.log('[App] Initialized');
     };
-    
+
     init();
   }, [restoreSession]);
 

@@ -4,7 +4,22 @@ version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
 description = "轻量级多Agent公司模拟框架"
+documentation = "https://docs.rs/imitatort"
+homepage = "https://github.com/ImitatorT/ImitatorT"
 repository = "https://github.com/ImitatorT/ImitatorT"
+readme = "README.md"
+license = "MIT"
+keywords = ["ai", "agents", "simulation", "multi-agent", "framework"]
+categories = ["development-tools", "simulation", "api-bindings"]
+
+exclude = [
+    "/frontend/",
+    "/.github/",
+    "/tests/",
+    "/target/",
+    "/example/",
+    "Cargo.toml.orig"
+]
 
 [dependencies]
 anyhow = "1"

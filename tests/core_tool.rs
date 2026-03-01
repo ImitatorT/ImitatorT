@@ -1,7 +1,7 @@
 //! Tool 注册表测试
 
 use imitatort::core::tool::ToolRegistry;
-use imitatort::domain::tool::{CategoryPath, Tool, JsonSchema, ReturnType};
+use imitatort::domain::tool::{CategoryPath, JsonSchema, ReturnType, Tool};
 use serde_json::json;
 
 fn create_test_tool(id: &str, category: &str) -> Tool {
@@ -9,14 +9,12 @@ fn create_test_tool(id: &str, category: &str) -> Tool {
         id,
         format!("Tool {}", id),
         "Test description",
-        CategoryPath::from_str(category),
+        CategoryPath::from_string(category),
         JsonSchema::object()
             .property("arg", JsonSchema::string().description("Test argument"))
             .build(),
-    ).with_returns(ReturnType::new(
-        "Test return",
-        json!({"type": "string"}),
-    ))
+    )
+    .with_returns(ReturnType::new("Test return", json!({"type": "string"})))
 }
 
 #[tokio::test]
@@ -36,10 +34,22 @@ async fn test_find_by_category() {
     let registry = ToolRegistry::new();
 
     // 注册不同分类的工具
-    registry.register(create_test_tool("file.read", "file/read")).await.unwrap();
-    registry.register(create_test_tool("file.write", "file/write")).await.unwrap();
-    registry.register(create_test_tool("file.delete", "file/delete")).await.unwrap();
-    registry.register(create_test_tool("chat.send", "chat/send")).await.unwrap();
+    registry
+        .register(create_test_tool("file.read", "file/read"))
+        .await
+        .unwrap();
+    registry
+        .register(create_test_tool("file.write", "file/write"))
+        .await
+        .unwrap();
+    registry
+        .register(create_test_tool("file.delete", "file/delete"))
+        .await
+        .unwrap();
+    registry
+        .register(create_test_tool("chat.send", "chat/send"))
+        .await
+        .unwrap();
 
     // 查询 file 分类（包含子分类）
     let file_tools = registry.find_by_category("file").await;
@@ -55,9 +65,18 @@ async fn test_find_by_category() {
 async fn test_list_subcategories() {
     let registry = ToolRegistry::new();
 
-    registry.register(create_test_tool("a.b", "a/b")).await.unwrap();
-    registry.register(create_test_tool("a.c", "a/c")).await.unwrap();
-    registry.register(create_test_tool("a.d.e", "a/d/e")).await.unwrap();
+    registry
+        .register(create_test_tool("a.b", "a/b"))
+        .await
+        .unwrap();
+    registry
+        .register(create_test_tool("a.c", "a/c"))
+        .await
+        .unwrap();
+    registry
+        .register(create_test_tool("a.d.e", "a/d/e"))
+        .await
+        .unwrap();
 
     let subcats = registry.list_subcategories("a").await;
     assert_eq!(subcats.len(), 3);
@@ -70,8 +89,14 @@ async fn test_list_subcategories() {
 async fn test_list_all_categories() {
     let registry = ToolRegistry::new();
 
-    registry.register(create_test_tool("a.b", "a/b")).await.unwrap();
-    registry.register(create_test_tool("a.c.d", "a/c/d")).await.unwrap();
+    registry
+        .register(create_test_tool("a.b", "a/b"))
+        .await
+        .unwrap();
+    registry
+        .register(create_test_tool("a.c.d", "a/c/d"))
+        .await
+        .unwrap();
 
     let categories = registry.list_all_categories().await;
     assert!(categories.contains(&"a".to_string()));

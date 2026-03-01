@@ -1,6 +1,7 @@
 use imitatort::{
-    application::autonomous::AutonomousAgent, CompanyConfig, VirtualCompany,
-    domain::{Agent, LLMConfig, Role, MessageTarget}
+    application::autonomous::AutonomousAgent,
+    domain::{Agent, LLMConfig, MessageTarget, Role},
+    CompanyConfig, VirtualCompany,
 };
 use std::sync::Arc;
 
@@ -10,20 +11,29 @@ async fn test_group_creation() {
     let mut org = imitatort::Organization::new();
 
     // Add a department
-    org.add_department(imitatort::Department::top_level("tech", "Technology Department"));
+    org.add_department(imitatort::Department::top_level(
+        "tech",
+        "Technology Department",
+    ));
 
     // 添加几个Agent
     let agent1 = Agent::new(
         "ceo",
         "CEO",
-        Role::simple("CEO", "You are the CEO of the company, responsible for decision-making and management."),
+        Role::simple(
+            "CEO",
+            "You are the CEO of the company, responsible for decision-making and management.",
+        ),
         LLMConfig::openai("test-key"),
     );
 
     let agent2 = Agent::new(
         "developer",
         "Developer",
-        Role::simple("Developer", "You are a developer, responsible for development work."),
+        Role::simple(
+            "Developer",
+            "You are a developer, responsible for development work.",
+        ),
         LLMConfig::openai("test-key"),
     );
 
@@ -38,7 +48,7 @@ async fn test_group_creation() {
     // 创建虚拟公司
     let company = VirtualCompany::with_store(
         config,
-        Arc::new(imitatort::infrastructure::store::SqliteStore::new_in_memory().unwrap())
+        Arc::new(imitatort::infrastructure::store::SqliteStore::new_in_memory().unwrap()),
     );
 
     // 启动公司

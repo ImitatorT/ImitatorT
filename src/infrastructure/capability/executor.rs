@@ -7,9 +7,9 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
 
+use crate::core::capability::CapabilityRegistry;
 use crate::core::skill::SkillManager;
 use crate::core::tool::ToolRegistry;
-use crate::core::capability::CapabilityRegistry;
 use crate::domain::capability::CapabilityCallContext;
 
 #[async_trait]
@@ -23,7 +23,12 @@ pub trait CapabilityExecutor: Send + Sync {
     ///
     /// # Returns
     /// 功能执行结果（JSON值）
-    async fn execute(&self, capability_id: &str, params: Value, context: &CapabilityCallContext) -> Result<Value>;
+    async fn execute(
+        &self,
+        capability_id: &str,
+        params: Value,
+        context: &CapabilityCallContext,
+    ) -> Result<Value>;
 
     /// 检查是否支持某功能
     fn can_execute(&self, capability_id: &str) -> bool;
@@ -92,7 +97,10 @@ impl CapabilityExecutorRegistry {
         tool_registry: Arc<ToolRegistry>,
         capability_registry: Arc<CapabilityRegistry>,
     ) -> Self {
-        let skill_manager = Arc::new(SkillManager::new_with_registries(tool_registry, capability_registry));
+        let skill_manager = Arc::new(SkillManager::new_with_registries(
+            tool_registry,
+            capability_registry,
+        ));
         Self::new(skill_manager)
     }
 
@@ -110,15 +118,26 @@ impl CapabilityExecutorRegistry {
     }
 
     /// 查找可以执行指定功能且具备相应技能的执行器
-    fn find_executor_with_skills(&self, capability_id: &str, skills: &[String]) -> Option<&dyn CapabilityExecutor> {
+    fn find_executor_with_skills(
+        &self,
+        capability_id: &str,
+        skills: &[String],
+    ) -> Option<&dyn CapabilityExecutor> {
         self.executors
             .iter()
-            .find(|e| e.can_execute(capability_id) && e.can_execute_with_skills(capability_id, skills))
+            .find(|e| {
+                e.can_execute(capability_id) && e.can_execute_with_skills(capability_id, skills)
+            })
             .map(|e| e.as_ref())
     }
 
     /// 执行功能调用（自动路由到合适的执行器）
-    pub async fn execute(&self, capability_id: &str, params: Value, context: &CapabilityCallContext) -> Result<CapabilityResult> {
+    pub async fn execute(
+        &self,
+        capability_id: &str,
+        params: Value,
+        context: &CapabilityCallContext,
+    ) -> Result<CapabilityResult> {
         match self.find_executor(capability_id) {
             Some(executor) => {
                 let result = executor.execute(capability_id, params, context).await?;
@@ -140,7 +159,10 @@ impl CapabilityExecutorRegistry {
         caller_skills: &[String],
     ) -> Result<CapabilityResult> {
         // 首先检查技能权限
-        if !self.skill_manager.can_call_capability(capability_id, caller_skills) {
+        if !self
+            .skill_manager
+            .can_call_capability(capability_id, caller_skills)
+        {
             return Ok(CapabilityResult::error(format!(
                 "Insufficient skills to execute capability: {}",
                 capability_id
@@ -167,8 +189,11 @@ impl CapabilityExecutorRegistry {
 
     /// 检查是否有执行器支持该功能（带技能验证）
     pub fn can_execute_with_skills(&self, capability_id: &str, skills: &[String]) -> bool {
-        self.find_executor_with_skills(capability_id, skills).is_some() &&
-        self.skill_manager.can_call_capability(capability_id, skills)
+        self.find_executor_with_skills(capability_id, skills)
+            .is_some()
+            && self
+                .skill_manager
+                .can_call_capability(capability_id, skills)
     }
 
     /// 获取所有支持的功能ID
@@ -182,10 +207,15 @@ impl CapabilityExecutorRegistry {
 
 /// 函数式功能执行器包装
 ///
+/// Capability executor function type alias
+type CapabilityHandlerFn = dyn Fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + Send>>
+    + Send
+    + Sync;
+
 /// 允许将普通异步函数包装为CapabilityExecutor
 pub struct FnCapabilityExecutor {
     capability_id: String,
-    handler: Box<dyn Fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + Send>> + Send + Sync>,
+    handler: Box<CapabilityHandlerFn>,
 }
 
 impl FnCapabilityExecutor {
@@ -204,9 +234,18 @@ impl FnCapabilityExecutor {
 
 #[async_trait]
 impl CapabilityExecutor for FnCapabilityExecutor {
-    async fn execute(&self, capability_id: &str, params: Value, _context: &CapabilityCallContext) -> Result<Value> {
+    async fn execute(
+        &self,
+        capability_id: &str,
+        params: Value,
+        _context: &CapabilityCallContext,
+    ) -> Result<Value> {
         if capability_id != self.capability_id {
-            return Err(anyhow::anyhow!("Capability ID mismatch: {} != {}", capability_id, self.capability_id));
+            return Err(anyhow::anyhow!(
+                "Capability ID mismatch: {} != {}",
+                capability_id,
+                self.capability_id
+            ));
         }
         (self.handler)(params).await
     }

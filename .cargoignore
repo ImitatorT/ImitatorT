@@ -1,0 +1,35 @@
+# Logs
+*.log
+
+# Build directory
+/target/
+
+# Various profiles
+profdata
+*.gcda
+
+# Unit test build artifacts
+**/test_build/
+
+# Temporary coverage reports
+**/target/kcov-out/
+
+# Documentation
+**/doc/
+
+# IDE
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+
+# Frontend files (only include Rust code and essential files)
+frontend/
+publish-validation.sh
+
+# Exclude all test files (they're not needed for the published crate)
+tests/

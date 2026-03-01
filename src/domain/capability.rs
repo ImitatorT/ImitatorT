@@ -20,8 +20,77 @@ pub struct Capability {
     pub endpoint: Option<String>, // Optional endpoint URL
 }
 
+/// Builder for Capability
+#[derive(Default)]
+pub struct CapabilityBuilder {
+    id: Option<String>,
+    name: Option<String>,
+    description: Option<String>,
+    capability_path: Option<CapabilityPath>,
+    input_schema: Option<Value>,
+    output_schema: Option<Value>,
+    protocol: Option<String>,
+    endpoint: Option<String>,
+}
+
+impl CapabilityBuilder {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    pub fn capability_path(mut self, capability_path: CapabilityPath) -> Self {
+        self.capability_path = Some(capability_path);
+        self
+    }
+
+    pub fn input_schema(mut self, input_schema: Value) -> Self {
+        self.input_schema = Some(input_schema);
+        self
+    }
+
+    pub fn output_schema(mut self, output_schema: Value) -> Self {
+        self.output_schema = Some(output_schema);
+        self
+    }
+
+    pub fn protocol(mut self, protocol: impl Into<String>) -> Self {
+        self.protocol = Some(protocol.into());
+        self
+    }
+
+    pub fn endpoint(mut self, endpoint: Option<String>) -> Self {
+        self.endpoint = endpoint;
+        self
+    }
+
+    pub fn build(self) -> Capability {
+        Capability {
+            id: self.id.unwrap_or_default(),
+            name: self.name.unwrap_or_default(),
+            description: self.description.unwrap_or_default(),
+            capability_path: self.capability_path.unwrap_or_default(),
+            input_schema: self.input_schema.unwrap_or_default(),
+            output_schema: self.output_schema.unwrap_or_default(),
+            protocol: self.protocol.unwrap_or_default(),
+            endpoint: self.endpoint,
+        }
+    }
+}
+
 impl Capability {
     /// Create new capability
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -42,6 +111,11 @@ impl Capability {
             protocol: protocol.into(),
             endpoint,
         }
+    }
+
+    /// Create a new capability builder
+    pub fn builder() -> CapabilityBuilder {
+        CapabilityBuilder::default()
     }
 
     /// Get required parameter field list
@@ -69,7 +143,7 @@ impl Capability {
 }
 
 /// 功能路径 - 支持多级如 ["file", "read"]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct CapabilityPath(Vec<String>);
 
 impl CapabilityPath {
@@ -79,7 +153,7 @@ impl CapabilityPath {
     }
 
     /// 从字符串解析，如 "file/read" -> ["file", "read"]
-    pub fn from_str(path: &str) -> Self {
+    pub fn from_string(path: &str) -> Self {
         let parts: Vec<String> = path
             .split('/')
             .filter(|s| !s.is_empty())
@@ -134,12 +208,6 @@ impl CapabilityPath {
     }
 }
 
-impl Default for CapabilityPath {
-    fn default() -> Self {
-        Self(Vec::new())
-    }
-}
-
 /// JSON Schema 输入参数构建器
 ///
 /// 用于方便地构建 MCP 兼容的 JSON Schema 参数定义
@@ -149,7 +217,9 @@ impl InputSchema {
     /// 创建 object 类型的参数根
     ///
     /// # Example
-    /// ```
+    /// ```ignore
+    /// use imitatort::domain::capability::InputSchema;
+    ///
     /// let params = InputSchema::object()
     ///     .property("name", InputSchema::string().description("用户名"))
     ///     .property("age", InputSchema::integer().description("年龄").optional())
@@ -259,13 +329,15 @@ impl ObjectSchemaBuilder {
         // 先检查是否必填，再移动 builder
         let is_required = builder.required;
 
-        let properties = self.schema["properties"].as_object_mut()
+        let properties = self.schema["properties"]
+            .as_object_mut()
             .expect("Expected 'properties' to be an object in schema");
         properties.insert(name.to_string(), builder.build());
 
         // 如果属性是必填的，添加到 required 数组
         if is_required {
-            let required = self.schema["required"].as_array_mut()
+            let required = self.schema["required"]
+                .as_array_mut()
                 .expect("Expected 'required' to be an array in schema");
             required.push(json!(name));
         }
@@ -275,12 +347,14 @@ impl ObjectSchemaBuilder {
 
     /// 直接添加原始 JSON Schema 属性
     pub fn raw_property(mut self, name: &str, schema: Value, is_required: bool) -> Self {
-        let properties = self.schema["properties"].as_object_mut()
+        let properties = self.schema["properties"]
+            .as_object_mut()
             .expect("Expected 'properties' to be an object in schema");
         properties.insert(name.to_string(), schema);
 
         if is_required {
-            let required = self.schema["required"].as_array_mut()
+            let required = self.schema["required"]
+                .as_array_mut()
                 .expect("Expected 'required' to be an array in schema");
             required.push(json!(name));
         }
@@ -333,18 +407,13 @@ impl TypeBuilder {
 }
 
 /// 匹配类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MatchType {
     /// 精确匹配
     Exact,
     /// 模糊匹配
+    #[default]
     Fuzzy,
-}
-
-impl Default for MatchType {
-    fn default() -> Self {
-        MatchType::Fuzzy
-    }
 }
 
 /// Capability 提供者接口

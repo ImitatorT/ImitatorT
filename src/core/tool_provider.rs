@@ -113,7 +113,11 @@ impl ToolProvider for RegistryToolProvider {
                         tool.id.to_lowercase().contains(&query_lower)
                             || tool.name.to_lowercase().contains(&query_lower)
                             || tool.description.to_lowercase().contains(&query_lower)
-                            || tool.category.to_path_string().to_lowercase().contains(&query_lower)
+                            || tool
+                                .category
+                                .to_path_string()
+                                .to_lowercase()
+                                .contains(&query_lower)
                     }
                 }
             })
@@ -125,13 +129,9 @@ impl ToolProvider for RegistryToolProvider {
         // 注意：这需要在 tokio 运行时上下文中调用
         let rt = tokio::runtime::Handle::try_current();
         match rt {
-            Ok(handle) => {
-                tokio::task::block_in_place(|| {
-                    handle.block_on(async {
-                        self.registry.find_by_category(category).await
-                    })
-                })
-            }
+            Ok(handle) => tokio::task::block_in_place(|| {
+                handle.block_on(async { self.registry.find_by_category(category).await })
+            }),
             Err(_) => {
                 // 如果不在运行时中，返回空列表
                 Vec::new()
@@ -142,17 +142,13 @@ impl ToolProvider for RegistryToolProvider {
     fn get_category_tree(&self) -> CategoryNodeInfo {
         let rt = tokio::runtime::Handle::try_current();
         match rt {
-            Ok(handle) => {
-                tokio::task::block_in_place(|| {
-                    handle.block_on(async {
-                        let root = self.registry.get_category_tree().await;
-                        convert_to_info(&root, "")
-                    })
+            Ok(handle) => tokio::task::block_in_place(|| {
+                handle.block_on(async {
+                    let root = self.registry.get_category_tree().await;
+                    convert_to_info(&root, "")
                 })
-            }
-            Err(_) => {
-                CategoryNodeInfo::new("root", "")
-            }
+            }),
+            Err(_) => CategoryNodeInfo::new("root", ""),
         }
     }
 }
@@ -237,7 +233,7 @@ impl FrameworkToolProvider {
             "tool.search",
             "搜索工具",
             "按名称、描述、分类搜索工具，支持精确匹配和模糊匹配",
-            CategoryPath::from_str("tool/query"),
+            CategoryPath::from_string("tool/query"),
             JsonSchema::object()
                 .property("query", JsonSchema::string().description("搜索关键词"))
                 .property(
@@ -268,7 +264,7 @@ impl FrameworkToolProvider {
             "tool.list_categories",
             "列出工具分类",
             "获取所有工具的分类层级结构",
-            CategoryPath::from_str("tool/query"),
+            CategoryPath::from_string("tool/query"),
             JsonSchema::object()
                 .property(
                     "parent_category",
@@ -292,7 +288,7 @@ impl FrameworkToolProvider {
             "tool.get_category_tools",
             "获取分类工具",
             "获取指定分类下的所有工具",
-            CategoryPath::from_str("tool/query"),
+            CategoryPath::from_string("tool/query"),
             JsonSchema::object()
                 .property(
                     "category",
@@ -320,15 +316,16 @@ impl FrameworkToolProvider {
             "message.send_direct",
             "发送私聊消息",
             "向指定 Agent 发送私聊消息",
-            CategoryPath::from_str("message/send"),
+            CategoryPath::from_string("message/send"),
             JsonSchema::object()
-                .property("to_agent_id", JsonSchema::string().description("接收者 Agent ID"))
+                .property(
+                    "to_agent_id",
+                    JsonSchema::string().description("接收者 Agent ID"),
+                )
                 .property("content", JsonSchema::string().description("消息内容"))
                 .property(
                     "reply_to_message_id",
-                    JsonSchema::string()
-                        .description("回复的消息ID")
-                        .optional(),
+                    JsonSchema::string().description("回复的消息ID").optional(),
                 )
                 .build(),
         )
@@ -343,7 +340,7 @@ impl FrameworkToolProvider {
             "message.send_group",
             "发送群聊消息",
             "向指定群组发送消息，支持 @ 他人",
-            CategoryPath::from_str("message/send"),
+            CategoryPath::from_string("message/send"),
             JsonSchema::object()
                 .property("group_id", JsonSchema::string().description("群组 ID"))
                 .property("content", JsonSchema::string().description("消息内容"))
@@ -355,9 +352,7 @@ impl FrameworkToolProvider {
                 )
                 .property(
                     "reply_to_message_id",
-                    JsonSchema::string()
-                        .description("回复的消息ID")
-                        .optional(),
+                    JsonSchema::string().description("回复的消息ID").optional(),
                 )
                 .build(),
         )
@@ -372,9 +367,12 @@ impl FrameworkToolProvider {
             "message.reply",
             "回复消息",
             "引用并回复指定消息，可同时 @ 他人",
-            CategoryPath::from_str("message/send"),
+            CategoryPath::from_string("message/send"),
             JsonSchema::object()
-                .property("message_id", JsonSchema::string().description("要回复的消息ID"))
+                .property(
+                    "message_id",
+                    JsonSchema::string().description("要回复的消息ID"),
+                )
                 .property("content", JsonSchema::string().description("回复内容"))
                 .property(
                     "mention_agent_ids",
@@ -395,13 +393,10 @@ impl FrameworkToolProvider {
             "time.now",
             "获取当前时间",
             "获取系统当前时间",
-            CategoryPath::from_str("time/query"),
+            CategoryPath::from_string("time/query"),
             JsonSchema::object().build(),
         )
-        .with_returns(ReturnType::new(
-            "当前时间信息",
-            json!({"type": "object"}),
-        ))
+        .with_returns(ReturnType::new("当前时间信息", json!({"type": "object"})))
     }
 
     fn create_org_get_structure() -> Tool {
@@ -412,7 +407,7 @@ impl FrameworkToolProvider {
             "org.get_structure",
             "获取组织架构",
             "获取完整的组织架构树",
-            CategoryPath::from_str("org/query"),
+            CategoryPath::from_string("org/query"),
             JsonSchema::object().build(),
         )
         .with_returns(ReturnType::new("组织架构树", json!({"type": "object"})))
@@ -426,12 +421,18 @@ impl FrameworkToolProvider {
             "org.get_department",
             "Get Department Info",
             "Get detailed information of specified department",
-            CategoryPath::from_str("org/query"),
+            CategoryPath::from_string("org/query"),
             JsonSchema::object()
-                .property("department_id", JsonSchema::string().description("Department ID"))
+                .property(
+                    "department_id",
+                    JsonSchema::string().description("Department ID"),
+                )
                 .build(),
         )
-        .with_returns(ReturnType::new("Department Info", json!({"type": "object"})))
+        .with_returns(ReturnType::new(
+            "Department Info",
+            json!({"type": "object"}),
+        ))
     }
 
     fn create_org_get_leader() -> Tool {
@@ -442,9 +443,12 @@ impl FrameworkToolProvider {
             "org.get_leader",
             "Get Department Leader",
             "Get the leader information of specified department",
-            CategoryPath::from_str("org/query"),
+            CategoryPath::from_string("org/query"),
             JsonSchema::object()
-                .property("department_id", JsonSchema::string().description("Department ID"))
+                .property(
+                    "department_id",
+                    JsonSchema::string().description("Department ID"),
+                )
                 .build(),
         )
         .with_returns(ReturnType::new("领导信息", json!({"type": "object"})))
@@ -458,7 +462,7 @@ impl FrameworkToolProvider {
             "org.find_agents",
             "查找 Agent",
             "Multi-dimensional Agent search by ID, name, position, department, description, etc.",
-            CategoryPath::from_str("org/query"),
+            CategoryPath::from_string("org/query"),
             JsonSchema::object()
                 .property(
                     "query_type",
@@ -468,9 +472,7 @@ impl FrameworkToolProvider {
                 .property("query_value", JsonSchema::string().description("查询值"))
                 .property(
                     "fuzzy_match",
-                    JsonSchema::boolean()
-                        .description("是否模糊匹配")
-                        .optional(),
+                    JsonSchema::boolean().description("是否模糊匹配").optional(),
                 )
                 .build(),
         )
@@ -488,9 +490,12 @@ impl FrameworkToolProvider {
             "org.get_sub_departments",
             "Get Sub-departments",
             "Get the list of direct sub-departments of specified department",
-            CategoryPath::from_str("org/query"),
+            CategoryPath::from_string("org/query"),
             JsonSchema::object()
-                .property("department_id", JsonSchema::string().description("Department ID"))
+                .property(
+                    "department_id",
+                    JsonSchema::string().description("Department ID"),
+                )
                 .build(),
         )
         .with_returns(ReturnType::new(
@@ -507,7 +512,7 @@ impl FrameworkToolProvider {
             "org.get_subordinates",
             "Get Subordinates",
             "Get the list of subordinates for specified Agent (based on department leadership relationship)",
-            CategoryPath::from_str("org/query"),
+            CategoryPath::from_string("org/query"),
             JsonSchema::object()
                 .property("agent_id", JsonSchema::string().description("Agent ID"))
                 .build(),
@@ -536,17 +541,14 @@ impl ToolProvider for FrameworkToolProvider {
 
         all_tools
             .into_iter()
-            .filter(|tool| {
-                match match_type {
-                    MatchType::Exact => {
-                        tool.id.to_lowercase() == query_lower
-                            || tool.name.to_lowercase() == query_lower
-                    }
-                    MatchType::Fuzzy => {
-                        tool.id.to_lowercase().contains(&query_lower)
-                            || tool.name.to_lowercase().contains(&query_lower)
-                            || tool.description.to_lowercase().contains(&query_lower)
-                    }
+            .filter(|tool| match match_type {
+                MatchType::Exact => {
+                    tool.id.to_lowercase() == query_lower || tool.name.to_lowercase() == query_lower
+                }
+                MatchType::Fuzzy => {
+                    tool.id.to_lowercase().contains(&query_lower)
+                        || tool.name.to_lowercase().contains(&query_lower)
+                        || tool.description.to_lowercase().contains(&query_lower)
                 }
             })
             .collect()
@@ -554,13 +556,11 @@ impl ToolProvider for FrameworkToolProvider {
 
     fn list_tools_by_category(&self, category: &str) -> Vec<Tool> {
         let all_tools = Self::get_framework_tools();
-        let category_path = crate::domain::tool::CategoryPath::from_str(category);
+        let category_path = crate::domain::tool::CategoryPath::from_string(category);
 
         all_tools
             .into_iter()
-            .filter(|tool| {
-                tool.category == category_path || tool.category.contains(&category_path)
-            })
+            .filter(|tool| tool.category == category_path || tool.category.contains(&category_path))
             .collect()
     }
 
@@ -589,10 +589,7 @@ fn add_tool_to_tree(root: &mut CategoryNodeInfo, tool: &Tool) {
         current_path.push_str(segment);
 
         // 查找或创建子节点
-        let child_index = current
-            .children
-            .iter()
-            .position(|c| c.name == *segment);
+        let child_index = current.children.iter().position(|c| c.name == *segment);
 
         match child_index {
             Some(index) => {

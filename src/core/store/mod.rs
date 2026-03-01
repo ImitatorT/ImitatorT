@@ -5,8 +5,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use crate::domain::{Group, Message, Organization};
 use crate::domain::invitation_code::InvitationCode;
+use crate::domain::{Group, Message, Organization};
 
 /// 消息查询过滤器
 #[derive(Debug, Clone, Default)]
@@ -102,9 +102,7 @@ pub trait Store: Send + Sync {
     /// 加载与指定Agent相关的消息
     async fn load_messages_by_agent(&self, agent_id: &str, limit: usize) -> Result<Vec<Message>> {
         // 查询从指定Agent发送的消息
-        let from_filter = MessageFilter::new()
-            .limit(limit)
-            .from(agent_id);
+        let from_filter = MessageFilter::new().limit(limit).from(agent_id);
         let from_msgs = self.load_messages(from_filter).await?;
 
         // 查询发送给指定Agent的私聊消息
@@ -123,7 +121,7 @@ pub trait Store: Send + Sync {
         }
 
         // 按时间戳排序，最新的在前
-        all_msgs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        all_msgs.sort_by_key(|msg| std::cmp::Reverse(msg.timestamp));
         all_msgs.truncate(limit);
 
         Ok(all_msgs)
@@ -145,7 +143,10 @@ pub trait Store: Send + Sync {
     }
 
     /// 根据用户名加载用户
-    async fn load_user_by_username(&self, _username: &str) -> Result<Option<crate::domain::user::User>> {
+    async fn load_user_by_username(
+        &self,
+        _username: &str,
+    ) -> Result<Option<crate::domain::user::User>> {
         // 默认实现，子类可以重写
         Ok(None)
     }
@@ -181,11 +182,11 @@ pub trait Store: Send + Sync {
     }
 
     /// 根据创建者ID查找邀请码
-    async fn load_invitation_codes_by_creator(&self, _creator_id: &str) -> Result<Vec<InvitationCode>> {
+    async fn load_invitation_codes_by_creator(
+        &self,
+        _creator_id: &str,
+    ) -> Result<Vec<InvitationCode>> {
         // 默认实现，子类可以重写
         Ok(vec![])
     }
 }
-
-mod memory;
-pub use memory::MemoryStore;

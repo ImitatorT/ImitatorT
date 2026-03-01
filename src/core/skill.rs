@@ -2,10 +2,10 @@
 //!
 //! 提供技能的注册、绑定和权限管理功能
 
-use crate::domain::{Skill, Tool, SkillToolBinding, ToolAccessType};
+use crate::core::capability::CapabilityRegistry;
 use crate::core::tool::ToolRegistry;
 use crate::domain::capability::{Capability, CapabilityAccessType, SkillCapabilityBinding};
-use crate::core::capability::CapabilityRegistry;
+use crate::domain::{Skill, SkillToolBinding, Tool, ToolAccessType};
 use anyhow::Result;
 use dashmap::DashMap;
 use std::sync::Arc;
@@ -32,7 +32,10 @@ pub struct SkillManager {
 }
 
 impl SkillManager {
-    pub fn new(tool_registry: Arc<ToolRegistry>, capability_registry: Arc<CapabilityRegistry>) -> Self {
+    pub fn new(
+        tool_registry: Arc<ToolRegistry>,
+        capability_registry: Arc<CapabilityRegistry>,
+    ) -> Self {
         Self {
             skills: DashMap::new(),
             skill_tool_bindings: DashMap::new(),
@@ -53,7 +56,10 @@ impl SkillManager {
     }
 
     /// 创建支持工具和功能的 SkillManager
-    pub fn new_with_registries(tool_registry: Arc<ToolRegistry>, capability_registry: Arc<CapabilityRegistry>) -> Self {
+    pub fn new_with_registries(
+        tool_registry: Arc<ToolRegistry>,
+        capability_registry: Arc<CapabilityRegistry>,
+    ) -> Self {
         Self::new(tool_registry, capability_registry)
     }
 
@@ -79,17 +85,23 @@ impl SkillManager {
             return Err(anyhow::anyhow!("Tool not found: {}", tool_id));
         }
 
-        self.tool_access_control.insert(tool_id.to_string(), access_type);
+        self.tool_access_control
+            .insert(tool_id.to_string(), access_type);
         Ok(())
     }
 
     /// 设置功能访问类型
-    pub fn set_capability_access(&self, capability_id: &str, access_type: CapabilityAccessType) -> Result<()> {
+    pub fn set_capability_access(
+        &self,
+        capability_id: &str,
+        access_type: CapabilityAccessType,
+    ) -> Result<()> {
         if !self.capability_registry.contains(capability_id) {
             return Err(anyhow::anyhow!("Capability not found: {}", capability_id));
         }
 
-        self.capability_access_control.insert(capability_id.to_string(), access_type);
+        self.capability_access_control
+            .insert(capability_id.to_string(), access_type);
         Ok(())
     }
 
@@ -106,13 +118,13 @@ impl SkillManager {
         // 添加到技能-工具映射
         self.skill_tool_bindings
             .entry(binding.skill_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(binding.clone());
 
         // 添加到工具-技能映射
         self.tool_skill_bindings
             .entry(binding.tool_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(binding.skill_id.clone());
 
         // 自动将工具设为私有（如果尚未设置）
@@ -131,23 +143,29 @@ impl SkillManager {
             return Err(anyhow::anyhow!("Skill not found: {}", binding.skill_id));
         }
         if !self.capability_registry.contains(&binding.capability_id) {
-            return Err(anyhow::anyhow!("Capability not found: {}", binding.capability_id));
+            return Err(anyhow::anyhow!(
+                "Capability not found: {}",
+                binding.capability_id
+            ));
         }
 
         // 添加到技能-功能映射
         self.skill_capability_bindings
             .entry(binding.skill_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(binding.clone());
 
         // 添加到功能-技能映射
         self.capability_skill_bindings
             .entry(binding.capability_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(binding.skill_id.clone());
 
         // 自动将功能设为私有（如果尚未设置）
-        if !self.capability_access_control.contains_key(&binding.capability_id) {
+        if !self
+            .capability_access_control
+            .contains_key(&binding.capability_id)
+        {
             self.capability_access_control
                 .insert(binding.capability_id.clone(), CapabilityAccessType::Private);
         }
@@ -193,7 +211,8 @@ impl SkillManager {
         }
 
         // 检查访问控制
-        let access_type = self.tool_access_control
+        let access_type = self
+            .tool_access_control
             .get(tool_id)
             .map(|v| v.value().clone())
             .unwrap_or(ToolAccessType::Public); // 默认为公共工具
@@ -203,7 +222,9 @@ impl SkillManager {
             ToolAccessType::Private => {
                 // 检查调用者是否具有绑定该工具的技能
                 if let Some(allowed_skills) = self.tool_skill_bindings.get(tool_id) {
-                    caller_skills.iter().any(|skill| allowed_skills.value().contains(skill))
+                    caller_skills
+                        .iter()
+                        .any(|skill| allowed_skills.value().contains(skill))
                 } else {
                     false
                 }
@@ -219,7 +240,8 @@ impl SkillManager {
         }
 
         // 检查访问控制
-        let access_type = self.capability_access_control
+        let access_type = self
+            .capability_access_control
             .get(capability_id)
             .map(|v| v.value().clone())
             .unwrap_or(CapabilityAccessType::Public); // 默认为公共功能
@@ -229,7 +251,9 @@ impl SkillManager {
             CapabilityAccessType::Private => {
                 // 检查调用者是否具有绑定该功能的技能
                 if let Some(allowed_skills) = self.capability_skill_bindings.get(capability_id) {
-                    caller_skills.iter().any(|skill| allowed_skills.value().contains(skill))
+                    caller_skills
+                        .iter()
+                        .any(|skill| allowed_skills.value().contains(skill))
                 } else {
                     false
                 }
@@ -268,7 +292,8 @@ impl SkillManager {
         self.skill_tool_bindings
             .get(skill_id)
             .map(|bindings| {
-                bindings.value()
+                bindings
+                    .value()
                     .iter()
                     .map(|binding| binding.tool_id.clone())
                     .collect()
@@ -281,7 +306,8 @@ impl SkillManager {
         self.skill_capability_bindings
             .get(skill_id)
             .map(|bindings| {
-                bindings.value()
+                bindings
+                    .value()
                     .iter()
                     .map(|binding| binding.capability_id.clone())
                     .collect()
@@ -296,11 +322,19 @@ impl SkillManager {
 
     /// 获取所有工具ID
     pub fn get_tool_ids(&self) -> Vec<String> {
-        self.tool_registry.list_all().iter().map(|t| t.id.clone()).collect()
+        self.tool_registry
+            .list_all()
+            .iter()
+            .map(|t| t.id.clone())
+            .collect()
     }
 
     /// 获取所有功能ID
     pub fn get_capability_ids(&self) -> Vec<String> {
-        self.capability_registry.list_all().iter().map(|c| c.id.clone()).collect()
+        self.capability_registry
+            .list_all()
+            .iter()
+            .map(|c| c.id.clone())
+            .collect()
     }
 }

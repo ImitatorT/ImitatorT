@@ -15,10 +15,13 @@ use crate::core::store::Store;
 use crate::domain::{Message, Organization};
 use crate::infrastructure::store::SqliteStore;
 
-use super::company_runtime::{OrganizationManager, AgentManager, ToolCapabilityManager};
+use super::company_runtime::{AgentManager, OrganizationManager, ToolCapabilityManager};
 
 // 导入缺失的类型
-use crate::{ToolRegistry, ToolEnvironment, FrameworkToolExecutor, CapabilityRegistry, McpServer, McpProtocolHandler};
+use crate::{
+    CapabilityRegistry, FrameworkToolExecutor, McpProtocolHandler, McpServer, ToolEnvironment,
+    ToolRegistry,
+};
 
 // 默认数据库路径现在由 AppConfig 管理
 // pub const DEFAULT_DB_PATH: &str = "imitatort.db"; // 已移除硬编码
@@ -33,12 +36,16 @@ pub struct VirtualCompany {
     message_bus: Arc<MessageBus>,
     message_tx: broadcast::Sender<Message>,
     store: Arc<dyn Store>,
+    watchdog_agent: Arc<crate::core::watchdog_agent::WatchdogAgent>,
 }
 
 impl VirtualCompany {
     /// 从配置创建虚拟公司，使用默认SQLite存储
     pub fn from_config(config: CompanyConfig) -> Result<Self> {
-        Self::with_sqlite(config, &std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string()))
+        Self::with_sqlite(
+            config,
+            std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string()),
+        )
     }
 
     /// 从配置创建虚拟公司，使用指定路径的SQLite存储
@@ -56,6 +63,16 @@ impl VirtualCompany {
         let tool_capability_manager = ToolCapabilityManager::new();
         let agent_manager = AgentManager::new(message_bus.clone());
 
+        // 创建系统WatchdogAgent
+        let watchdog_agent = Arc::new(crate::core::watchdog_agent::WatchdogAgent::new(
+            crate::domain::Agent::new(
+                "system_watchdog",
+                "System Watchdog Agent",
+                crate::domain::Role::simple("System", "System monitoring agent"),
+                crate::domain::LLMConfig::openai("dummy-key"),
+            ),
+        ));
+
         Self {
             organization_manager,
             agent_manager,
@@ -63,6 +80,7 @@ impl VirtualCompany {
             message_bus,
             message_tx,
             store,
+            watchdog_agent,
         }
     }
 
@@ -95,31 +113,32 @@ impl VirtualCompany {
     pub async fn save(&self) -> Result<()> {
         info!("Saving company state to storage...");
         let org = self.organization_manager.organization().await;
-        self.store.save_organization(&*org).await?;
+        self.store.save_organization(&org).await?;
         info!("Company state saved successfully");
         Ok(())
     }
 
     /// 初始化并启动公司
     pub async fn run(&self) -> Result<()> {
-        info!("Starting virtual company: {}", self.organization_manager.config().name);
+        info!(
+            "Starting virtual company: {}",
+            self.organization_manager.config().name
+        );
 
         // 1. 初始化所有Agent
         let org = self.organization_manager.organization().await;
-        self.agent_manager.initialize_agents(&*org).await?;
+        self.agent_manager
+            .initialize_agents(&org, Some(self.watchdog_agent.clone()))
+            .await?;
         drop(org); // 释放读锁
 
-        info!("All {} agents initialized", self.agent_manager.get_agents().await?.len());
+        info!(
+            "All {} agents initialized",
+            self.agent_manager.get_agents().await?.len()
+        );
 
-        // 2. 启动所有Agent的自主循环
-        let handles = self.agent_manager.start_agent_loops().await?;
-
-        info!("All agents started, company is running...");
-
-        // 3. 等待所有Agent（实际上不会结束）
-        for handle in handles {
-            let _ = handle.await;
-        }
+        // 现在Agent只在事件触发时激活，不再启动持续循环
+        info!("Agents initialized and ready for event-driven activation");
 
         Ok(())
     }
@@ -127,11 +146,6 @@ impl VirtualCompany {
     /// 获取消息流（用于外部监听）
     pub fn subscribe_messages(&self) -> broadcast::Receiver<Message> {
         self.message_tx.subscribe()
-    }
-
-    /// 手动触发任务给指定Agent
-    pub fn assign_task(&self, agent_id: &str, task: impl Into<String>) -> Result<()> {
-        self.agent_manager.assign_task(agent_id, task)
     }
 
     /// 获取组织架构（异步读取）
@@ -194,8 +208,13 @@ impl VirtualCompany {
     }
 
     /// 注册应用自定义功能
-    pub async fn register_app_capability(&self, capability: crate::domain::capability::Capability) -> Result<()> {
-        self.tool_capability_manager.register_app_capability(capability).await
+    pub async fn register_app_capability(
+        &self,
+        capability: crate::domain::capability::Capability,
+    ) -> Result<()> {
+        self.tool_capability_manager
+            .register_app_capability(capability)
+            .await
     }
 
     /// 创建 MCP 服务器
@@ -206,6 +225,31 @@ impl VirtualCompany {
     /// 获取 MCP 协议处理器
     pub fn get_mcp_protocol_handler(&self) -> McpProtocolHandler {
         self.tool_capability_manager.get_mcp_protocol_handler()
+    }
+
+    /// 注册技能
+    pub fn register_skill(&self, skill: crate::domain::skill::Skill) -> Result<()> {
+        self.tool_capability_manager.register_skill(skill)
+    }
+
+    /// 绑定技能和工具
+    pub fn bind_skill_tool(&self, binding: crate::domain::skill::SkillToolBinding) -> Result<()> {
+        self.tool_capability_manager.bind_skill_tool(binding)
+    }
+
+    /// 设置工具访问类型
+    pub fn set_tool_access(
+        &self,
+        tool_id: &str,
+        access_type: crate::domain::skill::ToolAccessType,
+    ) -> Result<()> {
+        self.tool_capability_manager
+            .set_tool_access(tool_id, access_type)
+    }
+
+    /// 获取技能管理器引用
+    pub fn skill_manager(&self) -> Arc<crate::core::skill::SkillManager> {
+        self.tool_capability_manager.skill_manager()
     }
 }
 
@@ -218,7 +262,7 @@ pub struct CompanyBuilder {
 impl CompanyBuilder {
     /// 创建新的构建器，使用默认SQLite路径
     pub fn new() -> Result<Self> {
-        Self::with_sqlite(&std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string()))
+        Self::with_sqlite(std::env::var("DB_PATH").unwrap_or_else(|_| "imitatort.db".to_string()))
     }
 
     /// 从配置创建，使用默认SQLite路径

@@ -1,0 +1,147 @@
+# .github/workflows/cross-build.yml
+name: Cross Platform Builds
+
+on:
+  push:
+    tags:
+      - 'v*'
+    paths:
+      - '**/*.rs'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '.github/workflows/cross-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  pre-checks:
+    name: Pre-build Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-deps-prebuild-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-deps-prebuild-
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: target/
+          key: ${{ runner.os }}-cargo-build-prebuild-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs', '**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-prebuild-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-build-prebuild-
+            ${{ runner.os }}-cargo-build-
+
+      - name: Check syntax and dependencies
+        run: |
+          cargo check --release
+          cargo clippy --release
+          cargo test --release
+
+  build:
+    name: Build for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    needs: pre-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive_name: imitatort-x86_64-unknown-linux-gnu.tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            archive_name: imitatort-aarch64-unknown-linux-gnu.tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive_name: imitatort-x86_64-apple-darwin.tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive_name: imitatort-aarch64-apple-darwin.tar.gz
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install cross-compilation tools (Linux)
+        if: runner.os == 'Linux' && matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Set up cross-compilation for Linux targets
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          echo "CC_aarch64_unknown_linux_gnu=gcc-aarch64-linux-gnu" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      # Skip tests since they ran in pre-checks
+      - name: Build for target
+        run: |
+          # Build only the binary, leveraging cached dependencies from pre-checks
+          cargo build --release --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: Package binary
+        shell: bash
+        run: |
+          binary_name="imitatort"
+
+          # Handle Windows executable extension
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            binary_name="imitatort.exe"
+          fi
+
+          dist_dir="dist_${{ matrix.target }}"
+          mkdir -p "$dist_dir"
+
+          cp "target/${{ matrix.target }}/release/$binary_name" "$dist_dir/"
+          cp README.md "$dist_dir/"
+          cp LICENSE "$dist_dir/"
+
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            7z a "${{ matrix.archive_name }}" "$dist_dir"
+          else
+            tar czvf "${{ matrix.archive_name }}" "$dist_dir"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive_name }}
+          path: ${{ matrix.archive_name }}

@@ -5,17 +5,36 @@ import type { CompanyEvent, Message } from '../types';
 
 export function useWebSocket() {
   const ws = useRef<WebSocket | null>(null);
-  const reconnectTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
-  
+
   const [connected, setConnected] = useState(false);
   const { addMessage, setTyping, updateSession } = useChatStore();
+
+  // Store functions in refs to avoid circular dependencies
+  const connectRef = useRef<() => void>();
+  const attemptReconnectRef = useRef<() => void>();
+
+  const attemptReconnect = useCallback(() => {
+    if (reconnectAttempts.current >= maxReconnectAttempts) {
+      return;
+    }
+
+    reconnectAttempts.current++;
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+
+    if (reconnectTimeout.current) {
+      clearTimeout(reconnectTimeout.current);
+    }
+    reconnectTimeout.current = setTimeout(() => {
+      connectRef.current?.();
+    }, delay);
+  }, []);
 
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
 
-    // Get WebSocket URL from backend store
     const { getWsUrl } = useBackendStore.getState();
     const wsUrl = getWsUrl();
 
@@ -23,7 +42,6 @@ export function useWebSocket() {
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
-        console.log('[WebSocket] Connected to virtual company stream');
         setConnected(true);
         reconnectAttempts.current = 0;
       };
@@ -31,92 +49,69 @@ export function useWebSocket() {
       ws.current.onmessage = (event) => {
         try {
           const data: CompanyEvent = JSON.parse(event.data);
-          handleEvent(data);
-        } catch (error) {
-          console.error('[WebSocket] Failed to parse event:', error);
+          switch (data.type) {
+            case 'message_sent': {
+              const message: Message = {
+                id: data.message_id,
+                content: data.content,
+                sender: data.sender,
+                timestamp: new Date(data.timestamp),
+                type: 'text',
+                status: 'sent',
+              };
+              addMessage(data.session_id, message);
+              break;
+            }
+
+            case 'agent_typing':
+              setTyping(data.session_id, data.agent_id, true);
+              setTimeout(() => {
+                setTyping(data.session_id, data.agent_id, false);
+              }, 3000);
+              break;
+
+            case 'group_created':
+              updateSession({
+                id: data.group_id,
+                name: data.name,
+                type: 'group',
+                participants: data.members,
+                unreadCount: 0,
+                updatedAt: new Date(),
+              });
+              break;
+
+            case 'agent_online':
+            case 'agent_offline':
+              break;
+
+            case 'system':
+              break;
+          }
+        } catch (_error) {
+          // Handle parsing error
         }
       };
 
       ws.current.onclose = () => {
-        console.log('[WebSocket] Disconnected');
         setConnected(false);
-        attemptReconnect();
+        attemptReconnectRef.current?.();
       };
 
-      ws.current.onerror = (error) => {
-        console.error('[WebSocket] Error:', error);
+      ws.current.onerror = (_error) => {
         setConnected(false);
       };
-    } catch (error) {
-      console.error('[WebSocket] Failed to create connection:', error);
+    } catch (_error) {
       setConnected(false);
-      attemptReconnect();
-    }
-  }, []);
-
-  const handleEvent = useCallback((event: CompanyEvent) => {
-    console.log('[WebSocket] Received event:', event.type);
-    
-    switch (event.type) {
-      case 'message_sent':
-        const message: Message = {
-          id: event.message_id,
-          content: event.content,
-          sender: event.sender,
-          timestamp: new Date(event.timestamp),
-          type: 'text',
-          status: 'sent',
-        };
-        addMessage(event.session_id, message);
-        break;
-        
-      case 'agent_typing':
-        setTyping(event.session_id, event.agent_id, true);
-        // Auto-clear typing after 3 seconds
-        setTimeout(() => {
-          setTyping(event.session_id, event.agent_id, false);
-        }, 3000);
-        break;
-        
-      case 'group_created':
-        // Add new session to list
-        updateSession({
-          id: event.group_id,
-          name: event.name,
-          type: 'group',
-          participants: event.members,
-          unreadCount: 0,
-          updatedAt: new Date(),
-        });
-        break;
-        
-      case 'agent_online':
-      case 'agent_offline':
-        // Agent status updates - handled by store
-        console.log(`[Company] Agent ${event.agent_id} is ${event.type === 'agent_online' ? 'online' : 'offline'}`);
-        break;
-        
-      case 'system':
-        console.log('[Company System]', event.message);
-        break;
+      attemptReconnectRef.current?.();
     }
   }, [addMessage, setTyping, updateSession]);
 
-  const attemptReconnect = useCallback(() => {
-    if (reconnectAttempts.current >= maxReconnectAttempts) {
-      console.log('[WebSocket] Max reconnection attempts reached');
-      return;
-    }
-
-    reconnectAttempts.current++;
-    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-    
-    console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
-    
-    reconnectTimeout.current = setTimeout(() => {
-      connect();
-    }, delay);
-  }, [connect]);
+  // Update refs whenever the functions change
+  useEffect(() => {
+    connectRef.current = connect;
+    attemptReconnectRef.current = attemptReconnect;
+  }, [connect, attemptReconnect]);
 
   useEffect(() => {
     connect();
@@ -124,6 +119,7 @@ export function useWebSocket() {
     return () => {
       if (reconnectTimeout.current) {
         clearTimeout(reconnectTimeout.current);
+        reconnectTimeout.current = null;
       }
       if (ws.current) {
         ws.current.close();

@@ -68,7 +68,7 @@ export default function BoardManagement() {
       } else {
         toast.error(data.error || '添加失败');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('网络错误');
     } finally {
       setIsLoading(false);
@@ -93,7 +93,7 @@ export default function BoardManagement() {
       } else {
         toast.error(data.error || '删除失败');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('网络错误');
     } finally {
       setIsLoading(false);
