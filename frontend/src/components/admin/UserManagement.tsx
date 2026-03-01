@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../../stores/authStore';
+import { getApiUrl } from '../../stores/backendStore';
 import { Button, Input, Modal } from '../ui';
 import { Key, Plus, Copy, Trash2, Calendar, Users, User, Building2, Briefcase } from 'lucide-react';
 
@@ -41,7 +42,7 @@ export default function UserManagement() {
   const loadInviteCodes = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/admin/invite-codes', {
+      const res = await fetch(getApiUrl('/api/admin/invite-codes'), {
         headers: {
           'Authorization': `Bearer ${token || ''}`,
         },
@@ -60,7 +61,7 @@ export default function UserManagement() {
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await fetch(getApiUrl('/api/admin/users'), {
         headers: {
           'Authorization': `Bearer ${token || ''}`,
         },
@@ -90,7 +91,7 @@ export default function UserManagement() {
         max_usage: newInviteMaxUsage
       };
 
-      const res = await fetch('/api/admin/invite-codes', {
+      const res = await fetch(getApiUrl('/api/admin/invite-codes'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,7 +121,7 @@ export default function UserManagement() {
 
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/admin/invite-codes/${id}`, {
+      const res = await fetch(getApiUrl(`/api/admin/invite-codes/${id}`), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token || ''}`,
