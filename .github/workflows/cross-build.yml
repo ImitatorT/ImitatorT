@@ -36,11 +36,19 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target/
-          key: ${{ runner.os }}-cargo-prebuild-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-deps-prebuild-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-prebuild-
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-deps-prebuild-
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: target/
+          key: ${{ runner.os }}-cargo-build-prebuild-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs', '**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-prebuild-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-build-prebuild-
+            ${{ runner.os }}-cargo-build-
 
       - name: Check syntax and dependencies
         run: |

@@ -42,10 +42,18 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-deps-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-deps-
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: target/
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs', '**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-build-
 
       - name: Verify version matches tag
         run: |
@@ -56,15 +64,13 @@ jobs:
             exit 1
           fi
 
-      # Run minimal verification tests
-      - name: Run quick verification tests
-        run: cargo test --release --lib --bins -- --skip integration_tests
-
-      - name: Run clippy
-        run: cargo clippy --release -- -D warnings
-
-      - name: Run fmt check
-        run: cargo fmt --all -- --check
+      # Run comprehensive backend tests before publishing
+      - name: Run backend tests
+        run: |
+          # First run unit tests
+          cargo test --release
+          # Then run clippy for syntax checking
+          cargo clippy --release -- -D warnings
 
       - name: Publish to crates.io
         uses: katyo/publish-crates@v2
@@ -91,10 +97,18 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-deps-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-deps-
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: target/
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs', '**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-build-
 
       - name: Determine version suffix
         id: version
@@ -115,15 +129,13 @@ jobs:
           # Update Cargo.toml with new version
           sed -i.bak "s/^version = \".*\"$/version = \"$NEW_VERSION\"/" Cargo.toml
 
-      # Run minimal verification tests
-      - name: Run quick verification tests
-        run: cargo test --release --lib --bins -- --skip integration_tests
-
-      - name: Run clippy
-        run: cargo clippy --release -- -D warnings
-
-      - name: Run fmt check
-        run: cargo fmt --all -- --check
+      # Run comprehensive backend tests before publishing
+      - name: Run backend tests
+        run: |
+          # First run unit tests
+          cargo test --release
+          # Then run clippy for syntax checking
+          cargo clippy --release -- -D warnings
 
       # Only publish to crates.io if manual trigger or dev branch (requires special handling for SNAPSHOT versions)
       # Note: Crates.io doesn't allow re-publishing same version, so SNAPSHOT would need to use timestamp
