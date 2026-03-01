@@ -7,6 +7,7 @@ import ChatContainer from './components/chat/ChatContainer';
 import OrgTree from './components/org/OrgTree';
 import BoardPanel from './components/board/BoardPanel';
 import BoardManagement from './components/board/BoardManagement';
+import UserManagement from './components/admin/UserManagement';
 import UserProfile from './components/user/UserProfile';
 import AuthModal from './components/auth/AuthModal';
 import { Loader2 } from 'lucide-react';
@@ -63,6 +64,8 @@ function App() {
         return <BoardPanel />;
       case '#board-mgmt':
         return <BoardManagement />;
+      case '#user-mgmt':
+        return <UserManagement />;
       case '#profile':
         return <UserProfile />;
       case '#chat':

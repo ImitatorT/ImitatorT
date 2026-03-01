@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { cn } from '../../utils/helpers';
-import { 
-  MessageCircle, 
-  Building2, 
-  Crown, 
-  Moon, 
-  Sun, 
+import {
+  MessageCircle,
+  Building2,
+  Crown,
+  Moon,
+  Sun,
   X,
   LogOut,
   User,
-  Shield
+  Shield,
+  Users
 } from 'lucide-react';
 import { useAppStore, useBoardStore } from '../../stores/appStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -59,6 +60,7 @@ export default function Sidebar({ isOpen, onClose, onShowAuth }: SidebarProps) {
     { icon: Building2, label: '组织架构', href: '#org', requireDirector: true },
     ...(isBoardLoggedIn ? [{ icon: Crown, label: '董事局', href: '#board' }] : []),
     ...(isChairman ? [{ icon: Shield, label: '董事局管理', href: '#board-mgmt' }] : []),
+    ...(isChairman ? [{ icon: Users, label: '用户管理', href: '#user-mgmt' }] : []),
   ];
 
   const handleNavClick = (href: string, requireDirector?: boolean) => {
