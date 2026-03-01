@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { Button, Input, Modal } from '../ui';
 import { Key, Plus, Copy, Trash2, Calendar, Users, User, Building2, Briefcase } from 'lucide-react';
@@ -38,13 +38,6 @@ export default function UserManagement() {
   // 权限检查
   const isChairman = user?.position === 'Chairman' || user?.is_director;
 
-  useEffect(() => {
-    if (isChairman) {
-      loadInviteCodes();
-      loadUsers();
-    }
-  }, [isChairman, loadInviteCodes, loadUsers]);
-
   const loadInviteCodes = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -82,6 +75,13 @@ export default function UserManagement() {
       setIsLoading(false);
     }
   }, [token]);
+
+  useEffect(() => {
+    if (isChairman) {
+      loadInviteCodes();
+      loadUsers();
+    }
+  }, [isChairman, loadInviteCodes, loadUsers]);
 
   const createInviteCode = async () => {
     setIsLoading(true);
