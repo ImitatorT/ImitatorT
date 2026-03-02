@@ -1,0 +1,12 @@
+[package]
+name = "philosophy-demo"
+version = "0.1.0"
+edition = "2021"
+description = "多 Agent 哲学讨论演示 - 使用 imitatort 框架"
+
+[dependencies]
+imitatort = { path = "../.." }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
