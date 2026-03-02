@@ -876,10 +876,10 @@ impl FrameworkToolExecutor {
                             // 简单实现：*.rs -> ends_with(".rs"), test_* -> starts_with("test_")
                             if pat.starts_with('*') && pat.ends_with('*') {
                                 name.contains(&pat[1..pat.len() - 1])
-                            } else if pat.starts_with('*') {
-                                name.ends_with(&pat[1..])
-                            } else if pat.ends_with('*') {
-                                name.starts_with(&pat[..pat.len() - 1])
+                            } else if let Some(suffix) = pat.strip_prefix('*') {
+                                name.ends_with(suffix)
+                            } else if let Some(prefix) = pat.strip_suffix('*') {
+                                name.starts_with(prefix)
                             } else {
                                 name == pat
                             }
