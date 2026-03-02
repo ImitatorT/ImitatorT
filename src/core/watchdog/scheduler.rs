@@ -118,10 +118,10 @@ impl ScheduleRule {
             return false;
         }
 
-        let minute = now.minute() as u32;
-        let hour = now.hour() as u32;
-        let day = now.day() as u32;
-        let month = now.month() as u32;
+        let minute = now.minute();
+        let hour = now.hour();
+        let day = now.day();
+        let month = now.month();
         let weekday = now.weekday().num_days_from_sunday();
 
         let matches_field = |field: &str, value: u32| -> bool {
@@ -156,7 +156,7 @@ impl ScheduleRule {
             }
 
             // 精确匹配
-            field.parse::<u32>().map_or(false, |v| v == value)
+            field.parse::<u32>() == Ok(value)
         };
 
         matches_field(parts[0], minute)
