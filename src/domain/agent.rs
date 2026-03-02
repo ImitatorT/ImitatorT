@@ -18,6 +18,10 @@ pub enum TriggerCondition {
     StatusMatches { expected_status: String },
     /// Custom expression condition: Define complex conditions using expression language
     CustomExpression { expression: String },
+    /// Schedule interval: Trigger at fixed time intervals (in seconds)
+    ScheduleInterval { seconds: u64 },
+    /// Schedule cron: Trigger at cron-specified times (cron expression format: "minute hour day month weekday")
+    ScheduleCron { cron_expression: String },
 }
 
 /// Agent Entity - Unified Agent definition, single source of truth

@@ -1,12 +1,17 @@
 //! Watchdog Agent - System agent that monitors tool executions and triggers other agents
+//!
+//! Enhanced with scheduled task and polling capabilities
 
 use anyhow::Result;
 use dashmap::DashMap;
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{broadcast, RwLock};
 use tracing::{debug, error, info};
 
+use crate::infrastructure::tool::ToolExecutor;
+use crate::core::watchdog::poller::{PollingManager, PollingRule, PollingTick};
+use crate::core::watchdog::scheduler::{ScheduleManager, ScheduleRule, ScheduleTick};
 use crate::domain::{tool::ToolCallContext, Agent, TriggerCondition};
 
 /// 工具执行事件
@@ -35,13 +40,13 @@ pub enum ToolExecutionEvent {
 /// 监控规则
 #[derive(Debug, Clone)]
 pub struct WatchdogRule {
-    /// 规则ID
+    /// 规则 ID
     pub id: String,
-    /// 监控的工具ID
+    /// 监控的工具 ID
     pub tool_id: String,
     /// 触发条件
     pub condition: TriggerCondition,
-    /// 关联的Agent ID（触发时通知该Agent）
+    /// 关联的 Agent ID（触发时通知该 Agent）
     pub target_agent_id: String,
     /// 规则是否启用
     pub enabled: bool,
@@ -89,7 +94,6 @@ impl WatchdogRule {
 
     /// 评估条件
     fn evaluate_condition(&self, result: &Value) -> bool {
-        // 评估触发条件
         match &self.condition {
             TriggerCondition::NumericRange { min, max } => {
                 if let Some(num_val) = result.as_f64() {
@@ -99,12 +103,10 @@ impl WatchdogRule {
                 }
             }
             TriggerCondition::StringContains { content } => {
-                // 检查字符串值
                 if let Some(str_val) = result.as_str() {
                     return str_val.contains(content.as_str());
                 }
 
-                // 检查JSON对象中是否包含指定内容
                 if let Value::Object(obj) = result {
                     for (_, val) in obj {
                         if let Some(str_val) = val.as_str() {
@@ -113,7 +115,6 @@ impl WatchdogRule {
                             }
                         }
 
-                        // 如果值是数组，检查数组元素
                         if let Value::Array(arr) = val {
                             for arr_val in arr {
                                 if let Some(arr_str) = arr_val.as_str() {
@@ -126,7 +127,6 @@ impl WatchdogRule {
                     }
                 }
 
-                // 将整个JSON序列化为字符串再检查
                 let json_str = result.to_string();
                 json_str.contains(content)
             }
@@ -137,10 +137,9 @@ impl WatchdogRule {
                     false
                 }
             }
-            TriggerCondition::CustomExpression { .. } => {
-                // 简单实现，实际应用中可能需要更复杂的表达式解析
-                false
-            }
+            TriggerCondition::CustomExpression { .. }
+            | TriggerCondition::ScheduleInterval { .. }
+            | TriggerCondition::ScheduleCron { .. } => false,
         }
     }
 }
@@ -157,20 +156,15 @@ impl EventHandler for DefaultEventHandler {
     fn handle_event(&self, event: &ToolExecutionEvent) -> Result<()> {
         match event {
             ToolExecutionEvent::PostExecute {
-                tool_id,
-                result,
-                context: _,
+                tool_id, result, ..
             } => {
                 debug!(
                     "Tool {} executed successfully with result: {:?}",
                     tool_id, result
                 );
-                // 这里可以添加具体的处理逻辑
             }
             ToolExecutionEvent::Error {
-                tool_id,
-                error,
-                context: _,
+                tool_id, error, ..
             } => {
                 error!("Tool {} execution failed: {}", tool_id, error);
             }
@@ -213,7 +207,9 @@ impl EventDispatcher {
     }
 }
 
-/// Watchdog Agent - 作为系统内置Agent永久运行
+/// Watchdog Agent - 作为系统内置 Agent 永久运行
+///
+/// 增强功能：支持定时任务和轮询监听
 pub struct WatchdogAgent {
     /// 监控规则存储
     rules: DashMap<String, WatchdogRule>,
@@ -221,24 +217,43 @@ pub struct WatchdogAgent {
     event_dispatcher: Arc<EventDispatcher>,
     /// 全局启用状态
     enabled: Arc<RwLock<bool>>,
-    /// Agent实例
+    /// Agent 实例
     agent: Agent,
+    /// 定时任务管理器
+    schedule_manager: Arc<ScheduleManager>,
+    /// 轮询管理器
+    polling_manager: Arc<PollingManager>,
+    /// 定时任务事件接收器
+    schedule_rx: Arc<RwLock<Option<broadcast::Receiver<ScheduleTick>>>>,
+    /// 轮询事件接收器
+    polling_rx: Arc<RwLock<Option<broadcast::Receiver<PollingTick>>>>,
+    /// 触发的 Agent 发送器
+    triggered_tx: broadcast::Sender<String>,
 }
 
 impl WatchdogAgent {
-    /// 创建新的Watchdog Agent
-    pub fn new(agent: Agent) -> Self {
+    /// 创建新的 Watchdog Agent
+    pub fn new(agent: Agent, tool_executor: Arc<dyn ToolExecutor>) -> Self {
+        let (message_tx, _) = broadcast::channel(100);
+
         Self {
             rules: DashMap::new(),
             event_dispatcher: Arc::new(EventDispatcher::new()),
             enabled: Arc::new(RwLock::new(true)),
             agent,
+            schedule_manager: Arc::new(ScheduleManager::new()),
+            polling_manager: Arc::new(PollingManager::new(tool_executor)),
+            schedule_rx: Arc::new(RwLock::new(None)),
+            polling_rx: Arc::new(RwLock::new(None)),
+            triggered_tx: message_tx,
         }
     }
 
     /// 注册监控规则
     pub fn register_rule(&self, rule: WatchdogRule) -> Result<()> {
+        let rule_id = rule.id.clone();
         self.rules.insert(rule.id.clone(), rule);
+        info!("Registered watchdog rule: {}", rule_id);
         Ok(())
     }
 
@@ -308,7 +323,7 @@ impl WatchdogAgent {
             .map(|rule| rule.id.clone())
             .collect();
 
-        // 收集被触发的Agent ID
+        // 收集被触发的 Agent ID
         let mut triggered_agents = Vec::new();
         for rule_id in matched_rule_ids {
             if let Some(rule) = self.rules.get(&rule_id) {
@@ -323,25 +338,94 @@ impl WatchdogAgent {
         Ok(triggered_agents)
     }
 
+    /// 注册定时任务规则
+    pub fn register_schedule_rule(&self, rule: ScheduleRule) -> Result<()> {
+        self.schedule_manager.register_rule(rule)
+    }
+
+    /// 注册轮询规则
+    pub fn register_polling_rule(&self, rule: PollingRule) -> Result<()> {
+        self.polling_manager.register_rule(rule)
+    }
+
+    /// 启动后台任务（定时任务和轮询）
+    pub async fn start_background_tasks(&self) {
+        // 启动定时任务管理器
+        self.schedule_manager.start();
+
+        // 启动轮询管理器
+        self.polling_manager.start();
+
+        // 订阅定时任务事件
+        {
+            let mut rx = self.schedule_manager.subscribe();
+            let tx = self.triggered_tx.clone();
+
+            tokio::spawn(async move {
+                while let Ok(tick) = rx.recv().await {
+                    info!("Schedule tick received: {} -> {}", tick.rule_id, tick.target_agent_id);
+                    let _ = tx.send(tick.target_agent_id);
+                }
+            });
+        }
+
+        // 订阅轮询事件
+        {
+            let mut rx = self.polling_manager.subscribe();
+            let tx = self.triggered_tx.clone();
+
+            tokio::spawn(async move {
+                while let Ok(tick) = rx.recv().await {
+                    info!("Polling tick received: {} -> {}", tick.rule_id, tick.target_agent_id);
+                    let _ = tx.send(tick.target_agent_id);
+                }
+            });
+        }
+
+        info!("WatchdogAgent background tasks started");
+    }
+
+    /// 停止后台任务
+    pub async fn stop_background_tasks(&self) {
+        self.schedule_manager.stop().await;
+        self.polling_manager.stop().await;
+        info!("WatchdogAgent background tasks stopped");
+    }
+
+    /// 获取触发的 Agent 接收器
+    pub fn subscribe_triggered_agents(&self) -> broadcast::Receiver<String> {
+        self.triggered_tx.subscribe()
+    }
+
     /// 获取事件分发器引用
     pub fn event_dispatcher(&self) -> Arc<EventDispatcher> {
         self.event_dispatcher.clone()
     }
 
-    /// 获取Agent实例
+    /// 获取 Agent 实例
     pub fn agent(&self) -> &Agent {
         &self.agent
+    }
+
+    /// 获取定时任务管理器
+    pub fn schedule_manager(&self) -> Arc<ScheduleManager> {
+        self.schedule_manager.clone()
+    }
+
+    /// 获取轮询管理器
+    pub fn polling_manager(&self) -> Arc<PollingManager> {
+        self.polling_manager.clone()
     }
 }
 
 impl WatchdogAgent {
-    /// 为Agent注册私聊唤醒事件
+    /// 为 Agent 注册私聊唤醒事件
     pub fn register_direct_message_watcher(&self, agent_id: &str) -> Result<()> {
         let rule = WatchdogRule::new(
             format!("direct_msg_{}", agent_id),
-            "message.send_direct".to_string(), // 私聊消息工具
+            "message.send_direct".to_string(),
             TriggerCondition::StringContains {
-                content: agent_id.to_string(), // 当结果包含agent_id时触发
+                content: agent_id.to_string(),
             },
             agent_id.to_string(),
         );
@@ -349,13 +433,13 @@ impl WatchdogAgent {
         self.register_rule(rule)
     }
 
-    /// 为Agent注册艾特(@)唤醒事件
+    /// 为 Agent 注册艾特 (@) 唤醒事件
     pub fn register_mention_watcher(&self, agent_id: &str) -> Result<()> {
         let rule = WatchdogRule::new(
             format!("mention_{}", agent_id),
-            "message.send_group".to_string(), // 群聊消息工具
+            "message.send_group".to_string(),
             TriggerCondition::StringContains {
-                content: agent_id.to_string(), // 当结果包含agent_id时触发
+                content: agent_id.to_string(),
             },
             agent_id.to_string(),
         );
@@ -363,7 +447,7 @@ impl WatchdogAgent {
         self.register_rule(rule)
     }
 
-    /// 为Agent注册默认唤醒事件（私聊和艾特）
+    /// 为 Agent 注册默认唤醒事件（私聊和艾特）
     pub fn register_default_watchers(&self, agent_id: &str) -> Result<()> {
         self.register_direct_message_watcher(agent_id)?;
         self.register_mention_watcher(agent_id)?;
@@ -378,6 +462,11 @@ impl Clone for WatchdogAgent {
             event_dispatcher: self.event_dispatcher.clone(),
             enabled: self.enabled.clone(),
             agent: self.agent.clone(),
+            schedule_manager: self.schedule_manager.clone(),
+            polling_manager: self.polling_manager.clone(),
+            schedule_rx: self.schedule_rx.clone(),
+            polling_rx: self.polling_rx.clone(),
+            triggered_tx: self.triggered_tx.clone(),
         }
     }
 }
@@ -408,5 +497,37 @@ impl WatchdogClient {
         );
 
         self.watchdog_agent.register_rule(rule)
+    }
+
+    /// Register a scheduled task
+    pub fn register_scheduled_task(
+        &self,
+        rule_id: &str,
+        interval_secs: u64,
+        target_agent_id: &str,
+    ) -> anyhow::Result<()> {
+        let rule = ScheduleRule::new_interval(rule_id, interval_secs, target_agent_id);
+        self.watchdog_agent.register_schedule_rule(rule)
+    }
+
+    /// Register a polling task
+    pub fn register_polling_task(
+        &self,
+        rule_id: &str,
+        tool_id: &str,
+        params: Value,
+        interval_secs: u64,
+        condition: TriggerCondition,
+        target_agent_id: &str,
+    ) -> anyhow::Result<()> {
+        let rule = PollingRule::new(
+            rule_id,
+            tool_id,
+            params,
+            interval_secs,
+            condition,
+            target_agent_id,
+        );
+        self.watchdog_agent.register_polling_rule(rule)
     }
 }

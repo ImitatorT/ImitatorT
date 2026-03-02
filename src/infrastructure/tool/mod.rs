@@ -12,8 +12,12 @@ use crate::core::tool::ToolRegistry;
 use crate::domain::tool::ToolCallContext;
 
 pub mod framework_tools;
+pub mod github_tools;
+pub mod cargo_tools;
 
 pub use framework_tools::{FrameworkToolExecutor, ToolEnvironment};
+pub use github_tools::GitHubToolExecutor;
+pub use cargo_tools::CargoToolExecutor;
 
 /// 工具执行器接口 - 由具体实现者提供
 #[async_trait]

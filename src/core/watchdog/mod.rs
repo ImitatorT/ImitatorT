@@ -1,8 +1,11 @@
 //! Watchdog Framework - Legacy module redirected to WatchdogAgent
 //! This module now serves as a compatibility layer pointing to the new WatchdogAgent implementation
 
-// We can't use pub use here since watchdog_agent is now a separate module
-// So we re-export the types individually where needed
+// Scheduler module for scheduled tasks
+pub mod scheduler;
+
+// Polling module for active tool polling
+pub mod poller;
 
 // Legacy re-exports for backward compatibility (will be deprecated)
 pub mod condition {
@@ -38,7 +41,9 @@ pub mod condition {
                         false
                     }
                 }
-                TriggerCondition::CustomExpression { .. } => {
+                TriggerCondition::CustomExpression { .. }
+                | TriggerCondition::ScheduleInterval { .. }
+                | TriggerCondition::ScheduleCron { .. } => {
                     // 简单实现，实际应用中可能需要更复杂的表达式解析
                     false
                 }

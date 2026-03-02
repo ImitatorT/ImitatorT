@@ -64,6 +64,11 @@ impl VirtualCompany {
         let agent_manager = AgentManager::new(message_bus.clone());
 
         // 创建系统WatchdogAgent
+        let framework_executor = tool_capability_manager.get_framework_tool_executor(
+            message_bus.clone(),
+            organization_manager.organization_arc(),
+            store.clone(),
+        );
         let watchdog_agent = Arc::new(crate::core::watchdog_agent::WatchdogAgent::new(
             crate::domain::Agent::new(
                 "system_watchdog",
@@ -71,6 +76,7 @@ impl VirtualCompany {
                 crate::domain::Role::simple("System", "System monitoring agent"),
                 crate::domain::LLMConfig::openai("dummy-key"),
             ),
+            Arc::new(framework_executor),
         ));
 
         Self {
