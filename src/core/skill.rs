@@ -81,10 +81,8 @@ impl SkillManager {
 
     /// 设置工具访问类型
     pub fn set_tool_access(&self, tool_id: &str, access_type: ToolAccessType) -> Result<()> {
-        if !self.tool_registry.contains(tool_id) {
-            return Err(anyhow::anyhow!("Tool not found: {}", tool_id));
-        }
-
+        // 不检查工具是否存在，因为框架工具可能不在 ToolRegistry 中
+        // 而是在 FrameworkToolProvider 中定义
         self.tool_access_control
             .insert(tool_id.to_string(), access_type);
         Ok(())
@@ -107,13 +105,11 @@ impl SkillManager {
 
     /// 绑定技能和工具
     pub fn bind_skill_tool(&self, binding: SkillToolBinding) -> Result<()> {
-        // 验证技能和工具是否存在
+        // 验证技能是否存在
         if !self.skills.contains_key(&binding.skill_id) {
             return Err(anyhow::anyhow!("Skill not found: {}", binding.skill_id));
         }
-        if !self.tool_registry.contains(&binding.tool_id) {
-            return Err(anyhow::anyhow!("Tool not found: {}", binding.tool_id));
-        }
+        // 不检查工具是否存在，因为框架工具可能不在 ToolRegistry 中
 
         // 添加到技能-工具映射
         self.skill_tool_bindings

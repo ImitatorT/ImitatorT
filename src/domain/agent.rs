@@ -133,6 +133,21 @@ pub struct Role {
 }
 
 impl Role {
+    /// Create new role with full configuration
+    pub fn new(
+        title: impl Into<String>,
+        responsibilities: impl IntoIterator<Item = impl Into<String>>,
+        expertise: impl IntoIterator<Item = impl Into<String>>,
+        system_prompt: impl Into<String>,
+    ) -> Self {
+        Self {
+            title: title.into(),
+            responsibilities: responsibilities.into_iter().map(|s| s.into()).collect(),
+            expertise: expertise.into_iter().map(|s| s.into()).collect(),
+            system_prompt: system_prompt.into(),
+        }
+    }
+
     /// Create simple role
     pub fn simple(title: impl Into<String>, system_prompt: impl Into<String>) -> Self {
         Self {
@@ -144,14 +159,14 @@ impl Role {
     }
 
     /// Add responsibilities
-    pub fn with_responsibilities(mut self, items: Vec<String>) -> Self {
-        self.responsibilities = items;
+    pub fn with_responsibilities(mut self, items: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.responsibilities = items.into_iter().map(|s| s.into()).collect();
         self
     }
 
     /// Add expertise areas
-    pub fn with_expertise(mut self, items: Vec<String>) -> Self {
-        self.expertise = items;
+    pub fn with_expertise(mut self, items: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.expertise = items.into_iter().map(|s| s.into()).collect();
         self
     }
 }
