@@ -222,6 +222,15 @@ impl FrameworkToolProvider {
             Self::create_org_find_agents(),
             Self::create_org_get_sub_departments(),
             Self::create_org_get_subordinates(),
+            // 文件操作类
+            Self::create_file_read(),
+            Self::create_file_write(),
+            Self::create_file_delete(),
+            Self::create_file_list(),
+            // 命令执行类
+            Self::create_shell_exec(),
+            // 网页请求类
+            Self::create_http_fetch(),
         ]
     }
 
@@ -520,6 +529,157 @@ impl FrameworkToolProvider {
         .with_returns(ReturnType::new(
             "Subordinate Agent List",
             json!({"type": "array", "items": {"type": "object"}}),
+        ))
+    }
+
+    // ==================== 文件操作类 ====================
+
+    fn create_file_read() -> Tool {
+        use crate::domain::tool::{CategoryPath, JsonSchema, ReturnType};
+        use serde_json::json;
+
+        Tool::new(
+            "file.read",
+            "读取文件",
+            "读取文件的全部内容",
+            CategoryPath::from_string("file/read"),
+            JsonSchema::object()
+                .property("path", JsonSchema::string().description("文件路径"))
+                .build(),
+        )
+        .with_returns(ReturnType::new(
+            "文件内容",
+            json!({"type": "object", "properties": {"success": {"type": "boolean"}, "content": {"type": "string"}, "error": {"type": "string"}}}),
+        ))
+    }
+
+    fn create_file_write() -> Tool {
+        use crate::domain::tool::{CategoryPath, JsonSchema, ReturnType};
+        use serde_json::json;
+
+        Tool::new(
+            "file.write",
+            "写入文件",
+            "写入内容到文件，支持覆盖或追加模式",
+            CategoryPath::from_string("file/write"),
+            JsonSchema::object()
+                .property("path", JsonSchema::string().description("文件路径"))
+                .property("content", JsonSchema::string().description("要写入的内容"))
+                .property(
+                    "append",
+                    JsonSchema::boolean()
+                        .description("是否追加模式（默认 false 覆盖写入）")
+                        .optional(),
+                )
+                .build(),
+        )
+        .with_returns(ReturnType::new(
+            "写入结果",
+            json!({"type": "object", "properties": {"success": {"type": "boolean"}, "error": {"type": "string"}}}),
+        ))
+    }
+
+    fn create_file_delete() -> Tool {
+        use crate::domain::tool::{CategoryPath, JsonSchema, ReturnType};
+        use serde_json::json;
+
+        Tool::new(
+            "file.delete",
+            "删除文件",
+            "删除指定文件",
+            CategoryPath::from_string("file/delete"),
+            JsonSchema::object()
+                .property("path", JsonSchema::string().description("文件路径"))
+                .build(),
+        )
+        .with_returns(ReturnType::new(
+            "删除结果",
+            json!({"type": "object", "properties": {"success": {"type": "boolean"}, "error": {"type": "string"}}}),
+        ))
+    }
+
+    fn create_file_list() -> Tool {
+        use crate::domain::tool::{CategoryPath, JsonSchema, ReturnType};
+        use serde_json::json;
+
+        Tool::new(
+            "file.list",
+            "列出目录",
+            "列出目录下的文件和子目录，支持通配符过滤",
+            CategoryPath::from_string("file/list"),
+            JsonSchema::object()
+                .property("path", JsonSchema::string().description("目录路径"))
+                .property(
+                    "pattern",
+                    JsonSchema::string()
+                        .description("通配符过滤模式（如 *.rs）")
+                        .optional(),
+                )
+                .build(),
+        )
+        .with_returns(ReturnType::new(
+            "目录列表",
+            json!({"type": "object", "properties": {"success": {"type": "boolean"}, "entries": {"type": "array", "items": {"type": "object"}}, "error": {"type": "string"}}}),
+        ))
+    }
+
+    // ==================== 命令执行类 ====================
+
+    fn create_shell_exec() -> Tool {
+        use crate::domain::tool::{CategoryPath, JsonSchema, ReturnType};
+        use serde_json::json;
+
+        Tool::new(
+            "shell.exec",
+            "执行 Shell 命令",
+            "执行系统 Shell 命令并返回输出",
+            CategoryPath::from_string("shell/execute"),
+            JsonSchema::object()
+                .property("command", JsonSchema::string().description("要执行的命令"))
+                .property(
+                    "timeout",
+                    JsonSchema::integer()
+                        .description("超时时间（秒），默认 60 秒")
+                        .optional(),
+                )
+                .build(),
+        )
+        .with_returns(ReturnType::new(
+            "执行结果",
+            json!({"type": "object", "properties": {"success": {"type": "boolean"}, "stdout": {"type": "string"}, "stderr": {"type": "string"}, "exit_code": {"type": "integer"}, "error": {"type": "string"}}}),
+        ))
+    }
+
+    // ==================== 网页请求类 ====================
+
+    fn create_http_fetch() -> Tool {
+        use crate::domain::tool::{CategoryPath, JsonSchema, ReturnType};
+        use serde_json::json;
+
+        Tool::new(
+            "http.fetch",
+            "获取网页内容",
+            "使用 Chrome 浏览器特征请求头获取网页内容",
+            CategoryPath::from_string("http/fetch"),
+            JsonSchema::object()
+                .property("url", JsonSchema::string().description("要获取的 URL"))
+                .property(
+                    "method",
+                    JsonSchema::string()
+                        .description("HTTP 方法（GET/POST 等，默认 GET）")
+                        .optional(),
+                )
+                .property(
+                    "timeout",
+                    JsonSchema::integer()
+                        .description("超时时间（秒），默认 30 秒")
+                        .optional(),
+                )
+                .build(),
+        )
+        .with_returns(ReturnType::new(
+            "响应内容",
+            json!({"type": "object", "properties": {"success": {"type": "boolean"}, "status": {"type": "integer"}, "body": {"type": "string"}, "headers": {"type": "object"}, "error": {"type": "string"}}}),
         ))
     }
 }

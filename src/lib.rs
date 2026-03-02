@@ -168,11 +168,5 @@ pub use core::watchdog_agent::{ToolExecutionEvent, WatchdogAgent, WatchdogClient
 pub use core::watchdog::scheduler::{ScheduleManager, ScheduleRule, ScheduleTick, ScheduleType};
 pub use core::watchdog::poller::{PollingManager, PollingRule, PollingTick};
 
-/// GitHub Actions 工具
-pub use infrastructure::tool::github_tools::GitHubToolExecutor;
-
-/// Cargo 工具
-pub use infrastructure::tool::cargo_tools::CargoToolExecutor;
-
 /// 错误类型定义
 pub use errors::{ImitatorError, Result as ImitatorResult};

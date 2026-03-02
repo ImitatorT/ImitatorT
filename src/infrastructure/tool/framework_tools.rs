@@ -94,6 +94,15 @@ impl FrameworkToolExecutor {
             "org.find_agents",
             "org.get_sub_departments",
             "org.get_subordinates",
+            // 文件操作类
+            "file.read",
+            "file.write",
+            "file.delete",
+            "file.list",
+            // 命令执行类
+            "shell.exec",
+            // 网页请求类
+            "http.fetch",
         ]
     }
 
@@ -128,6 +137,15 @@ impl FrameworkToolExecutor {
             "org.find_agents" => self.execute_org_find_agents(params).await,
             "org.get_sub_departments" => self.execute_org_get_sub_departments(params).await,
             "org.get_subordinates" => self.execute_org_get_subordinates(params).await,
+            // 文件操作类
+            "file.read" => self.execute_file_read(params).await,
+            "file.write" => self.execute_file_write(params).await,
+            "file.delete" => self.execute_file_delete(params).await,
+            "file.list" => self.execute_file_list(params).await,
+            // 命令执行类
+            "shell.exec" => self.execute_shell_exec(params).await,
+            // 网页请求类
+            "http.fetch" => self.execute_http_fetch(params).await,
             _ => Ok(ToolResult::error(format!("Unknown tool: {}", tool_id))),
         }
     }
@@ -752,6 +770,329 @@ impl FrameworkToolExecutor {
             "count": subordinates_json.len(),
             "subordinates": subordinates_json,
         })))
+    }
+
+    // ==================== 文件操作类 ====================
+
+    async fn execute_file_read(&self, params: Value) -> Result<ToolResult> {
+        use tokio::fs;
+
+        let path = params["path"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("path is required"))?;
+
+        match fs::read_to_string(path).await {
+            Ok(content) => Ok(ToolResult::success(json!({
+                "success": true,
+                "content": content,
+            }))),
+            Err(e) => Ok(ToolResult::success(json!({
+                "success": false,
+                "error": format!("Failed to read file: {}", e),
+            }))),
+        }
+    }
+
+    async fn execute_file_write(&self, params: Value) -> Result<ToolResult> {
+        use tokio::fs;
+        use tokio::io::AsyncWriteExt;
+
+        let path = params["path"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("path is required"))?;
+        let content = params["content"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("content is required"))?;
+        let append = params["append"].as_bool().unwrap_or(false);
+
+        let result = if append {
+            // 追加模式
+            match fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .await
+            {
+                Ok(mut file) => match file.write_all(content.as_bytes()).await {
+                    Ok(_) => true,
+                    Err(_) => {
+                        let _ = fs::remove_file(path).await;
+                        false
+                    }
+                },
+                Err(_) => false,
+            }
+        } else {
+            // 覆盖模式
+            fs::write(path, content).await.is_ok()
+        };
+
+        if result {
+            Ok(ToolResult::success(json!({
+                "success": true,
+            })))
+        } else {
+            Ok(ToolResult::success(json!({
+                "success": false,
+                "error": "Failed to write file",
+            })))
+        }
+    }
+
+    async fn execute_file_delete(&self, params: Value) -> Result<ToolResult> {
+        use tokio::fs;
+
+        let path = params["path"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("path is required"))?;
+
+        match fs::remove_file(path).await {
+            Ok(_) => Ok(ToolResult::success(json!({
+                "success": true,
+            }))),
+            Err(e) => Ok(ToolResult::success(json!({
+                "success": false,
+                "error": format!("Failed to delete file: {}", e),
+            }))),
+        }
+    }
+
+    async fn execute_file_list(&self, params: Value) -> Result<ToolResult> {
+        use tokio::fs;
+
+        let path = params["path"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("path is required"))?;
+        let pattern = params["pattern"].as_str();
+
+        match fs::read_dir(path).await {
+            Ok(mut dir) => {
+                let mut entries = Vec::new();
+
+                while let Ok(Some(entry)) = dir.next_entry().await {
+                    if let Ok(name) = entry.file_name().into_string() {
+                        // 应用简单的通配符过滤（仅支持 *）
+                        let should_include = if let Some(pat) = pattern {
+                            // 简单实现：*.rs -> ends_with(".rs"), test_* -> starts_with("test_")
+                            if pat.starts_with('*') && pat.ends_with('*') {
+                                name.contains(&pat[1..pat.len() - 1])
+                            } else if pat.starts_with('*') {
+                                name.ends_with(&pat[1..])
+                            } else if pat.ends_with('*') {
+                                name.starts_with(&pat[..pat.len() - 1])
+                            } else {
+                                name == pat
+                            }
+                        } else {
+                            true
+                        };
+
+                        if should_include {
+                            let entry_type = entry.file_type().await.ok();
+                            entries.push(json!({
+                                "name": name,
+                                "is_dir": entry_type.map(|t| t.is_dir()).unwrap_or(false),
+                                "is_file": entry_type.map(|t| t.is_file()).unwrap_or(true),
+                            }));
+                        }
+                    }
+                }
+
+                Ok(ToolResult::success(json!({
+                    "success": true,
+                    "entries": entries,
+                })))
+            }
+            Err(e) => Ok(ToolResult::success(json!({
+                "success": false,
+                "error": format!("Failed to list directory: {}", e),
+            }))),
+        }
+    }
+
+    // ==================== 命令执行类 ====================
+
+    async fn execute_shell_exec(&self, params: Value) -> Result<ToolResult> {
+        use std::time::Duration;
+        use tokio::process::Command;
+        use tokio::time::timeout;
+
+        let command = params["command"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("command is required"))?;
+        let timeout_secs = params["timeout"].as_u64().unwrap_or(60);
+
+        // 根据平台选择 shell
+        let (shell, shell_arg) = if cfg!(windows) {
+            ("cmd", "/C")
+        } else {
+            ("sh", "-c")
+        };
+
+        match timeout(Duration::from_secs(timeout_secs), Command::new(shell).arg(shell_arg).arg(command).output()).await {
+            Ok(Ok(output)) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                Ok(ToolResult::success(json!({
+                    "success": output.status.success(),
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "exit_code": output.status.code().unwrap_or(-1),
+                })))
+            }
+            Ok(Err(e)) => Ok(ToolResult::success(json!({
+                "success": false,
+                "stdout": "",
+                "stderr": "",
+                "exit_code": -1,
+                "error": format!("Failed to execute command: {}", e),
+            }))),
+            Err(_) => Ok(ToolResult::success(json!({
+                "success": false,
+                "stdout": "",
+                "stderr": "",
+                "exit_code": -1,
+                "error": format!("Command timed out after {} seconds", timeout_secs),
+            }))),
+        }
+    }
+
+    // ==================== 网页请求类 ====================
+
+    async fn execute_http_fetch(&self, params: Value) -> Result<ToolResult> {
+        use reqwest::{Client, header};
+
+        let url = match params["url"].as_str() {
+            Some(u) => u,
+            None => return Ok(ToolResult::success(json!({
+                "success": false,
+                "status": 0,
+                "body": "",
+                "headers": {},
+                "error": "url is required",
+            }))),
+        };
+        let method = params["method"].as_str().unwrap_or("GET");
+        let timeout_secs = params["timeout"].as_u64().unwrap_or(30);
+
+        // 创建 Chrome 浏览器特征请求头
+        let mut headers = header::HeaderMap::new();
+        headers.insert(
+            header::USER_AGENT,
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                .parse()
+                .unwrap(),
+        );
+        headers.insert(
+            header::ACCEPT,
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+                .parse()
+                .unwrap(),
+        );
+        headers.insert(
+            header::ACCEPT_LANGUAGE,
+            "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7".parse().unwrap(),
+        );
+        headers.insert(
+            header::ACCEPT_ENCODING,
+            "gzip, deflate, br".parse().unwrap(),
+        );
+        headers.insert(header::CONNECTION, "keep-alive".parse().unwrap());
+        headers.insert(
+            "Upgrade-Insecure-Requests",
+            "1".parse().unwrap(),
+        );
+        // Chrome Sec-Ch-Ua 头
+        headers.insert(
+            "Sec-Ch-Ua",
+            "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\"".parse().unwrap(),
+        );
+        headers.insert("Sec-Ch-Ua-Mobile", "?0".parse().unwrap());
+        headers.insert("Sec-Ch-Ua-Platform", "\"macOS\"".parse().unwrap());
+
+        // 构建客户端
+        let client = Client::builder()
+            .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(timeout_secs))
+            .redirect(reqwest::redirect::Policy::limited(10))
+            .build();
+
+        let client = match client {
+            Ok(c) => c,
+            Err(e) => {
+                return Ok(ToolResult::success(json!({
+                    "success": false,
+                    "status": 0,
+                    "body": "",
+                    "headers": {},
+                    "error": format!("Failed to create HTTP client: {}", e),
+                })));
+            }
+        };
+
+        // 解析方法
+        let reqwest_method = match method.to_uppercase().as_str() {
+            "GET" => reqwest::Method::GET,
+            "POST" => reqwest::Method::POST,
+            "PUT" => reqwest::Method::PUT,
+            "DELETE" => reqwest::Method::DELETE,
+            "PATCH" => reqwest::Method::PATCH,
+            "HEAD" => reqwest::Method::HEAD,
+            "OPTIONS" => reqwest::Method::OPTIONS,
+            _ => {
+                return Ok(ToolResult::success(json!({
+                    "success": false,
+                    "status": 0,
+                    "body": "",
+                    "headers": {},
+                    "error": format!("Unsupported HTTP method: {}", method),
+                })));
+            }
+        };
+
+        // 执行请求
+        match client.request(reqwest_method, url).send().await {
+            Ok(response) => {
+                let status = response.status().as_u16();
+                let headers_map: serde_json::Map<String, Value> = response
+                    .headers()
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.as_str().to_string(),
+                            Value::String(v.to_str().unwrap_or("").to_string()),
+                        )
+                    })
+                    .collect();
+
+                let body = match response.text().await {
+                    Ok(text) => text,
+                    Err(e) => {
+                        return Ok(ToolResult::success(json!({
+                            "success": false,
+                            "status": status,
+                            "body": "",
+                            "headers": headers_map,
+                            "error": format!("Failed to read response body: {}", e),
+                        })));
+                    }
+                };
+
+                Ok(ToolResult::success(json!({
+                    "success": true,
+                    "status": status,
+                    "body": body,
+                    "headers": headers_map,
+                })))
+            }
+            Err(e) => Ok(ToolResult::success(json!({
+                "success": false,
+                "status": 0,
+                "body": "",
+                "headers": {},
+                "error": format!("Failed to fetch URL: {}", e),
+            }))),
+        }
     }
 }
 
