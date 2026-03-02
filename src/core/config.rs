@@ -25,13 +25,17 @@ impl CompanyConfig {
             "sk-your-api-key-here".to_string()
         });
         let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
-        let base_url = std::env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+        let base_url = std::env::var("OPENAI_BASE_URL")
+            .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
 
         // 添加Agent
         let agent1 = Agent::new(
             "ceo",
             "CEO",
-            Role::simple("CEO", "You are the CEO of the company, responsible for decision-making and management."),
+            Role::simple(
+                "CEO",
+                "You are the CEO of the company, responsible for decision-making and management.",
+            ),
             LLMConfig {
                 api_key,
                 model,

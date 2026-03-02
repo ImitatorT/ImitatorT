@@ -111,6 +111,11 @@ function DepartmentNode({ department, level = 0, onUserClick }: DepartmentNodePr
                   <p className="text-sm text-[var(--tg-hint-color)]">
                     {user.title}
                   </p>
+                  {user.description && (
+                    <p className="text-xs text-[var(--tg-hint-color)] mt-1 line-clamp-2">
+                      {user.description}
+                    </p>
+                  )}
                 </div>
                 <span
                   className={cn(
@@ -174,7 +179,7 @@ export default function OrgTree() {
   useEffect(() => {
     fetchDepartments();
     fetchAgents();
-  }, []);
+  }, [fetchDepartments, fetchAgents]);
 
   // 过滤数据
   const filteredData = useMemo(() => {
@@ -182,8 +187,8 @@ export default function OrgTree() {
     return searchDepartments(departments, searchQuery);
   }, [departments, searchQuery]);
 
-  const handleUserClick = (user: UserType) => {
-    console.log('Clicked user:', user);
+  const handleUserClick = (_user: UserType) => {
+    // Handle user click
   };
 
   // 计算统计数据

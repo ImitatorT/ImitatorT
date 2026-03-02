@@ -119,6 +119,7 @@ impl GuiltyLineManager {
             creator_id: "system".to_string(), // 系统创建
             members,
             created_at: chrono::Utc::now().timestamp(),
+            visibility: crate::domain::message::GroupVisibility::Hidden,
         };
 
         self.store.save_group(&group).await?;

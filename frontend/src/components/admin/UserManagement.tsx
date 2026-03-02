@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../../stores/authStore';
+import { getApiUrl } from '../../stores/backendStore';
 import { Button, Input, Modal } from '../ui';
 import { Key, Plus, Copy, Trash2, Calendar, Users, User, Building2, Briefcase } from 'lucide-react';
 
@@ -38,17 +39,10 @@ export default function UserManagement() {
   // 权限检查
   const isChairman = user?.position === 'Chairman' || user?.is_director;
 
-  useEffect(() => {
-    if (isChairman) {
-      loadInviteCodes();
-      loadUsers();
-    }
-  }, [user]);
-
-  const loadInviteCodes = async () => {
+  const loadInviteCodes = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/admin/invite-codes', {
+      const res = await fetch(getApiUrl('/api/admin/invite-codes'), {
         headers: {
           'Authorization': `Bearer ${token || ''}`,
         },
@@ -57,17 +51,17 @@ export default function UserManagement() {
       if (data.success) {
         setInviteCodes(data.data || []);
       }
-    } catch (error) {
-      console.error('加载邀请码失败:', error);
+    } catch (_error) {
+      console.error('加载邀请码失败:', _error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token]);
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await fetch(getApiUrl('/api/admin/users'), {
         headers: {
           'Authorization': `Bearer ${token || ''}`,
         },
@@ -76,12 +70,19 @@ export default function UserManagement() {
       if (data.success) {
         setUsers(data.data || []);
       }
-    } catch (error) {
-      console.error('加载用户列表失败:', error);
+    } catch (_error) {
+      console.error('加载用户列表失败:', _error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (isChairman) {
+      loadInviteCodes();
+      loadUsers();
+    }
+  }, [isChairman, loadInviteCodes, loadUsers]);
 
   const createInviteCode = async () => {
     setIsLoading(true);
@@ -90,7 +91,7 @@ export default function UserManagement() {
         max_usage: newInviteMaxUsage
       };
 
-      const res = await fetch('/api/admin/invite-codes', {
+      const res = await fetch(getApiUrl('/api/admin/invite-codes'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -108,7 +109,7 @@ export default function UserManagement() {
       } else {
         alert(data.error || '创建失败');
       }
-    } catch (error) {
+    } catch (_error) {
       alert('网络错误');
     } finally {
       setIsLoading(false);
@@ -120,7 +121,7 @@ export default function UserManagement() {
 
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/admin/invite-codes/${id}`, {
+      const res = await fetch(getApiUrl(`/api/admin/invite-codes/${id}`), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token || ''}`,
@@ -134,7 +135,7 @@ export default function UserManagement() {
       } else {
         alert(data.error || '删除失败');
       }
-    } catch (error) {
+    } catch (_error) {
       alert('网络错误');
     } finally {
       setIsLoading(false);

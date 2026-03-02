@@ -23,7 +23,11 @@ pub struct Message {
 
 impl Message {
     /// Create private message
-    pub fn private(from: impl Into<String>, to: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn private(
+        from: impl Into<String>,
+        to: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             from: from.into(),
@@ -36,7 +40,11 @@ impl Message {
     }
 
     /// Create group message
-    pub fn group(from: impl Into<String>, group_id: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn group(
+        from: impl Into<String>,
+        group_id: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             from: from.into(),
@@ -101,6 +109,15 @@ pub enum MessageTarget {
     Group(String),
 }
 
+/// Group Visibility
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum GroupVisibility {
+    #[serde(rename = "public")]
+    Public,
+    #[serde(rename = "hidden")]
+    Hidden,
+}
+
 /// Group Definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Group {
@@ -109,6 +126,7 @@ pub struct Group {
     pub creator_id: String,
     pub members: Vec<String>,
     pub created_at: i64,
+    pub visibility: GroupVisibility,
 }
 
 impl Group {
@@ -125,6 +143,24 @@ impl Group {
             creator_id: creator_id.into(),
             members,
             created_at: chrono::Utc::now().timestamp(),
+            visibility: GroupVisibility::Public,
+        }
+    }
+
+    /// Create new hidden group
+    pub fn new_hidden(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        creator_id: impl Into<String>,
+        members: Vec<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            creator_id: creator_id.into(),
+            members,
+            created_at: chrono::Utc::now().timestamp(),
+            visibility: GroupVisibility::Hidden,
         }
     }
 

@@ -82,7 +82,8 @@ impl Organization {
             let node = DepartmentNode {
                 department: dept.clone(),
                 children: vec![],
-                members: self.get_department_members(&dept.id)
+                members: self
+                    .get_department_members(&dept.id)
                     .into_iter()
                     .map(|a| a.id.clone())
                     .collect(),

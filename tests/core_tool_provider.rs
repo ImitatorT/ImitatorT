@@ -32,5 +32,7 @@ fn test_list_by_category() {
 
     let tools = provider.list_tools_by_category("tool/query");
     assert!(!tools.is_empty());
-    assert!(tools.iter().all(|t| t.category.to_path_string().starts_with("tool")));
+    assert!(tools
+        .iter()
+        .all(|t| t.category.to_path_string().starts_with("tool")));
 }

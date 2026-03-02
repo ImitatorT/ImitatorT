@@ -7,17 +7,18 @@ use std::sync::Arc;
 use anyhow::Result;
 use dashmap::DashMap;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::info;
 
+use super::autonomous::AutonomousAgent;
+use crate::core::capability::CapabilityRegistry;
 use crate::core::config::CompanyConfig;
 use crate::core::messaging::MessageBus;
+use crate::core::skill::SkillManager;
 use crate::core::store::Store;
 use crate::core::tool::ToolRegistry;
-use crate::core::capability::CapabilityRegistry;
 use crate::domain::Organization;
+use crate::infrastructure::capability::{McpProtocolHandler, McpServer};
 use crate::infrastructure::tool::{FrameworkToolExecutor, ToolEnvironment};
-use crate::infrastructure::capability::{McpServer, McpProtocolHandler};
-use super::autonomous::AutonomousAgent;
 
 /// 组织架构管理器
 pub struct OrganizationManager {
@@ -65,41 +66,23 @@ impl AgentManager {
     }
 
     /// 初始化所有 Agent
-    pub async fn initialize_agents(&self, organization: &Organization) -> Result<()> {
+    pub async fn initialize_agents(
+        &self,
+        organization: &Organization,
+        watchdog_agent: Option<Arc<crate::core::watchdog_agent::WatchdogAgent>>,
+    ) -> Result<()> {
         for agent_data in &organization.agents {
-            let agent = AutonomousAgent::new(agent_data.clone(), self.message_bus.clone()).await?;
+            let agent = AutonomousAgent::new(
+                agent_data.clone(),
+                self.message_bus.clone(),
+                watchdog_agent.clone(),
+            )
+            .await?;
             let agent_id = agent.id().to_string();
             self.agents.insert(agent_id.clone(), agent);
             info!("Created agent: {}", agent_id);
         }
         Ok(())
-    }
-
-    /// 启动所有 Agent 的自主循环
-    pub async fn start_agent_loops(&self) -> Result<Vec<tokio::task::JoinHandle<()>>> {
-        let mut handles = vec![];
-
-        for agent_ref in self.agents.iter() {
-            let agent = agent_ref.value().clone();
-            let handle = tokio::spawn(async move {
-                if let Err(e) = agent.run_loop().await {
-                    error!("Agent {} error: {}", agent.id(), e);
-                }
-            });
-            handles.push(handle);
-        }
-
-        Ok(handles)
-    }
-
-    /// 手动触发任务给指定Agent
-    pub fn assign_task(&self, agent_id: &str, task: impl Into<String>) -> Result<()> {
-        if let Some(agent) = self.agents.get(agent_id) {
-            agent.assign_task(task)?;
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Agent not found: {}", agent_id))
-        }
     }
 
     /// 获取所有 Agent 列表（用于 Web API）
@@ -114,13 +97,33 @@ impl AgentManager {
 pub struct ToolCapabilityManager {
     tool_registry: Arc<ToolRegistry>,
     capability_registry: Arc<CapabilityRegistry>,
+    skill_manager: Arc<SkillManager>,
+}
+
+impl Default for ToolCapabilityManager {
+    fn default() -> Self {
+        let tool_registry = Arc::new(ToolRegistry::new());
+        let capability_registry = Arc::new(CapabilityRegistry::new());
+        let skill_manager = Arc::new(SkillManager::new_with_tool_registry(tool_registry.clone()));
+
+        Self {
+            tool_registry,
+            capability_registry,
+            skill_manager,
+        }
+    }
 }
 
 impl ToolCapabilityManager {
     pub fn new() -> Self {
+        let tool_registry = Arc::new(ToolRegistry::new());
+        let capability_registry = Arc::new(CapabilityRegistry::new());
+        let skill_manager = Arc::new(SkillManager::new_with_tool_registry(tool_registry.clone()));
+
         Self {
-            tool_registry: Arc::new(ToolRegistry::new()),
-            capability_registry: Arc::new(CapabilityRegistry::new()),
+            tool_registry,
+            capability_registry,
+            skill_manager,
         }
     }
 
@@ -149,6 +152,7 @@ impl ToolCapabilityManager {
             organization,
             self.tool_registry.clone(),
             store,
+            self.skill_manager.clone(),
         )
     }
 
@@ -169,7 +173,10 @@ impl ToolCapabilityManager {
     }
 
     /// 注册应用自定义功能
-    pub async fn register_app_capability(&self, capability: crate::domain::capability::Capability) -> Result<()> {
+    pub async fn register_app_capability(
+        &self,
+        capability: crate::domain::capability::Capability,
+    ) -> Result<()> {
         let cap_id = capability.id.clone();
         self.capability_registry.register(capability).await?;
         info!("Registered app capability: {}", cap_id);
@@ -184,5 +191,29 @@ impl ToolCapabilityManager {
     /// 获取 MCP 协议处理器
     pub fn get_mcp_protocol_handler(&self) -> McpProtocolHandler {
         McpProtocolHandler::new(self.capability_registry.clone())
+    }
+
+    /// 注册技能
+    pub fn register_skill(&self, skill: crate::domain::skill::Skill) -> Result<()> {
+        self.skill_manager.register_skill(skill)
+    }
+
+    /// 绑定技能和工具
+    pub fn bind_skill_tool(&self, binding: crate::domain::skill::SkillToolBinding) -> Result<()> {
+        self.skill_manager.bind_skill_tool(binding)
+    }
+
+    /// 设置工具访问类型
+    pub fn set_tool_access(
+        &self,
+        tool_id: &str,
+        access_type: crate::domain::skill::ToolAccessType,
+    ) -> Result<()> {
+        self.skill_manager.set_tool_access(tool_id, access_type)
+    }
+
+    /// 获取技能管理器引用
+    pub fn skill_manager(&self) -> Arc<SkillManager> {
+        self.skill_manager.clone()
     }
 }

@@ -206,6 +206,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
                   setBackendUrlError(result.error || '地址格式不正确');
                 } else {
                   setBackendUrlError('');
+                  setBackendUrl(backendUrlInput);
                 }
               }}
             />
@@ -275,6 +276,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
                   setBackendUrlError(result.error || '地址格式不正确');
                 } else {
                   setBackendUrlError('');
+                  setBackendUrl(backendUrlInput);
                 }
               }}
             />

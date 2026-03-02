@@ -11,6 +11,7 @@ export interface User {
   status: 'online' | 'away' | 'busy' | 'offline';
   isAgent?: boolean;
   manager?: User;
+  description?: string;
 }
 
 // ==================== 认证用户类型 ====================
@@ -35,6 +36,7 @@ export interface AgentInfo {
   department: string;
   status: 'online' | 'offline' | 'working';
   expertise: string[];
+  description?: string;
 }
 
 // ==================== 部门类型 ====================

@@ -47,7 +47,9 @@ Object.defineProperty(window, 'sessionStorage', {
 });
 
 // Mock ResizeObserver (needed for some UI libraries)
-global.ResizeObserver = require('resize-observer-polyfill');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const resizeObserverPolyfill = require('resize-observer-polyfill');
+global.ResizeObserver = resizeObserverPolyfill;
 
 // Mock IntersectionObserver (needed for some UI libraries)
 window.IntersectionObserver = class IntersectionObserver {

@@ -6,8 +6,8 @@ use tokio::sync::broadcast;
 use tokio::time::Duration;
 
 use imitatort::domain::{Agent, LLMConfig, Message, MessageTarget, Organization, Role};
-use imitatort::infrastructure::web::{create_router, AppState};
 use imitatort::infrastructure::auth::JwtService;
+use imitatort::infrastructure::web::{create_router, AppState};
 
 // 创建测试用的app状态
 fn create_test_app_state() -> Arc<AppState> {
@@ -36,7 +36,7 @@ fn create_test_app_state() -> Arc<AppState> {
     let (message_tx, _) = broadcast::channel::<Message>(100);
 
     // 创建存储
-    let store = Arc::new(imitatort::core::store::MemoryStore::new());
+    let store = Arc::new(imitatort::infrastructure::store::SqliteStore::new_in_memory().unwrap());
 
     // 创建JWT服务
     let jwt_service = JwtService::new("test-secret-for-testing");

@@ -7,6 +7,7 @@ import ChatContainer from './components/chat/ChatContainer';
 import OrgTree from './components/org/OrgTree';
 import BoardPanel from './components/board/BoardPanel';
 import BoardManagement from './components/board/BoardManagement';
+import UserManagement from './components/admin/UserManagement';
 import UserProfile from './components/user/UserProfile';
 import AuthModal from './components/auth/AuthModal';
 import { Loader2 } from 'lucide-react';
@@ -40,18 +41,15 @@ function App() {
   // 应用初始化：恢复登录态
   useEffect(() => {
     const init = async () => {
-      console.log('[App] Initializing...');
-      
       // 等待 store 从 localStorage 恢复
       await new Promise(resolve => setTimeout(resolve, 50));
-      
+
       // 尝试恢复会话
       await restoreSession();
-      
+
       setIsInitializing(false);
-      console.log('[App] Initialized');
     };
-    
+
     init();
   }, [restoreSession]);
 
@@ -66,6 +64,8 @@ function App() {
         return <BoardPanel />;
       case '#board-mgmt':
         return <BoardManagement />;
+      case '#user-mgmt':
+        return <UserManagement />;
       case '#profile':
         return <UserProfile />;
       case '#chat':

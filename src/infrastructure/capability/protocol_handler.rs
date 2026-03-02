@@ -58,7 +58,8 @@ impl McpProtocolHandler {
 
     /// 发现特定的功能
     async fn handle_capabilities_discover(&self, params: Value) -> Result<Value> {
-        let requested = params.get("requested")
+        let requested = params
+            .get("requested")
             .and_then(|v| v.as_array())
             .map(|arr| {
                 arr.iter()
@@ -99,11 +100,13 @@ impl McpProtocolHandler {
 
     /// 调用特定功能
     async fn handle_capabilities_call(&self, params: Value) -> Result<Value> {
-        let capability_id = params.get("capability_id")
+        let capability_id = params
+            .get("capability_id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("capability_id is required"))?;
 
-        let capability_params = params.get("params")
+        let capability_params = params
+            .get("params")
             .cloned()
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
 
@@ -134,10 +137,7 @@ impl McpProtocolHandler {
         // 检查是否有一个匹配的功能ID
         if let Some(capability) = self.capability_registry.get(method) {
             // 创建调用上下文
-            let _context = CapabilityCallContext::new(
-                "mcp_client".to_string(),
-                params.clone(),
-            );
+            let _context = CapabilityCallContext::new("mcp_client".to_string(), params.clone());
 
             // 在实际实现中，这里会调用对应的 CapabilityExecutor
             // 现在我们返回一个模拟响应

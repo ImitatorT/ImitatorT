@@ -15,7 +15,6 @@ pub mod framework_tools;
 
 pub use framework_tools::{FrameworkToolExecutor, ToolEnvironment};
 
-
 /// 工具执行器接口 - 由具体实现者提供
 #[async_trait]
 pub trait ToolExecutor: Send + Sync {
@@ -28,7 +27,12 @@ pub trait ToolExecutor: Send + Sync {
     ///
     /// # Returns
     /// 工具执行结果（JSON值）
-    async fn execute(&self, tool_id: &str, params: Value, context: &ToolCallContext) -> Result<Value>;
+    async fn execute(
+        &self,
+        tool_id: &str,
+        params: Value,
+        context: &ToolCallContext,
+    ) -> Result<Value>;
 
     /// 检查是否支持某工具
     fn can_execute(&self, tool_id: &str) -> bool;
@@ -112,7 +116,11 @@ impl ToolExecutorRegistry {
     }
 
     /// 查找可以执行指定工具且具备相应技能的执行器
-    fn find_executor_with_skills(&self, tool_id: &str, skills: &[String]) -> Option<&dyn ToolExecutor> {
+    fn find_executor_with_skills(
+        &self,
+        tool_id: &str,
+        skills: &[String],
+    ) -> Option<&dyn ToolExecutor> {
         self.executors
             .iter()
             .find(|e| e.can_execute(tool_id) && e.can_execute_with_skills(tool_id, skills))
@@ -120,7 +128,12 @@ impl ToolExecutorRegistry {
     }
 
     /// 执行工具调用（自动路由到合适的执行器）
-    pub async fn execute(&self, tool_id: &str, params: Value, context: &ToolCallContext) -> Result<ToolResult> {
+    pub async fn execute(
+        &self,
+        tool_id: &str,
+        params: Value,
+        context: &ToolCallContext,
+    ) -> Result<ToolResult> {
         match self.find_executor(tool_id) {
             Some(executor) => {
                 let result = executor.execute(tool_id, params, context).await?;
@@ -169,8 +182,8 @@ impl ToolExecutorRegistry {
 
     /// 检查是否有执行器支持该工具（带技能验证）
     pub fn can_execute_with_skills(&self, tool_id: &str, skills: &[String]) -> bool {
-        self.find_executor_with_skills(tool_id, skills).is_some() &&
-        self.skill_manager.can_call_tool(tool_id, skills)
+        self.find_executor_with_skills(tool_id, skills).is_some()
+            && self.skill_manager.can_call_tool(tool_id, skills)
     }
 
     /// 获取所有支持的工具ID
@@ -187,10 +200,15 @@ impl ToolExecutorRegistry {
 
 /// 函数式工具执行器包装
 ///
+/// Tool executor function type alias
+type ToolHandlerFn = dyn Fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + Send>>
+    + Send
+    + Sync;
+
 /// 允许将普通异步函数包装为ToolExecutor
 pub struct FnToolExecutor {
     tool_id: String,
-    handler: Box<dyn Fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + Send>> + Send + Sync>,
+    handler: Box<ToolHandlerFn>,
 }
 
 impl FnToolExecutor {
@@ -209,9 +227,18 @@ impl FnToolExecutor {
 
 #[async_trait]
 impl ToolExecutor for FnToolExecutor {
-    async fn execute(&self, tool_id: &str, params: Value, _context: &ToolCallContext) -> Result<Value> {
+    async fn execute(
+        &self,
+        tool_id: &str,
+        params: Value,
+        _context: &ToolCallContext,
+    ) -> Result<Value> {
         if tool_id != self.tool_id {
-            return Err(anyhow::anyhow!("Tool ID mismatch: {} != {}", tool_id, self.tool_id));
+            return Err(anyhow::anyhow!(
+                "Tool ID mismatch: {} != {}",
+                tool_id,
+                self.tool_id
+            ));
         }
         (self.handler)(params).await
     }

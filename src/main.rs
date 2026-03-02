@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use imitatort::{
-    Agent, AppConfig, CompanyBuilder, CompanyConfig, VirtualCompany, start_web_server,
+    start_web_server, Agent, AppConfig, CompanyBuilder, CompanyConfig, VirtualCompany,
 };
 use tokio::sync::broadcast;
 use tracing::{info, warn};
@@ -26,7 +26,10 @@ async fn main() -> Result<()> {
 
     // 加载应用程序配置
     let app_config = AppConfig::from_env();
-    info!("Using configuration: output_mode={}, web_bind={}", app_config.output_mode, app_config.web_bind);
+    info!(
+        "Using configuration: output_mode={}, web_bind={}",
+        app_config.output_mode, app_config.web_bind
+    );
 
     // Automatically configure and start multi-Agent system and Web service
     let company = initialize_framework(&app_config).await?;
@@ -56,7 +59,10 @@ async fn initialize_framework(app_config: &AppConfig) -> Result<VirtualCompany> 
     info!("🔍 No config file found, attempting to load from database...");
     match VirtualCompany::from_sqlite(&app_config.db_path).await {
         Ok(company) => {
-            info!("✅ Loaded existing company from database: {}", app_config.db_path);
+            info!(
+                "✅ Loaded existing company from database: {}",
+                app_config.db_path
+            );
             Ok(company)
         }
         Err(_) => {
@@ -117,15 +123,18 @@ async fn start_services(company: VirtualCompany, app_config: &AppConfig) -> Resu
             &app_config.web_bind,
             agents,
             message_tx,
-            company_arc.store().clone()
-        ).await?;
+            company_arc.store().clone(),
+        )
+        .await?;
 
         info!("✅ Web server started successfully");
     } else {
         info!("ℹ️  Running in console mode (no web interface)");
         // In console mode, we still keep Agent loops running
         // Wait until terminated by interrupt signal
-        tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl+c");
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for ctrl+c");
         info!("🛑 Received shutdown signal");
     }
 
@@ -139,7 +148,7 @@ async fn start_agent_loops(
 ) {
     info!("🤖 Starting agent autonomous operations...");
 
-    // Start loops for all Agents via framework API
+    // 启动事件驱动的Agent系统
     match company.run().await {
         Ok(_) => info!("Agent operations completed"),
         Err(e) => {

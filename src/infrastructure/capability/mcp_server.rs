@@ -112,7 +112,9 @@ async fn call_capability(
     Ok(Json(result))
 }
 
-async fn ping(State(state): State<Arc<McpServerState>>) -> Result<impl IntoResponse, McpServerError> {
+async fn ping(
+    State(state): State<Arc<McpServerState>>,
+) -> Result<impl IntoResponse, McpServerError> {
     let result = state
         .protocol_handler
         .handle_request("ping", serde_json::json!({}))
@@ -197,8 +199,8 @@ async fn handle_client_message(
             debug!("Received WebSocket text message: {}", text);
 
             // 解析 MCP 协议消息
-            let parsed: Value = serde_json::from_str(&text)
-                .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+            let parsed: Value =
+                serde_json::from_str(&text).map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
 
             // 提取方法和参数
             let method = parsed
@@ -242,7 +244,9 @@ async fn handle_client_message(
                 },
             });
 
-            ws_sender.send(Message::Text(error_msg.to_string().into())).await?;
+            ws_sender
+                .send(Message::Text(error_msg.to_string().into()))
+                .await?;
         }
         Message::Ping(ping) => {
             ws_sender.send(Message::Pong(ping)).await?;
@@ -318,11 +322,7 @@ impl McpClient {
             "params": params
         });
 
-        let response = self.client
-            .post(&url)
-            .json(&payload)
-            .send()
-            .await?;
+        let response = self.client.post(&url).json(&payload).send().await?;
 
         let result: Value = response.json().await?;
         Ok(result)

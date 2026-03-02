@@ -3,13 +3,13 @@
 //! Core business entity definitions
 
 pub mod agent;
+pub mod capability;
+pub mod invitation_code;
 pub mod message;
 pub mod org;
 pub mod skill;
 pub mod tool;
-pub mod capability;
 pub mod user;
-pub mod invitation_code;
 
 pub use agent::*;
 pub use message::*;
@@ -20,5 +20,11 @@ pub use skill::*;
 pub use agent::TriggerCondition;
 
 // Selective exports to avoid conflicts
-pub use tool::{Tool, CategoryPath, ReturnType, ToolProvider, MatchType, CategoryNodeInfo, ToolCallContext, JsonSchema, ObjectSchemaBuilder, TypeBuilder};
-pub use capability::{Capability, CapabilityPath, CapabilityCallContext, CapabilityProvider, CapabilityAccessType, SkillCapabilityBinding, BindingType};
+pub use capability::{
+    BindingType, Capability, CapabilityAccessType, CapabilityCallContext, CapabilityPath,
+    CapabilityProvider, SkillCapabilityBinding,
+};
+pub use tool::{
+    CategoryNodeInfo, CategoryPath, JsonSchema, MatchType, ObjectSchemaBuilder, ReturnType, Tool,
+    ToolCallContext, ToolProvider, TypeBuilder,
+};

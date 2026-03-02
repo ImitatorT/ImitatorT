@@ -106,10 +106,7 @@ impl CapabilityProvider for RegistryCapabilityProvider {
                         // 精确匹配：ID、名称或完整分类路径
                         capability.id.to_lowercase() == query_lower
                             || capability.name.to_lowercase() == query_lower
-                            || capability
-                                .capability_path
-                                .to_path_string()
-                                .to_lowercase()
+                            || capability.capability_path.to_path_string().to_lowercase()
                                 == query_lower
                     }
                     MatchType::Fuzzy => {
@@ -133,13 +130,9 @@ impl CapabilityProvider for RegistryCapabilityProvider {
         // 注意：这需要在 tokio 运行时上下文中调用
         let rt = tokio::runtime::Handle::try_current();
         match rt {
-            Ok(handle) => {
-                tokio::task::block_in_place(|| {
-                    handle.block_on(async {
-                        self.registry.find_by_path(path).await
-                    })
-                })
-            }
+            Ok(handle) => tokio::task::block_in_place(|| {
+                handle.block_on(async { self.registry.find_by_path(path).await })
+            }),
             Err(_) => {
                 // 如果不在运行时中，返回空列表
                 Vec::new()
@@ -150,17 +143,13 @@ impl CapabilityProvider for RegistryCapabilityProvider {
     fn get_capability_tree(&self) -> CapabilityNodeInfo {
         let rt = tokio::runtime::Handle::try_current();
         match rt {
-            Ok(handle) => {
-                tokio::task::block_in_place(|| {
-                    handle.block_on(async {
-                        let root = self.registry.get_capability_tree().await;
-                        convert_to_info(&root, "")
-                    })
+            Ok(handle) => tokio::task::block_in_place(|| {
+                handle.block_on(async {
+                    let root = self.registry.get_capability_tree().await;
+                    convert_to_info(&root, "")
                 })
-            }
-            Err(_) => {
-                CapabilityNodeInfo::new("root", "")
-            }
+            }),
+            Err(_) => CapabilityNodeInfo::new("root", ""),
         }
     }
 }
@@ -237,7 +226,7 @@ impl FrameworkCapabilityProvider {
             "mcp.discover",
             "MCP Capability Discovery",
             "Discover available MCP capabilities",
-            CapabilityPath::from_str("mcp/discovery"),
+            CapabilityPath::from_string("mcp/discovery"),
             InputSchema::object()
                 .property(
                     "requested",
@@ -273,7 +262,7 @@ impl FrameworkCapabilityProvider {
             "mcp.list",
             "List Capabilities",
             "List all available capabilities",
-            CapabilityPath::from_str("mcp/discovery"),
+            CapabilityPath::from_string("mcp/discovery"),
             InputSchema::object().build(),
             OutputSchema::object()
                 .property(
@@ -303,7 +292,7 @@ impl FrameworkCapabilityProvider {
             "mcp.info",
             "Get Capability Info",
             "Get detailed information about a specific capability",
-            CapabilityPath::from_str("mcp/discovery"),
+            CapabilityPath::from_string("mcp/discovery"),
             InputSchema::object()
                 .property(
                     "capability_id",
@@ -325,7 +314,7 @@ impl FrameworkCapabilityProvider {
             "mcp.ping",
             "MCP Ping",
             "Ping the MCP server to check connectivity",
-            CapabilityPath::from_str("mcp/protocol"),
+            CapabilityPath::from_string("mcp/protocol"),
             InputSchema::object().build(),
             OutputSchema::object()
                 .property("result", OutputSchema::string().description("Ping result"))
@@ -343,7 +332,7 @@ impl FrameworkCapabilityProvider {
             "mcp.initialize",
             "MCP Initialize",
             "Initialize the MCP connection",
-            CapabilityPath::from_str("mcp/protocol"),
+            CapabilityPath::from_string("mcp/protocol"),
             InputSchema::object()
                 .raw_property(
                     "client_info",
@@ -351,10 +340,12 @@ impl FrameworkCapabilityProvider {
                         .property("name", InputSchema::string().description("Client name"))
                         .property(
                             "version",
-                            InputSchema::string().description("Client version").optional(),
+                            InputSchema::string()
+                                .description("Client version")
+                                .optional(),
                         )
                         .build(),
-                    true
+                    true,
                 )
                 .property(
                     "capabilities",
@@ -379,7 +370,7 @@ impl FrameworkCapabilityProvider {
                             OutputSchema::string().description("Server version"),
                         )
                         .build(),
-                    true
+                    true,
                 )
                 .build(),
             "http".to_string(),
@@ -394,20 +385,29 @@ impl FrameworkCapabilityProvider {
             "mcp.server.notification",
             "MCP Server Notification",
             "Handle server-initiated notifications",
-            CapabilityPath::from_str("mcp/protocol"),
+            CapabilityPath::from_string("mcp/protocol"),
             InputSchema::object()
-                .property("method", InputSchema::string().description("Notification method"))
+                .property(
+                    "method",
+                    InputSchema::string().description("Notification method"),
+                )
                 .raw_property(
                     "params",
                     InputSchema::object()
                         .property("type", InputSchema::string().description("Parameter type"))
-                        .property("value", InputSchema::string().description("Parameter value"))
+                        .property(
+                            "value",
+                            InputSchema::string().description("Parameter value"),
+                        )
                         .build(),
-                    true
+                    true,
                 )
                 .build(),
             OutputSchema::object()
-                .property("success", OutputSchema::boolean().description("Success status"))
+                .property(
+                    "success",
+                    OutputSchema::boolean().description("Success status"),
+                )
                 .build(),
             "websocket".to_string(),
             None,
@@ -421,16 +421,22 @@ impl FrameworkCapabilityProvider {
             "mcp.server.request",
             "MCP Server Request",
             "Handle server-initiated requests",
-            CapabilityPath::from_str("mcp/protocol"),
+            CapabilityPath::from_string("mcp/protocol"),
             InputSchema::object()
-                .property("method", InputSchema::string().description("Request method"))
+                .property(
+                    "method",
+                    InputSchema::string().description("Request method"),
+                )
                 .raw_property(
                     "params",
                     InputSchema::object()
                         .property("type", InputSchema::string().description("Parameter type"))
-                        .property("value", InputSchema::string().description("Parameter value"))
+                        .property(
+                            "value",
+                            InputSchema::string().description("Parameter value"),
+                        )
                         .build(),
-                    true
+                    true,
                 )
                 .build(),
             OutputSchema::object()
@@ -459,20 +465,15 @@ impl CapabilityProvider for FrameworkCapabilityProvider {
 
         all_capabilities
             .into_iter()
-            .filter(|capability| {
-                match match_type {
-                    MatchType::Exact => {
-                        capability.id.to_lowercase() == query_lower
-                            || capability.name.to_lowercase() == query_lower
-                    }
-                    MatchType::Fuzzy => {
-                        capability.id.to_lowercase().contains(&query_lower)
-                            || capability.name.to_lowercase().contains(&query_lower)
-                            || capability
-                                .description
-                                .to_lowercase()
-                                .contains(&query_lower)
-                    }
+            .filter(|capability| match match_type {
+                MatchType::Exact => {
+                    capability.id.to_lowercase() == query_lower
+                        || capability.name.to_lowercase() == query_lower
+                }
+                MatchType::Fuzzy => {
+                    capability.id.to_lowercase().contains(&query_lower)
+                        || capability.name.to_lowercase().contains(&query_lower)
+                        || capability.description.to_lowercase().contains(&query_lower)
                 }
             })
             .collect()
@@ -480,7 +481,7 @@ impl CapabilityProvider for FrameworkCapabilityProvider {
 
     fn list_capabilities_by_path(&self, path: &str) -> Vec<Capability> {
         let all_capabilities = Self::get_framework_capabilities();
-        let capability_path = crate::domain::capability::CapabilityPath::from_str(path);
+        let capability_path = crate::domain::capability::CapabilityPath::from_string(path);
 
         all_capabilities
             .into_iter()
@@ -516,10 +517,7 @@ fn add_capability_to_tree(root: &mut CapabilityNodeInfo, capability: &Capability
         current_path.push_str(segment);
 
         // 查找或创建子节点
-        let child_index = current
-            .children
-            .iter()
-            .position(|c| c.name == *segment);
+        let child_index = current.children.iter().position(|c| c.name == *segment);
 
         match child_index {
             Some(index) => {

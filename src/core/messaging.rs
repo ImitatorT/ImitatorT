@@ -147,7 +147,8 @@ impl MessageBus {
             if actual_pos + 1 < content.len() {
                 // 找到@符号后的单词
                 let rest = &content[actual_pos + 1..];
-                let word_end = rest.find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+                let word_end = rest
+                    .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
                     .unwrap_or(rest.len());
 
                 if word_end > 0 {
@@ -156,8 +157,9 @@ impl MessageBus {
                     // 检查组内是否有匹配的成员
                     for member_id in &group.members {
                         // 检查是否匹配用户ID或名称
-                        if member_id == mentioned_name ||
-                           self.is_name_match(member_id, mentioned_name) {
+                        if member_id == mentioned_name
+                            || self.is_name_match(member_id, mentioned_name)
+                        {
                             // 添加到mentions列表（如果还没有的话）
                             if !message.mentions.contains(member_id) {
                                 message = message.with_mention(member_id.clone());
@@ -180,9 +182,9 @@ impl MessageBus {
     /// 检查名称是否匹配（模糊匹配）
     fn is_name_match(&self, agent_id: &str, mentioned_name: &str) -> bool {
         // 检查是否为相同名称或包含关系
-        agent_id == mentioned_name ||
-        agent_id.contains(mentioned_name) ||
-        mentioned_name.contains(agent_id)
+        agent_id == mentioned_name
+            || agent_id.contains(mentioned_name)
+            || mentioned_name.contains(agent_id)
     }
 
     /// 订阅群聊消息
@@ -207,7 +209,10 @@ impl MessageBus {
     }
 
     /// 获取消息历史记录
-    pub async fn get_message_history(&self, filter: crate::core::store::MessageFilter) -> Result<Vec<Message>> {
+    pub async fn get_message_history(
+        &self,
+        filter: crate::core::store::MessageFilter,
+    ) -> Result<Vec<Message>> {
         if let Some(ref store) = self.store {
             store.load_messages(filter).await
         } else {
@@ -217,7 +222,11 @@ impl MessageBus {
     }
 
     /// 获取特定Agent的消息历史记录
-    pub async fn get_agent_message_history(&self, agent_id: &str, limit: usize) -> Result<Vec<Message>> {
+    pub async fn get_agent_message_history(
+        &self,
+        agent_id: &str,
+        limit: usize,
+    ) -> Result<Vec<Message>> {
         if let Some(ref store) = self.store {
             store.load_messages_by_agent(agent_id, limit).await
         } else {
@@ -227,7 +236,11 @@ impl MessageBus {
     }
 
     /// 获取特定群组的消息历史记录
-    pub async fn get_group_message_history(&self, group_id: &str, limit: usize) -> Result<Vec<Message>> {
+    pub async fn get_group_message_history(
+        &self,
+        group_id: &str,
+        limit: usize,
+    ) -> Result<Vec<Message>> {
         if let Some(ref store) = self.store {
             store.load_messages_by_group(group_id, limit).await
         } else {

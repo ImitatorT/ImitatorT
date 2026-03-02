@@ -1,8 +1,10 @@
 //! Tool 执行器接口测试
 
-use imitatort::infrastructure::tool::{FnToolExecutor, ToolContext, ToolExecutorRegistry, ToolResult, ToolExecutor};
 use imitatort::core::skill::SkillManager;
 use imitatort::core::tool::ToolRegistry;
+use imitatort::infrastructure::tool::{
+    FnToolExecutor, ToolContext, ToolExecutor, ToolExecutorRegistry, ToolResult,
+};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -22,12 +24,18 @@ async fn test_tool_executor_registry() {
     let context = imitatort::domain::tool::ToolCallContext::new("test-agent");
 
     // 测试执行
-    let result = registry.execute("test.echo", json!("hello"), &context).await.unwrap();
+    let result = registry
+        .execute("test.echo", json!("hello"), &context)
+        .await
+        .unwrap();
     assert!(result.success);
     assert_eq!(result.data["echo"], "hello");
 
     // 测试不存在的工具
-    let result = registry.execute("nonexistent", json!({}), &context).await.unwrap();
+    let result = registry
+        .execute("nonexistent", json!({}), &context)
+        .await
+        .unwrap();
     assert!(!result.success);
     assert!(result.error.is_some());
 }
@@ -44,7 +52,10 @@ async fn test_fn_tool_executor() {
     assert!(!executor.can_execute("math.sub"));
 
     let context = imitatort::domain::tool::ToolCallContext::new("test-agent");
-    let result = executor.execute("math.add", json!({"a": 1, "b": 2}), &context).await.unwrap();
+    let result = executor
+        .execute("math.add", json!({"a": 1, "b": 2}), &context)
+        .await
+        .unwrap();
     assert_eq!(result["result"], 3);
 }
 

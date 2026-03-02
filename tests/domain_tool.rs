@@ -1,31 +1,31 @@
 //! Tool 领域实体测试
 
-use imitatort::domain::tool::{CategoryPath, Tool, JsonSchema, ReturnType};
+use imitatort::domain::tool::{CategoryPath, JsonSchema, ReturnType, Tool};
 use serde_json::json;
 
 #[test]
 fn test_category_path_from_str() {
-    let path = CategoryPath::from_str("file/read");
+    let path = CategoryPath::from_string("file/read");
     assert_eq!(path.segments(), vec!["file", "read"]);
     assert_eq!(path.to_path_string(), "file/read");
 }
 
 #[test]
 fn test_category_path_parent() {
-    let path = CategoryPath::from_str("file/read/text");
-    assert_eq!(path.parent(), Some(CategoryPath::from_str("file/read")));
+    let path = CategoryPath::from_string("file/read/text");
+    assert_eq!(path.parent(), Some(CategoryPath::from_string("file/read")));
     assert_eq!(
         path.parent().unwrap().parent(),
-        Some(CategoryPath::from_str("file"))
+        Some(CategoryPath::from_string("file"))
     );
-    assert_eq!(CategoryPath::from_str("file").parent(), None);
+    assert_eq!(CategoryPath::from_string("file").parent(), None);
 }
 
 #[test]
 fn test_category_path_is_child_of() {
-    let child = CategoryPath::from_str("file/read/text");
-    let parent = CategoryPath::from_str("file/read");
-    let grandparent = CategoryPath::from_str("file");
+    let child = CategoryPath::from_string("file/read/text");
+    let parent = CategoryPath::from_string("file/read");
+    let grandparent = CategoryPath::from_string("file");
 
     assert!(child.is_child_of(&parent));
     assert!(child.is_child_of(&grandparent));
@@ -35,8 +35,8 @@ fn test_category_path_is_child_of() {
 
 #[test]
 fn test_category_path_contains() {
-    let parent = CategoryPath::from_str("file/read");
-    let child = CategoryPath::from_str("file/read/text");
+    let parent = CategoryPath::from_string("file/read");
+    let child = CategoryPath::from_string("file/read/text");
 
     assert!(parent.contains(&child));
     assert!(!child.contains(&parent));
@@ -49,14 +49,12 @@ fn test_tool_creation() {
         "file.read",
         "读取文件",
         "读取指定路径的文件内容",
-        CategoryPath::from_str("file/read"),
+        CategoryPath::from_string("file/read"),
         JsonSchema::object()
             .property("path", JsonSchema::string().description("文件路径"))
             .build(),
-    ).with_returns(ReturnType::new(
-        "文件内容",
-        json!({"type": "string"}),
-    ));
+    )
+    .with_returns(ReturnType::new("文件内容", json!({"type": "string"})));
 
     assert_eq!(tool.id, "file.read");
     assert_eq!(tool.name, "读取文件");

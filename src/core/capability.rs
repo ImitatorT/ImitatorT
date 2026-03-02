@@ -66,7 +66,7 @@ impl CapabilityRegistry {
     /// - "file" -> 所有file分类下的功能（包括子分类）
     /// - "file/read" -> 仅file/read分类下的功能
     pub async fn find_by_path(&self, path: &str) -> Vec<Capability> {
-        let path = CapabilityPath::from_str(path);
+        let path = CapabilityPath::from_string(path);
         let root = self.capability_root.read().await;
 
         // 查找目标分类节点
@@ -99,7 +99,7 @@ impl CapabilityRegistry {
 
     /// 获取直接属于某分类的功能（不包括子分类）
     pub async fn find_direct_by_path(&self, path: &str) -> Vec<Capability> {
-        let path = CapabilityPath::from_str(path);
+        let path = CapabilityPath::from_string(path);
         let root = self.capability_root.read().await;
 
         let mut node = &*root;
@@ -118,7 +118,7 @@ impl CapabilityRegistry {
 
     /// 列出某分类下的子分类
     pub async fn list_sub_paths(&self, path: &str) -> Vec<String> {
-        let path = CapabilityPath::from_str(path);
+        let path = CapabilityPath::from_string(path);
         let root = self.capability_root.read().await;
 
         let mut node = &*root;
@@ -154,7 +154,7 @@ impl CapabilityRegistry {
     pub async fn list_all_paths(&self) -> Vec<String> {
         let root = self.capability_root.read().await;
         let mut paths = Vec::new();
-        Self::collect_capability_paths(&*root, String::new(), &mut paths);
+        Self::collect_capability_paths(&root, String::new(), &mut paths);
         paths
     }
 

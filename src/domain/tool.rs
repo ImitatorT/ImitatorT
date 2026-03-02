@@ -63,7 +63,7 @@ impl Tool {
 }
 
 /// 分类路径 - 支持多级如 ["file", "read"]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct CategoryPath(Vec<String>);
 
 impl CategoryPath {
@@ -73,7 +73,7 @@ impl CategoryPath {
     }
 
     /// 从字符串解析，如 "file/read" -> ["file", "read"]
-    pub fn from_str(path: &str) -> Self {
+    pub fn from_string(path: &str) -> Self {
         let parts: Vec<String> = path
             .split('/')
             .filter(|s| !s.is_empty())
@@ -128,12 +128,6 @@ impl CategoryPath {
     }
 }
 
-impl Default for CategoryPath {
-    fn default() -> Self {
-        Self(Vec::new())
-    }
-}
-
 /// JSON Schema 参数构建器
 ///
 /// 用于方便地构建 OpenAI 兼容的 JSON Schema 参数定义
@@ -143,7 +137,9 @@ impl JsonSchema {
     /// 创建 object 类型的参数根
     ///
     /// # Example
-    /// ```
+    /// ```ignore
+    /// use imitatort::domain::tool::JsonSchema;
+    ///
     /// let params = JsonSchema::object()
     ///     .property("name", JsonSchema::string().description("用户名"))
     ///     .property("age", JsonSchema::integer().description("年龄").optional())
@@ -216,13 +212,15 @@ impl ObjectSchemaBuilder {
         // 先检查是否必填，再移动 builder
         let is_required = builder.required;
 
-        let properties = self.schema["properties"].as_object_mut()
+        let properties = self.schema["properties"]
+            .as_object_mut()
             .expect("Expected 'properties' to be an object in schema");
         properties.insert(name.to_string(), builder.build());
 
         // 如果属性是必填的，添加到 required 数组
         if is_required {
-            let required = self.schema["required"].as_array_mut()
+            let required = self.schema["required"]
+                .as_array_mut()
                 .expect("Expected 'required' to be an array in schema");
             required.push(json!(name));
         }
@@ -232,12 +230,14 @@ impl ObjectSchemaBuilder {
 
     /// 直接添加原始 JSON Schema 属性
     pub fn raw_property(mut self, name: &str, schema: Value, is_required: bool) -> Self {
-        let properties = self.schema["properties"].as_object_mut()
+        let properties = self.schema["properties"]
+            .as_object_mut()
             .expect("Expected 'properties' to be an object in schema");
         properties.insert(name.to_string(), schema);
 
         if is_required {
-            let required = self.schema["required"].as_array_mut()
+            let required = self.schema["required"]
+                .as_array_mut()
                 .expect("Expected 'required' to be an array in schema");
             required.push(json!(name));
         }
@@ -317,18 +317,13 @@ impl Default for ReturnType {
 }
 
 /// 匹配类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MatchType {
     /// 精确匹配
     Exact,
     /// 模糊匹配
+    #[default]
     Fuzzy,
-}
-
-impl Default for MatchType {
-    fn default() -> Self {
-        MatchType::Fuzzy
-    }
 }
 
 /// Tool 提供者接口
