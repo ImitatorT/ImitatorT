@@ -82,8 +82,8 @@ jobs:
     name: Publish Dev/Snapshot Version
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Run on dev branch or other branches (but not main or release)
-    if: github.ref_name == 'dev' || (github.ref_name != 'main' && github.event_name == 'push')
+    # Run on dev branch, other branches (but not main), or manually triggered
+    if: github.ref_name == 'dev' || github.event_name == 'workflow_dispatch' || (github.ref_name != 'main' && github.event_name == 'push')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
