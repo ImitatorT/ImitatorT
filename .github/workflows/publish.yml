@@ -116,10 +116,13 @@ jobs:
           ORIGINAL_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[0].version')
 
           if [ "${{ github.ref_name }}" = "dev" ]; then
-            NEW_VERSION="${ORIGINAL_VERSION}-dev"
+            # For dev branch, use timestamp-based version
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            NEW_VERSION="${ORIGINAL_VERSION}-dev.${TIMESTAMP}"
           else
-            # For other branches, use SNAPSHOT versioning
-            NEW_VERSION="${ORIGINAL_VERSION}-SNAPSHOT"
+            # For other branches, use SNAPSHOT with timestamp
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            NEW_VERSION="${ORIGINAL_VERSION}-SNAPSHOT.${TIMESTAMP}"
           fi
 
           echo "Original version: $ORIGINAL_VERSION"
@@ -137,10 +140,8 @@ jobs:
           # Then run clippy for syntax checking
           cargo clippy --release -- -D warnings
 
-      # Only publish to crates.io if manual trigger or dev branch (requires special handling for SNAPSHOT versions)
-      # Note: Crates.io doesn't allow re-publishing same version, so SNAPSHOT would need to use timestamp
-      - name: Prepare for publishing dev version
-        run: |
-          echo "Publishing development version: ${{ steps.version.outputs.new_version }}"
-          cargo package --allow-dirty
-          echo "Package created, but skipping actual publish to crates.io for dev/SNAPSHOT versions to avoid conflicts"
+      - name: Publish to crates.io
+        uses: katyo/publish-crates@v2
+        with:
+          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          args: --allow-dirty
