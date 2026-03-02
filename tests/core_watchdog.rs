@@ -1,6 +1,6 @@
-//! WatchdogAgent框架测试
+//! WatchdogAgent 框架测试
 //!
-//! 测试WatchdogAgent框架的核心功能
+//! 测试 WatchdogAgent 框架的核心功能
 
 use imitatort::core::watchdog_agent::{
     ToolExecutionEvent, WatchdogAgent, WatchdogClient, WatchdogRule,
@@ -11,8 +11,37 @@ use imitatort::domain::{
     agent::Role,
     agent::{Agent, TriggerCondition},
 };
-use serde_json::json;
+use imitatort::infrastructure::tool::ToolExecutor as ToolExecutorTrait;
+use serde_json::{json, Value};
 use std::sync::Arc;
+
+/// Mock Tool Executor for testing
+#[derive(Debug)]
+struct MockToolExecutor;
+
+#[async_trait::async_trait]
+impl ToolExecutorTrait for MockToolExecutor {
+    async fn execute(
+        &self,
+        _tool_id: &str,
+        _params: Value,
+        _context: &ToolCallContext,
+    ) -> anyhow::Result<Value> {
+        Ok(json!({"mock": "result"}))
+    }
+
+    fn can_execute(&self, _tool_id: &str) -> bool {
+        true
+    }
+
+    fn supported_tools(&self) -> Vec<String> {
+        vec!["mock_tool".to_string()]
+    }
+}
+
+fn create_mock_tool_executor() -> Arc<dyn ToolExecutorTrait> {
+    Arc::new(MockToolExecutor)
+}
 
 #[tokio::test]
 async fn test_watchdog_agent_creation() {
@@ -22,7 +51,7 @@ async fn test_watchdog_agent_creation() {
         Role::simple("System", "System monitoring agent"),
         LLMConfig::openai("test-key"),
     );
-    let watchdog_agent = WatchdogAgent::new(agent);
+    let watchdog_agent = WatchdogAgent::new(agent, create_mock_tool_executor());
     assert!(watchdog_agent.is_enabled().await);
 }
 
@@ -34,7 +63,7 @@ async fn test_watchdog_rule_registration() {
         Role::simple("System", "System monitoring agent"),
         LLMConfig::openai("test-key"),
     );
-    let watchdog_agent = WatchdogAgent::new(agent);
+    let watchdog_agent = WatchdogAgent::new(agent, create_mock_tool_executor());
 
     let rule = WatchdogRule::new(
         "test_rule",
@@ -58,7 +87,7 @@ async fn test_watchdog_rule_activation() {
         Role::simple("System", "System monitoring agent"),
         LLMConfig::openai("test-key"),
     );
-    let watchdog_agent = WatchdogAgent::new(agent);
+    let watchdog_agent = WatchdogAgent::new(agent, create_mock_tool_executor());
 
     let rule = WatchdogRule::new(
         "activation_test_rule",
@@ -105,7 +134,7 @@ async fn test_watchdog_client() {
         Role::simple("System", "System monitoring agent"),
         LLMConfig::openai("test-key"),
     );
-    let watchdog_agent = Arc::new(WatchdogAgent::new(agent));
+    let watchdog_agent = Arc::new(WatchdogAgent::new(agent, create_mock_tool_executor()));
     let client = WatchdogClient::new(watchdog_agent.clone());
 
     // 注册规则
@@ -142,7 +171,7 @@ async fn test_watchdog_rule_string_matching() {
         Role::simple("System", "System monitoring agent"),
         LLMConfig::openai("test-key"),
     );
-    let watchdog_agent = WatchdogAgent::new(agent);
+    let watchdog_agent = WatchdogAgent::new(agent, create_mock_tool_executor());
 
     let rule = WatchdogRule::new(
         "string_match_rule",
@@ -188,7 +217,7 @@ async fn test_watchdog_rule_status_matching() {
         Role::simple("System", "System monitoring agent"),
         LLMConfig::openai("test-key"),
     );
-    let watchdog_agent = WatchdogAgent::new(agent);
+    let watchdog_agent = WatchdogAgent::new(agent, create_mock_tool_executor());
 
     let rule = WatchdogRule::new(
         "status_match_rule",
@@ -222,7 +251,7 @@ async fn test_watchdog_agent_disable_enable() {
         Role::simple("System", "System monitoring agent"),
         LLMConfig::openai("test-key"),
     );
-    let watchdog_agent = WatchdogAgent::new(agent);
+    let watchdog_agent = WatchdogAgent::new(agent, create_mock_tool_executor());
 
     let rule = WatchdogRule::new(
         "toggle_rule",
@@ -271,11 +300,11 @@ async fn test_watchdog_agent_private_message_watcher() {
         Role::simple("System", "System monitoring agent"),
         LLMConfig::openai("test-key"),
     );
-    let watchdog_agent = WatchdogAgent::new(agent);
+    let watchdog_agent = WatchdogAgent::new(agent, create_mock_tool_executor());
 
     let test_agent_id = "test_agent";
 
-    // 为Agent注册私聊监控
+    // 为 Agent 注册私聊监控
     watchdog_agent
         .register_direct_message_watcher(test_agent_id)
         .expect("Failed to register private message watcher");
@@ -286,7 +315,7 @@ async fn test_watchdog_agent_private_message_watcher() {
     // 测试触发事件
     let event = ToolExecutionEvent::PostExecute {
         tool_id: "message.send_direct".to_string(),
-        result: json!({"target": test_agent_id}), // 包含目标Agent ID
+        result: json!({"target": test_agent_id}), // 包含目标 Agent ID
         context: ToolCallContext::new("sender".to_string()),
     };
 
@@ -303,11 +332,11 @@ async fn test_watchdog_agent_mention_watcher() {
         Role::simple("System", "System monitoring agent"),
         LLMConfig::openai("test-key"),
     );
-    let watchdog_agent = WatchdogAgent::new(agent);
+    let watchdog_agent = WatchdogAgent::new(agent, create_mock_tool_executor());
 
     let test_agent_id = "test_agent";
 
-    // 为Agent注册艾特(@)监控
+    // 为 Agent 注册艾特 (@) 监控
     watchdog_agent
         .register_mention_watcher(test_agent_id)
         .expect("Failed to register mention watcher");
@@ -318,7 +347,7 @@ async fn test_watchdog_agent_mention_watcher() {
     // 测试触发事件
     let event = ToolExecutionEvent::PostExecute {
         tool_id: "message.send_group".to_string(),
-        result: json!({"mention_agent_ids": [test_agent_id]}), // 包含被艾特的Agent ID
+        result: json!({"mention_agent_ids": [test_agent_id]}), // 包含被艾特的 Agent ID
         context: ToolCallContext::new("sender".to_string()),
     };
 

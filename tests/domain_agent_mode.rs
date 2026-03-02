@@ -1,10 +1,41 @@
-//! Agent重构后功能测试
+//! Agent 重构后功能测试
 //!
-//! 测试重构后的Agent功能，包括工具监听能力
+//! 测试重构后的 Agent 功能，包括工具监听能力
 
 use imitatort::core::watchdog_agent::{WatchdogAgent, WatchdogRule};
 use imitatort::domain::agent::{Agent, LLMConfig, Role, TriggerCondition};
+use imitatort::infrastructure::tool::ToolExecutor as ToolExecutorTrait;
+use imitatort::domain::tool::ToolCallContext;
+use serde_json::{json, Value};
 use std::sync::Arc;
+
+/// Mock Tool Executor for testing
+#[derive(Debug)]
+struct MockToolExecutor;
+
+#[async_trait::async_trait]
+impl ToolExecutorTrait for MockToolExecutor {
+    async fn execute(
+        &self,
+        _tool_id: &str,
+        _params: Value,
+        _context: &ToolCallContext,
+    ) -> anyhow::Result<Value> {
+        Ok(json!({"mock": "result"}))
+    }
+
+    fn can_execute(&self, _tool_id: &str) -> bool {
+        true
+    }
+
+    fn supported_tools(&self) -> Vec<String> {
+        vec!["mock_tool".to_string()]
+    }
+}
+
+fn create_mock_tool_executor() -> Arc<dyn ToolExecutorTrait> {
+    Arc::new(MockToolExecutor)
+}
 
 #[test]
 fn test_agent_creation_with_tool_watching() {
@@ -15,11 +46,11 @@ fn test_agent_creation_with_tool_watching() {
         LLMConfig::openai("test-key"),
     );
 
-    // 验证Agent默认具有空的工具监听列表
+    // 验证 Agent 默认具有空的工具监听列表
     assert_eq!(agent.watched_tools.len(), 0);
     assert_eq!(agent.trigger_conditions.len(), 0);
 
-    // 验证Agent可以通过构建器方法添加工具监听
+    // 验证 Agent 可以通过构建器方法添加工具监听
     let agent_with_watching = Agent::new(
         "test_agent2",
         "Test Agent 2",
@@ -76,7 +107,7 @@ async fn test_watchdog_agent_creation_and_rule_management() {
         LLMConfig::openai("test-key"),
     );
 
-    let watchdog_agent = WatchdogAgent::new(agent);
+    let watchdog_agent = WatchdogAgent::new(agent, create_mock_tool_executor());
 
     // 测试规则注册
     let rule = WatchdogRule::new(
@@ -106,7 +137,6 @@ async fn test_watchdog_agent_creation_and_rule_management() {
 #[tokio::test]
 async fn test_watchdog_agent_event_processing() {
     use imitatort::core::watchdog_agent::ToolExecutionEvent;
-    use imitatort::domain::tool::ToolCallContext;
     use serde_json::json;
 
     let agent = Agent::new(
@@ -116,7 +146,7 @@ async fn test_watchdog_agent_event_processing() {
         LLMConfig::openai("test-key"),
     );
 
-    let watchdog_agent = WatchdogAgent::new(agent);
+    let watchdog_agent = WatchdogAgent::new(agent, create_mock_tool_executor());
 
     // 注册一个数值范围触发规则
     let rule = WatchdogRule::new(
