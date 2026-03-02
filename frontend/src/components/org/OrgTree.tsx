@@ -111,6 +111,11 @@ function DepartmentNode({ department, level = 0, onUserClick }: DepartmentNodePr
                   <p className="text-sm text-[var(--tg-hint-color)]">
                     {user.title}
                   </p>
+                  {user.description && (
+                    <p className="text-xs text-[var(--tg-hint-color)] mt-1 line-clamp-2">
+                      {user.description}
+                    </p>
+                  )}
                 </div>
                 <span
                   className={cn(

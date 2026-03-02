@@ -265,6 +265,7 @@ impl Store for SqliteStore {
                         api_key: row.get(8)?,
                         base_url: row.get(9)?,
                     },
+                    description: None,
                     watched_tools: vec![],
                     trigger_conditions: vec![],
                 })

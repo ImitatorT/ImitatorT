@@ -28,6 +28,8 @@ pub struct Agent {
     pub role: Role,
     pub department_id: Option<String>,
     pub llm_config: LLMConfig,
+    /// Agent description/bio (简介/描述)
+    pub description: Option<String>,
     /// List of monitored tool IDs
     pub watched_tools: Vec<String>,
     /// Trigger condition configuration
@@ -48,6 +50,7 @@ impl Agent {
             role,
             department_id: None,
             llm_config,
+            description: None,
             watched_tools: vec![],
             trigger_conditions: vec![],
         }
@@ -68,6 +71,7 @@ impl Agent {
             role,
             department_id: None,
             llm_config,
+            description: None,
             watched_tools,
             trigger_conditions,
         }
@@ -100,6 +104,12 @@ impl Agent {
     /// Add a trigger condition
     pub fn add_trigger_condition(mut self, condition: TriggerCondition) -> Self {
         self.trigger_conditions.push(condition);
+        self
+    }
+
+    /// Set description
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
         self
     }
 

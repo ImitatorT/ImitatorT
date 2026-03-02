@@ -47,6 +47,7 @@ pub struct AgentResponse {
     pub name: String,
     pub role: String,
     pub department: String,
+    pub description: Option<String>,
 }
 
 // ==================== 请求类型 ====================
@@ -156,6 +157,7 @@ async fn list_agents(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             name: a.name.clone(),
             role: a.role.title.clone(),
             department: a.department_id.clone().unwrap_or_default(),
+            description: a.description.clone(),
         })
         .collect();
 
@@ -173,6 +175,7 @@ async fn get_agent(
             "name": agent.name,
             "role": agent.role.title,
             "department": agent.department_id,
+            "description": agent.description,
         }))
         .into_response(),
         None => (
@@ -598,6 +601,7 @@ async fn register(
                 },
                 department_id: Some(guilty_cliff_dept_id.to_string()),
                 llm_config: LLMConfig::openai("fake-api-key".to_string()),
+                description: None,
                 watched_tools: vec![],
                 trigger_conditions: vec![],
             };
@@ -1115,7 +1119,8 @@ async fn list_chat_sessions(State(state): State<Arc<AppState>>) -> impl IntoResp
                             "id": agent.id,
                             "name": agent.name,
                             "isAgent": true,
-                            "status": "online"  // 假设Agent始终在线
+                            "status": "online",  // 假设Agent始终在线
+                            "description": agent.description,
                         }],
                         "lastMessage": null,
                         "unreadCount": 0,
@@ -1242,7 +1247,8 @@ async fn get_org_tree(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                             "id": agent.id,
                             "name": agent.name,
                             "title": agent.role.title,
-                            "status": "online"
+                            "status": "online",
+                            "description": agent.description
                         })
                     })
                     .collect();
@@ -1259,7 +1265,8 @@ async fn get_org_tree(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                             "id": agent.id,
                             "name": agent.name,
                             "title": agent.role.title,
-                            "status": "online"
+                            "status": "online",
+                            "description": agent.description
                         })
                     })
                     .collect();
