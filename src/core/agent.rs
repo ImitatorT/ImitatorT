@@ -1,6 +1,15 @@
-//! Agent Runtime
+//! Agent Runtime - 核心层
 //!
-//! Responsible for interacting with LLM and executing ReAct decisions
+//! 提供 Agent 运行时能力，负责与 LLM 交互和执行 ReAct 决策
+//!
+//! **本模块职责**：
+//! - `AgentRuntime` - Agent 运行时实现（依赖 domain::Agent 实体）
+//! - `Context` - Agent 思考上下文
+//! - `Decision` - Agent 决策类型
+//!
+//! **依赖关系**：
+//! - 依赖 `domain::Agent` 实体
+//! - 依赖 `infrastructure::llm::OpenAIClient` 进行 LLM 调用
 
 use crate::domain::{Agent, Message, MessageTarget};
 use crate::infrastructure::llm::{OpenAIClient, Tool, ToolCall, ToolResponse};

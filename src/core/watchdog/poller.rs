@@ -11,7 +11,7 @@ use tokio::sync::{broadcast, RwLock};
 use tokio::time::{interval, Duration};
 use tracing::{debug, error, info};
 
-use crate::infrastructure::tool::ToolExecutor;
+use crate::core::tool::ToolExecutor;
 use crate::domain::tool::ToolCallContext;
 use crate::domain::TriggerCondition;
 

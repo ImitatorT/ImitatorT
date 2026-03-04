@@ -1,6 +1,25 @@
-//! Watchdog Agent - System agent that monitors tool executions and triggers other agents
+//! Watchdog Agent - 系统监控 Agent
 //!
-//! Enhanced with scheduled task and polling capabilities
+//! **职责定位**：Watchdog Agent 是系统内置的监控和触发协调器
+//!
+//! **设计说明**：
+//! WatchdogAgent 采用"协调器模式"，组合以下子模块：
+//! - `ToolMonitor`（工具监控）：通过 `rules: DashMap<WatchdogRule>` 实现
+//! - `EventDispatcher`（事件分发）：分发工具执行事件到注册的处理器
+//! - `ScheduleManager`（定时任务管理器）：定时任务调度（独立模块）
+//! - `PollingManager`（轮询管理器）：主动轮询工具执行（独立模块）
+//! - `AgentTrigger`（Agent 触发器）：通过 `triggered_tx: broadcast::Sender` 实现
+//!
+//! **为什么不拆分**：
+//! - `ScheduleManager` 和 `PollingManager` 已经是独立模块（`core::watchdog::scheduler/poller`）
+//! - `WatchdogAgent` 作为协调器，负责组合这些子模块并提供统一 API
+//! - 这种设计符合"组合优于继承"原则，保持模块独立性的同时提供统一接口
+//!
+//! **主要功能**：
+//! - 注册和管理监控规则（`register_rule`）
+//! - 处理工具执行事件并触发匹配的规则（`process_event`）
+//! - 管理定时任务和轮询任务（`register_schedule_rule` / `register_polling_rule`）
+//! - 为 Agent 注册默认唤醒事件（`register_default_watchers`）
 
 use anyhow::Result;
 use dashmap::DashMap;
@@ -9,7 +28,7 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{debug, error, info};
 
-use crate::infrastructure::tool::ToolExecutor;
+use crate::core::tool::ToolExecutor;
 use crate::core::watchdog::poller::{PollingManager, PollingRule, PollingTick};
 use crate::core::watchdog::scheduler::{ScheduleManager, ScheduleRule, ScheduleTick};
 use crate::domain::{tool::ToolCallContext, Agent, TriggerCondition};

@@ -103,6 +103,31 @@ impl FrameworkToolExecutor {
             "shell.exec",
             // 网页请求类
             "http.fetch",
+            // ===== DeepResearch 迁移工具 =====
+            // Web 搜索类
+            "web.search",
+            "web.visit",
+            // 知识库类
+            "wikipedia.search",
+            "wikipedia.get_article",
+            // 社区媒体类
+            "reddit.search",
+            "reddit.hot",
+            "reddit.new",
+            "twitter.tweets",
+            "twitter.info",
+            // 财经类
+            "bloomberg.search",
+            "bloomberg.latest",
+            "polymarket.search",
+            "polymarket.trending",
+            "polymarket.market",
+            "polymarket.odds",
+            // 代码执行类 - Rust 脚本
+            "rust.exec",
+            // 简单文件读取
+            "file.simple.read",
+            "file.simple.list",
         ]
     }
 
@@ -146,6 +171,31 @@ impl FrameworkToolExecutor {
             "shell.exec" => self.execute_shell_exec(params).await,
             // 网页请求类
             "http.fetch" => self.execute_http_fetch(params).await,
+            // ===== DeepResearch 迁移工具 =====
+            // Web 搜索类
+            "web.search" => Self::execute_web_search_call(params).await,
+            "web.visit" => Self::execute_web_visit_call(params).await,
+            // 知识库类
+            "wikipedia.search" => Self::execute_wikipedia_search_call(params).await,
+            "wikipedia.get_article" => Self::execute_wikipedia_article_call(params).await,
+            // 社区媒体类
+            "reddit.search" => Self::execute_reddit_search_call(params).await,
+            "reddit.hot" => Self::execute_reddit_hot_call(params).await,
+            "reddit.new" => Self::execute_reddit_new_call(params).await,
+            "twitter.tweets" => Self::execute_twitter_tweets_call(params).await,
+            "twitter.info" => Self::execute_twitter_info_call(params).await,
+            // 财经类
+            "bloomberg.search" => Self::execute_bloomberg_search_call(params).await,
+            "bloomberg.latest" => Self::execute_bloomberg_latest_call(params).await,
+            "polymarket.search" => Self::execute_polymarket_search_call(params).await,
+            "polymarket.trending" => Self::execute_polymarket_trending_call(params).await,
+            "polymarket.market" => Self::execute_polymarket_market_call(params).await,
+            "polymarket.odds" => Self::execute_polymarket_odds_call(params).await,
+            // 代码执行类 - Rust 脚本
+            "rust.exec" => Self::execute_rust_call(params).await,
+            // 简单文件读取
+            "file.simple.read" => Self::execute_simple_file_read_call(params).await,
+            "file.simple.list" => Self::execute_simple_file_list_call(params).await,
             _ => Ok(ToolResult::error(format!("Unknown tool: {}", tool_id))),
         }
     }
@@ -1116,7 +1166,7 @@ fn find_category_node(
 
 // ==================== ToolExecutor Trait Implementation ====================
 
-use crate::infrastructure::tool::ToolExecutor as ToolExecutorTrait;
+use crate::core::tool::ToolExecutor as ToolExecutorTrait;
 use async_trait::async_trait;
 
 #[async_trait]
@@ -1156,3 +1206,179 @@ impl ToolExecutorTrait for FrameworkToolExecutor {
 }
 
 // Tests moved to tests/infrastructure_framework_tools.rs
+
+// ==================== DeepResearch 迁移工具执行方法 ====================
+
+impl FrameworkToolExecutor {
+    // Web 搜索类
+    async fn execute_web_search_call(params: Value) -> Result<ToolResult> {
+        match crate::infrastructure::tool::execute_web_search(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_web_visit_call(params: Value) -> Result<ToolResult> {
+        match crate::infrastructure::tool::execute_web_visit(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    // 知识库类
+    async fn execute_wikipedia_search_call(params: Value) -> Result<ToolResult> {
+        match crate::infrastructure::tool::execute_wikipedia(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_wikipedia_article_call(params: Value) -> Result<ToolResult> {
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("action".to_string(), Value::String("get_article".to_string()));
+        }
+        match crate::infrastructure::tool::execute_wikipedia(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    // 社区媒体类
+    async fn execute_reddit_search_call(params: Value) -> Result<ToolResult> {
+        match crate::infrastructure::tool::execute_reddit(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_reddit_hot_call(params: Value) -> Result<ToolResult> {
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("action".to_string(), Value::String("hot".to_string()));
+        }
+        match crate::infrastructure::tool::execute_reddit(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_reddit_new_call(params: Value) -> Result<ToolResult> {
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("action".to_string(), Value::String("new".to_string()));
+        }
+        match crate::infrastructure::tool::execute_reddit(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_twitter_tweets_call(params: Value) -> Result<ToolResult> {
+        match crate::infrastructure::tool::execute_twitter(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_twitter_info_call(params: Value) -> Result<ToolResult> {
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("action".to_string(), Value::String("info".to_string()));
+        }
+        match crate::infrastructure::tool::execute_twitter(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    // 财经类
+    async fn execute_bloomberg_search_call(params: Value) -> Result<ToolResult> {
+        match crate::infrastructure::tool::execute_bloomberg(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_bloomberg_latest_call(params: Value) -> Result<ToolResult> {
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("action".to_string(), Value::String("latest".to_string()));
+        }
+        match crate::infrastructure::tool::execute_bloomberg(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_polymarket_search_call(params: Value) -> Result<ToolResult> {
+        match crate::infrastructure::tool::execute_polymarket(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_polymarket_trending_call(params: Value) -> Result<ToolResult> {
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("action".to_string(), Value::String("trending".to_string()));
+        }
+        match crate::infrastructure::tool::execute_polymarket(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_polymarket_market_call(params: Value) -> Result<ToolResult> {
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("action".to_string(), Value::String("market".to_string()));
+        }
+        match crate::infrastructure::tool::execute_polymarket(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_polymarket_odds_call(params: Value) -> Result<ToolResult> {
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("action".to_string(), Value::String("odds".to_string()));
+        }
+        match crate::infrastructure::tool::execute_polymarket(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    // 代码执行类 - Rust 脚本
+    async fn execute_rust_call(params: Value) -> Result<ToolResult> {
+        match crate::infrastructure::tool::execute_rust(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    // 简单文件读取
+    async fn execute_simple_file_read_call(params: Value) -> Result<ToolResult> {
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("action".to_string(), Value::String("read".to_string()));
+        }
+        match crate::infrastructure::tool::execute_simple_file(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+
+    async fn execute_simple_file_list_call(params: Value) -> Result<ToolResult> {
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("action".to_string(), Value::String("list".to_string()));
+        }
+        match crate::infrastructure::tool::execute_simple_file(params).await {
+            Ok(result) => Ok(ToolResult::success(result)),
+            Err(e) => Ok(ToolResult::error(e.to_string())),
+        }
+    }
+}

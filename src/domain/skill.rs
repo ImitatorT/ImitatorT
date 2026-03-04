@@ -1,6 +1,21 @@
-//! Skill Domain Entity
+//! Skill Domain Entity - 技能领域实体
 //!
-//! Core business definition for skill system, supporting many-to-many binding between skills and tools
+//! **技能系统定位**：
+//! - Skill 代表"用户技能"，是可复用的能力包（类似插件）
+//! - 有作者、版本、分类等元数据
+//! - 通过 SkillToolBinding 绑定到 Tool
+//! - 支持 Required/Optional 两种绑定类型
+//!
+//! **与 Capability 的区别**：
+//! - Skill：用户视角的"技能包"，强调复用性和版本管理
+//! - Capability：系统视角的"能力接口"，强调 MCP 协议兼容和技术实现
+//! - Skill 可以通过 SkillCapabilityBinding 利用 Capability 增强功能
+//!
+//! **核心类型**：
+//! - `Skill` - 技能实体
+//! - `SkillToolBinding` - 技能与工具的绑定关系
+//! - `BindingType` - 绑定类型（Required/Optional）
+//! - `ToolAccessType` - 工具访问类型（Public/Private）
 
 use serde::{Deserialize, Serialize};
 

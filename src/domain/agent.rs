@@ -1,6 +1,14 @@
-//! Agent Domain Entity
+//! Agent Domain Entity - 领域层
 //!
-//! Basic definition of virtual company employees
+//! 包含 Agent 相关的纯实体定义，不包含任何运行时逻辑
+//!
+//! **本模块职责**：
+//! - `Agent` - Agent 实体（唯一数据源）
+//! - `Role` - 角色定义
+//! - `LLMConfig` - LLM 配置
+//! - `TriggerCondition` - 触发条件枚举
+//!
+//! **注意**：如需 Agent 运行时逻辑，请使用 `core::agent::AgentRuntime`
 
 use serde::{Deserialize, Serialize};
 

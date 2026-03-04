@@ -1,7 +1,22 @@
-//! Capability Domain Entity
+//! Capability Domain Entity - 能力领域实体
 //!
-//! Core business definition for capability system, supporting multi-level classification, compatible with MCP (Model Context Protocol)
-//! Parameters use JSON Schema format, directly compatible with MCP Capability Discovery protocol
+//! **能力系统定位**：
+//! - Capability 代表"系统能力"，是 MCP（Model Context Protocol）兼容的能力接口
+//! - 支持多级分类（CapabilityPath）
+//! - 有 input_schema/output_schema（JSON Schema 格式）
+//! - 支持多种协议类型（http、stdio、websocket、sse 等）
+//!
+//! **与 Skill 的区别**：
+//! - Capability：系统视角的"能力接口"，强调 MCP 协议兼容和技术实现
+//! - Skill：用户视角的"技能包"，强调复用性和版本管理
+//! - Capability 可以被 Skill 通过 SkillCapabilityBinding 利用
+//!
+//! **核心类型**：
+//! - `Capability` - 能力实体（MCP 兼容）
+//! - `CapabilityPath` - 能力分类路径（类似 Tool 的 CategoryPath）
+//! - `CapabilityProvider` - 能力提供者接口
+//! - `SkillCapabilityBinding` - 技能与能力的绑定关系
+//! - `InputSchema` / `OutputSchema` - JSON Schema 构建器
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

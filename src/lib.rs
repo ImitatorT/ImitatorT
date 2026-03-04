@@ -79,7 +79,7 @@ pub mod infrastructure {
     pub mod logger;
     pub mod store;
     pub mod tool;
-    pub mod web;
+    pub mod matrix;
 }
 
 // ================================
@@ -94,13 +94,6 @@ pub use core::config::CompanyConfig;
 
 /// 快速启动函数 - 自动配置并启动框架
 pub use bootstrap::{quick_start, start_with_config, FrameworkLauncher};
-
-// ================================
-// Web 服务 API - 内置 Web 功能
-// ================================
-
-/// 启动内置 Web 服务器 - 提供 REST API 和 WebSocket 服务
-pub use infrastructure::web::start_web_server;
 
 // ================================
 // 核心实体定义 - 领域模型
@@ -119,7 +112,7 @@ pub use domain::user::User;
 // 工具和能力系统 - 扩展功能
 // ================================
 
-pub use core::tool::ToolRegistry;
+pub use core::tool::{ToolRegistry, ToolExecutor, ToolExecutorRegistry, ToolResult, FnToolExecutor};
 pub use core::tool_provider::{CompositeToolProvider, FrameworkToolProvider, RegistryToolProvider};
 /// 工具系统相关类型
 pub use domain::tool::{
@@ -127,7 +120,7 @@ pub use domain::tool::{
     ToolProvider,
 };
 pub use infrastructure::tool::{
-    FrameworkToolExecutor, ToolEnvironment, ToolExecutor, ToolExecutorRegistry, ToolResult,
+    FrameworkToolExecutor, ToolEnvironment,
 };
 
 pub use core::capability::CapabilityRegistry;
