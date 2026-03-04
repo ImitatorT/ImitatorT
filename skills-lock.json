@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "largomst-ducksearch": {
+      "source": "smithery.ai",
+      "sourceType": "well-known",
+      "computedHash": "605c67244c303856a3d0d4b9085bb21d49ba8eb44f180c7370e14961eea7d634"
+    }
+  }
+}
