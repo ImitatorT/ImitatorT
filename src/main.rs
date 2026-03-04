@@ -1,15 +1,16 @@
-//! ImitatorT - Spring Boot Style Launcher
+//! ImitatorT - Matrix Appservice Launcher
 //!
-//! Automatically configures multi-Agent system and Web service
+//! Automatically configures multi-Agent system with Matrix integration
 
 use std::sync::Arc;
 
 use anyhow::Result;
 use imitatort::{
-    start_web_server, Agent, AppConfig, CompanyBuilder, CompanyConfig, VirtualCompany,
+    AppConfig, CompanyBuilder, CompanyConfig, VirtualCompany,
+    infrastructure::matrix::{MatrixConfig, MatrixClient, AppService, SyncService, Mapper},
 };
-use tokio::sync::broadcast;
-use tracing::{info, warn};
+use tokio::sync::{broadcast, RwLock};
+use tracing::{info, warn, error};
 
 // 加载环境变量
 use dotenv::dotenv;
@@ -22,32 +23,36 @@ async fn main() -> Result<()> {
     // 初始化日志
     tracing_subscriber::fmt::init();
 
-    info!("🚀 Starting ImitatorT - Multi-Agent Company Framework...");
+    info!("🚀 Starting ImitatorT - Matrix Appservice...");
 
     // 加载应用程序配置
     let app_config = AppConfig::from_env();
     info!(
-        "Using configuration: output_mode={}, web_bind={}",
-        app_config.output_mode, app_config.web_bind
+        "Using configuration: output_mode={}, run_agent_loops={}",
+        app_config.output_mode, app_config.run_agent_loops
     );
 
-    // Automatically configure and start multi-Agent system and Web service
-    let company = initialize_framework(&app_config).await?;
+    // 加载 Matrix 配置
+    let matrix_config = MatrixConfig::from_env()
+        .expect("Failed to load Matrix configuration. Please set required environment variables.");
+    info!("📋 Matrix configuration loaded for server: {}", matrix_config.server_name);
 
-    // 根据配置自动启动相应的服务
-    start_services(company, &app_config).await?;
+    // Initialize multi-Agent system
+    let company = initialize_multi_agent_system(&app_config).await?;
+
+    // Start Matrix integration
+    start_matrix_services(company, &matrix_config, &app_config).await?;
 
     Ok(())
 }
 
-/// Initialize framework - Automatically configure multi-Agent system
-async fn initialize_framework(app_config: &AppConfig) -> Result<VirtualCompany> {
-    info!("🔧 Initializing multi-agent framework...");
+/// Initialize multi-Agent system
+async fn initialize_multi_agent_system(app_config: &AppConfig) -> Result<VirtualCompany> {
+    info!("🔧 Initializing multi-agent system...");
 
-    // Try to load new configuration from config file
-    if let Ok(config) = load_config() {
+    // Try to load configuration from config file
+    if let Ok(config) = load_company_config() {
         info!("📋 Loaded company configuration from company_config.yaml");
-        // Create new company using config file, save to SQLite
         let company = CompanyBuilder::from_config(config)?
             .build_and_save()
             .await?;
@@ -55,18 +60,15 @@ async fn initialize_framework(app_config: &AppConfig) -> Result<VirtualCompany> 
         return Ok(company);
     }
 
-    // Try to load from existing SQLite database
-    info!("🔍 No config file found, attempting to load from database...");
+    // Try to load from database
+    info!("🔍 Attempting to load from database...");
     match VirtualCompany::from_sqlite(&app_config.db_path).await {
         Ok(company) => {
-            info!(
-                "✅ Loaded existing company from database: {}",
-                app_config.db_path
-            );
+            info!("✅ Loaded existing company from database");
             Ok(company)
         }
         Err(_) => {
-            warn!("⚠️  No existing database found, initializing with default configuration");
+            warn!("⚠️  No existing configuration found, initializing with default setup");
             let config = CompanyConfig::test_config();
             let company = CompanyBuilder::from_config(config)?
                 .build_and_save()
@@ -77,82 +79,90 @@ async fn initialize_framework(app_config: &AppConfig) -> Result<VirtualCompany> 
     }
 }
 
-/// Load configuration file
-fn load_config() -> Result<CompanyConfig> {
-    // Try to load configuration from YAML file
+/// Load company configuration
+fn load_company_config() -> Result<CompanyConfig> {
     if let Ok(content) = std::fs::read_to_string("company_config.yaml") {
         let config: CompanyConfig = serde_yaml::from_str(&content)?;
         return Ok(config);
     }
-
     Err(anyhow::anyhow!("Config file not found"))
 }
 
-/// Start services - Automatically start corresponding functions based on configuration
-async fn start_services(company: VirtualCompany, app_config: &AppConfig) -> Result<()> {
-    info!("⚡ Starting framework services...");
+/// Start Matrix services
+async fn start_matrix_services(
+    company: VirtualCompany,
+    matrix_config: &MatrixConfig,
+    app_config: &AppConfig,
+) -> Result<()> {
+    info!("⚡ Starting Matrix services...");
 
-    // Get Agent list for Web API
-    let agents: Vec<Agent> = company.get_agents().await?;
+    // Get Agent list
+    let agents = company.get_agents().await?;
     info!("👥 Loaded {} agents", agents.len());
 
     // Create message broadcast channel
-    let (message_tx, _) = broadcast::channel::<imitatort::Message>(1000);
+    let (message_tx, _message_rx) = broadcast::channel::<imitatort::Message>(1000);
 
     // Create shared reference to company instance
     let company_arc = Arc::new(company);
 
-    // Decide whether to start Agent loops based on configuration
+    // Initialize Matrix client
+    let matrix_client = MatrixClient::new(matrix_config);
+
+    // Initialize mapper
+    let mapper = Arc::new(RwLock::new(Mapper::new(matrix_config)));
+
+    // Create sync service
+    let sync_service = SyncService::new(
+        matrix_client.clone(),
+        matrix_config,
+        mapper.clone(),
+        company_arc.store().clone(),
+    );
+
+    // Sync users (register virtual users if needed)
+    info!("🔄 Synchronizing users to Matrix...");
+    if let Err(e) = sync_service.sync_all_users().await {
+        error!("Failed to sync users: {}", e);
+    }
+
+    // Sync rooms (create department rooms)
+    info!("🔄 Synchronizing rooms to Matrix...");
+    if let Err(e) = sync_service.sync_all_rooms().await {
+        error!("Failed to sync rooms: {}", e);
+    }
+
+    // Start Appservice server to listen for Homeserver events
+    info!("🌐 Starting Matrix Appservice on port {}...", matrix_config.appservice_port);
+    let appservice = AppService::new(matrix_config.clone(), message_tx.clone());
+
+    // Spawn Appservice in background
+    tokio::spawn(async move {
+        if let Err(e) = appservice.run().await {
+            error!("Appservice error: {}", e);
+        }
+    });
+
+    // Start Agent loops if configured
     if app_config.run_agent_loops {
         info!("🔄 Starting agent autonomous loops...");
         let company_for_agents = company_arc.clone();
-        let message_tx_for_agents = message_tx.clone();
-
         tokio::spawn(async move {
-            start_agent_loops(company_for_agents, message_tx_for_agents).await;
+            if let Err(e) = company_for_agents.run().await {
+                error!("Agent operations error: {}", e);
+            }
         });
-    } else {
-        info!("⏸️  Agent loops disabled by configuration");
     }
 
-    // Automatically start Web service (if configured for web mode)
-    if app_config.output_mode == "web" {
-        info!("🌐 Starting web server on {}", app_config.web_bind);
+    info!("✅ Matrix Appservice started successfully");
+    info!("ℹ️  Connect with Element or other Matrix clients to {}", matrix_config.homeserver_url);
 
-        start_web_server(
-            &app_config.web_bind,
-            agents,
-            message_tx,
-            company_arc.store().clone(),
-        )
-        .await?;
+    // Wait for shutdown signal
+    tokio::signal::ctrl_c()
+        .await
+        .expect("Failed to listen for ctrl+c");
 
-        info!("✅ Web server started successfully");
-    } else {
-        info!("ℹ️  Running in console mode (no web interface)");
-        // In console mode, we still keep Agent loops running
-        // Wait until terminated by interrupt signal
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to listen for ctrl+c");
-        info!("🛑 Received shutdown signal");
-    }
+    info!("🛑 Received shutdown signal");
 
     Ok(())
-}
-
-/// Start autonomous loops for all Agents
-async fn start_agent_loops(
-    company: Arc<VirtualCompany>,
-    _message_tx: broadcast::Sender<imitatort::Message>,
-) {
-    info!("🤖 Starting agent autonomous operations...");
-
-    // 启动事件驱动的Agent系统
-    match company.run().await {
-        Ok(_) => info!("Agent operations completed"),
-        Err(e) => {
-            tracing::error!("Agent operations error: {}", e);
-        }
-    }
 }

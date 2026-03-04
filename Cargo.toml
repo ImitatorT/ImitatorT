@@ -38,7 +38,9 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 uuid = { version = "1", features = ["v4"] }
 dashmap = "6"
 swarms-rs = "0.1"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "gzip"] }
+scraper = "0.20"
+regex = "1.10"
 async-trait = "0.1"
 async-openai = { version = "0.33", features = ["chat-completion"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -48,6 +50,8 @@ tower = "0.5"
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
 url = "2"
+urlencoding = "2.1"
+futures = "0.3"
 eventsource-stream = "0.2"
 sha2 = "0.10"
 rand = "0.8"

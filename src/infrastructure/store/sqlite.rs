@@ -612,6 +612,14 @@ impl Store for SqliteStore {
         }).await
     }
 
+    async fn delete_user(&self, user_id: &str) -> Result<()> {
+        let user_id = user_id.to_string();
+        self.execute(move |conn| {
+            conn.execute("DELETE FROM users WHERE id = ?1", [user_id])?;
+            Ok(())
+        }).await
+    }
+
     async fn save_invitation_code(&self, code: &InvitationCode) -> Result<()> {
         let code_clone = code.clone();
         self.execute(move |conn| {

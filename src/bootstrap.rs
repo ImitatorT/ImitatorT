@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{info, warn};
 
-use crate::{start_web_server, Agent, AppConfig, CompanyBuilder, CompanyConfig, VirtualCompany};
+use crate::{Agent, AppConfig, CompanyBuilder, CompanyConfig, VirtualCompany};
 
 /// Framework Launcher - Provides auto-configured startup functionality
 #[derive(Default)]
@@ -109,36 +109,12 @@ impl FrameworkLauncher {
             info!("⏸️  Agent loops disabled by configuration");
         }
 
-        // Start Web service
-        if self.config.output_mode == "web" {
-            info!(
-                "🌐 Starting embedded web server on {}",
-                self.config.web_bind
-            );
-
-            start_web_server(
-                &self.config.web_bind,
-                agents,
-                message_tx,
-                company_arc.store().clone(),
-            )
-            .await?;
-
-            info!("✅ Web server started successfully");
-
-            // Wait until terminated by interrupt signal
-            tokio::signal::ctrl_c()
-                .await
-                .expect("Failed to listen for ctrl+c");
-            info!("🛑 Received shutdown signal");
-        } else {
-            info!("ℹ️  Running in console mode");
-            // Wait for interrupt signal in console mode
-            tokio::signal::ctrl_c()
-                .await
-                .expect("Failed to listen for ctrl+c");
-            info!("🛑 Received shutdown signal");
-        }
+        // Wait for interrupt signal
+        info!("ℹ️  Waiting for shutdown signal...");
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for ctrl+c");
+        info!("🛑 Received shutdown signal");
 
         Ok(())
     }
