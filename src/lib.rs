@@ -75,11 +75,12 @@ pub mod application {
 pub mod infrastructure {
     pub mod auth;
     pub mod capability;
+    pub mod ldap;
     pub mod llm;
     pub mod logger;
+    pub mod matrix;
     pub mod store;
     pub mod tool;
-    pub mod matrix;
 }
 
 // ================================

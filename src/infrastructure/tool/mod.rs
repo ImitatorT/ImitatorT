@@ -8,10 +8,8 @@ pub use crate::core::tool::{ToolExecutor, ToolResult, ToolExecutorRegistry, FnTo
 pub mod framework_tools;
 pub mod common;
 pub mod web;
-pub mod code;
 pub mod file;
 
 pub use framework_tools::{FrameworkToolExecutor, ToolEnvironment};
-pub use web::{execute_web_search, execute_web_visit, execute_wikipedia, execute_reddit, execute_twitter, execute_bloomberg, execute_polymarket};
-pub use code::execute_rust;
+pub use web::{execute_web_search, execute_web_visit, execute_wikipedia, execute_reddit, execute_bloomberg, execute_polymarket};
 pub use file::execute_simple_file;

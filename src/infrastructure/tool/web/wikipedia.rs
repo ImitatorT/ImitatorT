@@ -199,20 +199,39 @@ mod tests {
     async fn test_search() {
         let tool = WikipediaTool::new();
         let result = tool.search("Rust programming", 3).await;
-        if result.is_ok() {
-            let content = result.unwrap();
-            assert!(content.contains("Rust") || !content.is_empty());
-        }
+        assert!(result.is_ok(), "搜索失败");
+        let content = result.unwrap();
+        println!("\n=== 维基百科搜索测试结果 ===\n{}", content);
+        assert!(!content.is_empty(), "结果不应为空");
     }
 
     #[tokio::test]
     async fn test_get_article() {
         let tool = WikipediaTool::new();
         let result = tool.get_article("Rust_(programming_language)").await;
-        if result.is_ok() {
-            let content = result.unwrap();
-            assert!(!content.is_empty());
-        }
+        assert!(result.is_ok(), "获取词条失败");
+        let content = result.unwrap();
+        println!("\n=== 维基百科词条测试结果 ===\n{}", content.chars().take(500).collect::<String>());
+        assert!(!content.is_empty(), "结果不应为空");
+    }
+
+    #[tokio::test]
+    async fn test_get_summary() {
+        let tool = WikipediaTool::new();
+        let result = tool.get_summary("Rust_(programming_language)").await;
+        assert!(result.is_ok(), "获取摘要失败");
+        let content = result.unwrap();
+        println!("\n=== 维基百科摘要测试结果 ===\n{}", content.chars().take(300).collect::<String>());
+        assert!(!content.is_empty(), "结果不应为空");
+    }
+
+    #[tokio::test]
+    async fn test_article_not_found() {
+        let tool = WikipediaTool::new();
+        let result = tool.get_article("NonExistentArticle12345").await;
+        assert!(result.is_ok(), "请求应成功返回");
+        let content = result.unwrap();
+        assert_eq!(content, "Article not found.");
     }
 
     #[test]

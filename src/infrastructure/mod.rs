@@ -8,3 +8,4 @@ pub mod store;
 pub mod tool;
 pub mod auth;
 pub mod matrix;
+pub mod ldap;

@@ -72,11 +72,13 @@ impl RedditTool {
         let document = scraper::Html::parse_document(html);
         let mut results = Vec::new();
 
-        // old.reddit.com 使用 thing 类标识帖子
-        let post_selector = scraper::Selector::parse(".thing").unwrap();
-        let title_selector = scraper::Selector::parse("a.title").unwrap();
-        let score_selector = scraper::Selector::parse(".score").unwrap();
-        let domain_selector = scraper::Selector::parse(".domain").unwrap();
+        // 搜索结果使用不同的 HTML 结构：.search-result-link 和 .search-title
+        let post_selector = scraper::Selector::parse(".search-result-link").unwrap();
+        let title_selector = scraper::Selector::parse(".search-title").unwrap();
+        let score_selector = scraper::Selector::parse(".search-score").unwrap();
+        let comments_selector = scraper::Selector::parse(".search-comments").unwrap();
+        let author_selector = scraper::Selector::parse(".search-author").unwrap();
+        let time_selector = scraper::Selector::parse(".search-time").unwrap();
 
         for post in document.select(&post_selector).take(20) {
             if let Some(title_elem) = post.select(&title_selector).next() {
@@ -88,7 +90,17 @@ impl RedditTool {
                     .map(|e| e.text().collect::<String>())
                     .unwrap_or_default();
 
-                let domain = post.select(&domain_selector)
+                let comments = post.select(&comments_selector)
+                    .next()
+                    .map(|e| e.text().collect::<String>())
+                    .unwrap_or_default();
+
+                let author = post.select(&author_selector)
+                    .next()
+                    .map(|e| e.text().collect::<String>())
+                    .unwrap_or_default();
+
+                let time = post.select(&time_selector)
                     .next()
                     .map(|e| e.text().collect::<String>())
                     .unwrap_or_default();
@@ -100,8 +112,8 @@ impl RedditTool {
                 };
 
                 results.push(format!(
-                    "**{}**\n- Score: {}\n- Domain: {}\n- URL: {}",
-                    title, score, domain, full_url
+                    "**{}**\n- Score: {}\n- Comments: {}\n- Author: {}\n- Time: {}\n- URL: {}",
+                    title, score, comments, author, time, full_url
                 ));
             }
         }
@@ -244,10 +256,29 @@ mod tests {
     async fn test_hot_posts() {
         let tool = RedditTool::new();
         let result = tool.get_hot_posts("technology", 5).await;
-        if result.is_ok() {
-            let content = result.unwrap();
-            assert!(!content.is_empty());
-        }
+        assert!(result.is_ok(), "获取热门帖子失败");
+        let content = result.unwrap();
+        println!("\n=== 热门帖子测试结果 ===\n{}", content);
+        assert!(!content.is_empty(), "结果为空");
+    }
+
+    #[tokio::test]
+    async fn test_new_posts() {
+        let tool = RedditTool::new();
+        let result = tool.get_new_posts("rust", 5).await;
+        assert!(result.is_ok(), "获取最新帖子失败");
+        let content = result.unwrap();
+        println!("\n=== 最新帖子测试结果 ===\n{}", content);
+        assert!(!content.is_empty(), "结果为空");
+    }
+
+    #[tokio::test]
+    async fn test_search() {
+        let tool = RedditTool::new();
+        let result = tool.search(Some("technology"), "AI", 5).await;
+        assert!(result.is_ok(), "搜索帖子失败");
+        let content = result.unwrap();
+        println!("\n=== 搜索结果测试 ===\n{}", content);
     }
 
     #[test]

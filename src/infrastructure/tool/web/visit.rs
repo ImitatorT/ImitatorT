@@ -1,6 +1,7 @@
 //! WebVisit 工具 - 网页访问和内容提取
 //!
-//! 使用 Jina Reader (https://r.jina.ai) 将网页转换为 LLM 友好的 Markdown 格式
+//! 优先使用 Crawl4AI API (https://github.com/unclecode/crawl4ai) 将网页转换为 Markdown 格式
+//! 如果未配置 CRAWL4AI_API_URL，则使用本地 HTML 解析器作为后备方案
 
 use anyhow::Result;
 use serde_json::{json, Value};
@@ -11,10 +12,13 @@ use crate::infrastructure::tool::common::HtmlParser;
 pub struct WebVisitTool {
     client: reqwest::Client,
     html_parser: HtmlParser,
+    crawl4ai_api_url: Option<String>,
 }
 
 impl WebVisitTool {
     pub fn new() -> Self {
+        let crawl4ai_api_url = std::env::var("CRAWL4AI_API_URL").ok();
+
         Self {
             client: reqwest::Client::builder()
                 .user_agent("Mozilla/5.0 (compatible; ImitatorT/1.0)")
@@ -22,24 +26,67 @@ impl WebVisitTool {
                 .build()
                 .unwrap_or_default(),
             html_parser: HtmlParser::new(),
+            crawl4ai_api_url,
         }
     }
 
     /// 访问单个网页
     pub async fn visit(&self, url: &str) -> Result<String> {
-        // 使用 Jina Reader
-        let jina_url = format!("https://r.jina.ai/{}", url);
-
-        let response = self.client.get(&jina_url).send().await?;
-        let status = response.status();
-
-        if !status.is_success() {
-            // Jina Reader 失败时，尝试直接获取并解析 HTML
-            return self.visit_direct(url).await;
+        // 如果配置了 Crawl4AI API，优先使用
+        if let Some(api_url) = &self.crawl4ai_api_url {
+            match self.visit_with_crawl4ai(api_url, url).await {
+                Ok(content) => return Ok(content),
+                Err(e) => {
+                    tracing::warn!("Crawl4AI API 调用失败：{}, 使用本地解析", e);
+                }
+            }
         }
 
-        let text = response.text().await?;
-        Ok(text)
+        // 未配置 Crawl4AI 或 API 调用失败时，使用本地 HTML 解析
+        self.visit_direct(url).await
+    }
+
+    /// 使用 Crawl4AI API 访问网页
+    async fn visit_with_crawl4ai(&self, api_url: &str, url: &str) -> Result<String> {
+        let crawl_endpoint = format!("{}/crawl", api_url.trim_end_matches('/'));
+
+        let payload = json!({
+            "url": url,
+            "formats": ["markdown"],
+            "only_main_content": true
+        });
+
+        let response = self
+            .client
+            .post(&crawl_endpoint)
+            .json(&payload)
+            .send()
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await?;
+            return Err(anyhow::anyhow!("Crawl4AI API error: {} - {}", status, error_text));
+        }
+
+        let json_response: Value = response.json().await?;
+
+        // 解析 Crawl4AI 响应，提取 markdown 内容
+        let markdown_content = json_response
+            .get("markdown")
+            .and_then(|m| m.as_str())
+            .unwrap_or_else(|| {
+                json_response
+                    .get("content")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("")
+            });
+
+        if markdown_content.is_empty() {
+            return Err(anyhow::anyhow!("Crawl4AI returned empty content"));
+        }
+
+        Ok(markdown_content.to_string())
     }
 
     /// 直接访问网页（备用方案）

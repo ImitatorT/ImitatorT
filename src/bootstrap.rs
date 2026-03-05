@@ -36,6 +36,9 @@ impl FrameworkLauncher {
         // Initialize multi-Agent system
         let company = self.initialize_multi_agent_system().await?;
 
+        // Initialize LDAP synchronization (if configured)
+        self.initialize_ldap(&company).await?;
+
         // Initialize framework skills and permissions
         self.initialize_framework_skills(&company).await?;
 
@@ -139,6 +142,28 @@ impl FrameworkLauncher {
 
         // 启动事件驱动的Agent系统
         company.run().await
+    }
+
+    /// 初始化 LDAP 同步（如果已配置）
+    async fn initialize_ldap(&self, company: &VirtualCompany) -> Result<()> {
+        use crate::infrastructure::ldap::{LdapBootstrap, LdapConfig};
+
+        if !LdapConfig::is_configured() {
+            info!("⏭️  LDAP not configured, skipping initialization");
+            return Ok(());
+        }
+
+        info!("🔗 Initializing LDAP synchronization...");
+
+        // 获取公司的 Store 引用
+        let store = company.store();
+
+        // 创建 LDAP 引导服务并初始化
+        let ldap_bootstrap = LdapBootstrap::new(LdapConfig::from_env(), store.clone());
+        ldap_bootstrap.initialize().await?;
+
+        info!("✅ LDAP synchronization initialized");
+        Ok(())
     }
 
     /// 初始化框架特定的技能和权限

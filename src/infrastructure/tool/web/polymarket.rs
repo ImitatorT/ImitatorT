@@ -1,7 +1,7 @@
 //! Polymarket 工具 - 获取预测市场数据
 //!
-//! 使用 Polymarket 官方 API
-//! API 文档：https://polymarket.github.io/polymarket-docs/
+//! 使用 Polymarket Gamma API
+//! API 文档：https://gamma-api.polymarket.com
 
 use anyhow::Result;
 use serde_json::{json, Value};
@@ -20,39 +20,38 @@ impl PolymarketTool {
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .unwrap_or_default(),
-            base_url: "https://polymarket.com".to_string(),
+            base_url: "https://gamma-api.polymarket.com".to_string(),
         }
     }
 
     /// 搜索市场
     pub async fn search_markets(&self, query: &str, limit: usize) -> Result<String> {
-        // Polymarket 没有公开搜索 API，使用网页爬取
-        let url = format!("{}/search?q={}", self.base_url, urlencoding::encode(query));
+        let url = format!(
+            "{}/markets?query={}&limit={}",
+            self.base_url,
+            urlencoding::encode(query),
+            limit
+        );
 
         let response = self.client.get(&url).send().await?;
-        let html = response.text().await?;
+        let json: Value = response.json().await?;
 
-        self.parse_search_results(&html, limit)
+        self.format_markets(&json, limit)
     }
 
     /// 获取热门市场
     pub async fn get_trending_markets(&self, limit: usize) -> Result<String> {
-        let url = format!("{}/api/markets/trending", self.base_url);
+        let url = format!("{}/markets/trending?limit={}", self.base_url, limit);
 
         let response = self.client.get(&url).send().await?;
+        let json: Value = response.json().await?;
 
-        if response.status().is_success() {
-            let json: Value = response.json().await?;
-            return self.format_markets(&json, limit);
-        }
-
-        // API 失败时尝试爬取网页
-        self.get_trending_from_web(limit).await
+        self.format_markets(&json, limit)
     }
 
     /// 获取特定市场详情
     pub async fn get_market(&self, market_id: &str) -> Result<String> {
-        let url = format!("{}/api/markets/{}", self.base_url, market_id);
+        let url = format!("{}/markets/{}", self.base_url, market_id);
 
         let response = self.client.get(&url).send().await?;
         let json: Value = response.json().await?;
@@ -62,91 +61,12 @@ impl PolymarketTool {
 
     /// 获取市场赔率
     pub async fn get_market_odds(&self, market_id: &str) -> Result<String> {
-        let url = format!("{}/api/markets/{}/odds", self.base_url, market_id);
+        let url = format!("{}/markets/{}/orderbook", self.base_url, market_id);
 
         let response = self.client.get(&url).send().await?;
         let json: Value = response.json().await?;
 
         self.format_odds(&json)
-    }
-
-    /// 解析搜索结果（网页）
-    fn parse_search_results(&self, html: &str, limit: usize) -> Result<String> {
-        let document = scraper::Html::parse_document(html);
-        let mut results = Vec::new();
-
-        // 查找市场卡片
-        let market_selector = scraper::Selector::parse("[data-testid='market-card']").unwrap();
-        let title_selector = scraper::Selector::parse("[data-testid='market-title']").unwrap();
-        let volume_selector = scraper::Selector::parse("[data-testid='market-volume']").unwrap();
-
-        for (idx, market) in document.select(&market_selector).take(limit).enumerate() {
-            let title = market.select(&title_selector)
-                .next()
-                .map(|e| e.text().collect::<String>().trim().to_string())
-                .unwrap_or_default();
-
-            let volume = market.select(&volume_selector)
-                .next()
-                .map(|e| e.text().collect::<String>().trim().to_string())
-                .unwrap_or_default();
-
-            if !title.is_empty() {
-                let mut result = format!("{}. **{}**", idx + 1, title);
-                if !volume.is_empty() {
-                    result.push_str(&format!(" (Volume: {})", volume));
-                }
-                results.push(result);
-            }
-        }
-
-        // 备用解析方法
-        if results.is_empty() {
-            return self.parse_with_links(html, limit);
-        }
-
-        if results.is_empty() {
-            return Ok("No markets found.".to_string());
-        }
-
-        Ok(results.join("\n\n"))
-    }
-
-    /// 备用链接解析
-    fn parse_with_links(&self, html: &str, limit: usize) -> Result<String> {
-        let document = scraper::Html::parse_document(html);
-        let mut results = Vec::new();
-
-        let link_selector = scraper::Selector::parse("a").unwrap();
-
-        for link in document.select(&link_selector) {
-            let href = link.value().attr("href").unwrap_or("");
-            let text = link.text().collect::<String>().trim().to_string();
-
-            // 过滤市场链接
-            if href.contains("/market/") && text.len() > 10 {
-                results.push(format!("- [{}]({}{})", text, self.base_url, href));
-                if results.len() >= limit {
-                    break;
-                }
-            }
-        }
-
-        if results.is_empty() {
-            return Ok("No markets found.".to_string());
-        }
-
-        Ok(results.join("\n"))
-    }
-
-    /// 从网页获取热门市场
-    async fn get_trending_from_web(&self, limit: usize) -> Result<String> {
-        let url = format!("{}/trending", self.base_url);
-
-        let response = self.client.get(&url).send().await?;
-        let html = response.text().await?;
-
-        self.parse_search_results(&html, limit)
     }
 
     /// 格式化市场列表
@@ -179,7 +99,7 @@ impl PolymarketTool {
         }
 
         if results.is_empty() {
-            return Ok("No trending markets found.".to_string());
+            return Ok("No markets found.".to_string());
         }
 
         Ok(results.join("\n\n"))
@@ -327,5 +247,35 @@ mod tests {
     #[test]
     fn test_tool_creation() {
         let _tool = PolymarketTool::new();
+    }
+
+    #[tokio::test]
+    async fn test_gamma_api_search() {
+        let tool = PolymarketTool::new();
+        let result = tool.search_markets("crypto", 5).await;
+        match result {
+            Ok(content) => {
+                println!("\n=== Polymarket Gamma API 搜索测试 ===\n{}", content);
+            }
+            Err(e) => {
+                println!("搜索失败：{}", e);
+                panic!("搜索 API 调用失败");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_gamma_api_trending() {
+        let tool = PolymarketTool::new();
+        let result = tool.get_trending_markets(5).await;
+        match result {
+            Ok(content) => {
+                println!("\n=== Polymarket Gamma API 热门市场测试 ===\n{}", content);
+            }
+            Err(e) => {
+                println!("获取热门失败：{}", e);
+                panic!("热门市场 API 调用失败");
+            }
+        }
     }
 }

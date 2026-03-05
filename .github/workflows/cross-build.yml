@@ -68,18 +68,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Linux
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            archive_name: imitatort-x86_64-unknown-linux-gnu.tar.gz
+            target: x86_64-linux-gnu
+            archive_name: imitatort-x86_64-linux-gnu.tar.gz
           - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            archive_name: imitatort-aarch64-unknown-linux-gnu.tar.gz
+            target: aarch64-linux-gnu
+            archive_name: imitatort-aarch64-linux-gnu.tar.gz
+          # macOS
           - os: macos-latest
             target: x86_64-apple-darwin
             archive_name: imitatort-x86_64-apple-darwin.tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
             archive_name: imitatort-aarch64-apple-darwin.tar.gz
+          # Windows
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            archive_name: imitatort-x86_64-pc-windows-msvc.zip
 
     steps:
       - name: Checkout code
@@ -102,16 +108,24 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install cross-compilation tools (Linux)
-        if: runner.os == 'Linux' && matrix.target == 'aarch64-unknown-linux-gnu'
+        if: runner.os == 'Linux' && matrix.target == 'aarch64-linux-gnu'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Set up cross-compilation for Linux targets
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        if: matrix.target == 'aarch64-linux-gnu'
         run: |
-          echo "CC_aarch64_unknown_linux_gnu=gcc-aarch64-linux-gnu" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CC_aarch64_linux_gnu=gcc-aarch64-linux-gnu" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - name: Setup vcpkg for Windows (SQLite dependency)
+        if: runner.os == 'Windows'
+        run: |
+          vcpkg install sqlite3:x64-windows
+          echo "VCPKG_ROOT=${env:VCPKG_INSTALLATION_ROOT}" | Out-File -FilePath ${env:GITHUB_ENV} -Append
+          echo "PKG_CONFIG_PATH=${env:VCPKG_INSTALLATION_ROOT}\packages\sqlite3_x64-windows\lib\pkgconfig" | Out-File -FilePath ${env:GITHUB_ENV} -Append
+        shell: pwsh
 
       # Skip tests since they ran in pre-checks
       - name: Build for target

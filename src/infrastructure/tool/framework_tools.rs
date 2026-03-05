@@ -182,8 +182,6 @@ impl FrameworkToolExecutor {
             "reddit.search" => Self::execute_reddit_search_call(params).await,
             "reddit.hot" => Self::execute_reddit_hot_call(params).await,
             "reddit.new" => Self::execute_reddit_new_call(params).await,
-            "twitter.tweets" => Self::execute_twitter_tweets_call(params).await,
-            "twitter.info" => Self::execute_twitter_info_call(params).await,
             // 财经类
             "bloomberg.search" => Self::execute_bloomberg_search_call(params).await,
             "bloomberg.latest" => Self::execute_bloomberg_latest_call(params).await,
@@ -1274,24 +1272,6 @@ impl FrameworkToolExecutor {
         }
     }
 
-    async fn execute_twitter_tweets_call(params: Value) -> Result<ToolResult> {
-        match crate::infrastructure::tool::execute_twitter(params).await {
-            Ok(result) => Ok(ToolResult::success(result)),
-            Err(e) => Ok(ToolResult::error(e.to_string())),
-        }
-    }
-
-    async fn execute_twitter_info_call(params: Value) -> Result<ToolResult> {
-        let mut params = params;
-        if let Some(obj) = params.as_object_mut() {
-            obj.insert("action".to_string(), Value::String("info".to_string()));
-        }
-        match crate::infrastructure::tool::execute_twitter(params).await {
-            Ok(result) => Ok(ToolResult::success(result)),
-            Err(e) => Ok(ToolResult::error(e.to_string())),
-        }
-    }
-
     // 财经类
     async fn execute_bloomberg_search_call(params: Value) -> Result<ToolResult> {
         match crate::infrastructure::tool::execute_bloomberg(params).await {
@@ -1353,7 +1333,7 @@ impl FrameworkToolExecutor {
 
     // 代码执行类 - Rust 脚本
     async fn execute_rust_call(params: Value) -> Result<ToolResult> {
-        match crate::infrastructure::tool::execute_rust(params).await {
+        match crate::infrastructure::tool::execute_reddit(params).await {
             Ok(result) => Ok(ToolResult::success(result)),
             Err(e) => Ok(ToolResult::error(e.to_string())),
         }

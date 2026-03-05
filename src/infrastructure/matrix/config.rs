@@ -24,6 +24,13 @@ pub struct MatrixConfig {
 }
 
 impl MatrixConfig {
+    /// 检查 Matrix 是否已配置
+    pub fn is_configured() -> bool {
+        env::var("MATRIX_HOMESERVER_URL").is_ok()
+            && env::var("MATRIX_SERVER_NAME").is_ok()
+            && env::var("MATRIX_AS_TOKEN").is_ok()
+    }
+
     /// 从环境变量加载配置
     ///
     /// 必需的环境变量：

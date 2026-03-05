@@ -12,9 +12,11 @@ pub mod appservice;
 pub mod events;
 pub mod mapper;
 pub mod sync;
+pub mod tuwunel_client;
 
 pub use config::MatrixConfig;
 pub use client::MatrixClient;
 pub use appservice::AppService;
 pub use mapper::Mapper;
 pub use sync::{SyncService, MatrixNotifier};
+pub use tuwunel_client::TuwunelClient;

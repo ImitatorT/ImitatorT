@@ -1,57 +1,123 @@
-//! Web 搜索工具 - 多引擎支持
+//! Web 搜索工具 - SearXNG + Brave Search
 //!
 //! 支持的搜索引擎：
-//! - Jina Search (优先，免费无限)
-//! - Brave Search (备用，2500 次/月免费)
-//! - Bing Search (备用，1000 次/月免费)
-//! - DuckDuckGo HTML (最后备用，无需 API)
+//! - SearXNG（首选，开源元搜索引擎）
+//! - Brave Search（备用，需配置 API Key）
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
 use std::sync::Arc;
 
-use crate::infrastructure::tool::common::{ApiKeyPool, HtmlParser, SimpleRateLimiter};
+use crate::infrastructure::tool::common::{ApiKeyPool, SimpleRateLimiter};
 
-/// Jina Search 客户端
-pub struct JinaSearchClient {
-    client: reqwest::Client,
-    base_url: String,
+/// SearXNG 搜索结果项
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SearXngResult {
+    pub title: String,
+    pub url: String,
+    #[serde(default)]
+    pub content: String,
+    #[serde(default)]
+    pub engine: String,
 }
 
-impl JinaSearchClient {
+/// SearXNG 搜索响应
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SearXngResponse {
+    pub query: String,
+    pub results: Vec<SearXngResult>,
+    #[serde(default)]
+    pub number_of_results: usize,
+}
+
+/// SearXNG 客户端
+pub struct SearXngClient {
+    client: reqwest::Client,
+    instance_url: String,
+    rate_limiter: Arc<SimpleRateLimiter>,
+}
+
+impl SearXngClient {
     pub fn new() -> Self {
+        let instance_url = env::var("SEARXNG_INSTANCE_URL")
+            .unwrap_or_else(|_| "https://searx.be".to_string());
+
         Self {
             client: reqwest::Client::builder()
                 .user_agent("Mozilla/5.0 (compatible; ImitatorT/1.0)")
                 .build()
                 .unwrap_or_default(),
-            base_url: "https://s.jina.ai".to_string(),
+            instance_url,
+            rate_limiter: Arc::new(SimpleRateLimiter::new(2)), // 2 请求/秒
         }
     }
 
     /// 执行搜索
     pub async fn search(&self, query: &str) -> Result<String> {
+        // 限流
+        self.rate_limiter.wait().await;
+
         let encoded_query = urlencoding::encode(query);
-        let url = format!("{}/{}", self.base_url, encoded_query);
+        let url = format!(
+            "{}/search?q={}&format=json",
+            self.instance_url, encoded_query
+        );
 
         let response = self.client.get(&url).send().await?;
         let status = response.status();
+        let text = response.text().await?;
 
         if !status.is_success() {
             return Err(anyhow::anyhow!(
-                "Jina Search API error: {} {}",
+                "SearXNG API error: {} {}",
                 status,
-                response.text().await.unwrap_or_default()
+                text
             ));
         }
 
-        let text = response.text().await?;
-        Ok(text)
+        // 解析 JSON 响应并格式化
+        self.format_searxng_response(&text)
+    }
+
+    /// 格式化 SearXNG 响应
+    fn format_searxng_response(&self, json_str: &str) -> Result<String> {
+        let response: SearXngResponse = serde_json::from_str(json_str)?;
+        let mut results = Vec::new();
+
+        for (idx, item) in response.results.iter().take(10).enumerate() {
+            let title = &item.title;
+            let url = &item.url;
+            let content = &item.content;
+
+            if content.is_empty() {
+                results.push(format!(
+                    "{}. [{}]({})",
+                    idx + 1,
+                    title,
+                    url
+                ));
+            } else {
+                results.push(format!(
+                    "{}. [{}]({})\n   {}",
+                    idx + 1,
+                    title,
+                    url,
+                    content
+                ));
+            }
+        }
+
+        if results.is_empty() {
+            return Ok("No results found.".to_string());
+        }
+
+        Ok(results.join("\n\n"))
     }
 }
 
-impl Default for JinaSearchClient {
+impl Default for SearXngClient {
     fn default() -> Self {
         Self::new()
     }
@@ -162,264 +228,38 @@ impl Default for BraveSearchClient {
     }
 }
 
-/// Bing Search 客户端
-pub struct BingSearchClient {
-    client: reqwest::Client,
-    api_key_pool: Option<ApiKeyPool>,
-    base_url: String,
-    rate_limiter: Arc<SimpleRateLimiter>,
-}
-
-impl BingSearchClient {
-    pub fn new() -> Self {
-        let api_keys = env::var("BING_API_KEYS").ok();
-        let api_key_pool = api_keys.as_deref().map(ApiKeyPool::from_csv);
-
-        Self {
-            client: reqwest::Client::builder().build().unwrap_or_default(),
-            api_key_pool,
-            base_url: "https://api.bing.microsoft.com/v7.0/search".to_string(),
-            rate_limiter: Arc::new(SimpleRateLimiter::new(2)), // 2 请求/秒
-        }
-    }
-
-    /// 执行搜索
-    pub async fn search(&self, query: &str) -> Result<String> {
-        let api_key = match &self.api_key_pool {
-            Some(pool) => pool.get_next_key().ok_or_else(|| {
-                anyhow::anyhow!("No available Bing API keys or all keys are rate limited")
-            })?,
-            None => {
-                return Err(anyhow::anyhow!(
-                    "Bing API keys not configured. Set BING_API_KEYS environment variable."
-                ))
-            }
-        };
-
-        // 限流
-        self.rate_limiter.wait().await;
-
-        let encoded_query = urlencoding::encode(query);
-        let url = format!(
-            "{}?q={}&count=10&mkt=zh-CN",
-            self.base_url, encoded_query
-        );
-
-        let response = self
-            .client
-            .get(&url)
-            .header("Ocp-Apim-Subscription-Key", &api_key)
-            .send()
-            .await?;
-
-        let status = response.status();
-        let text = response.text().await?;
-
-        if !status.is_success() {
-            // 如果是 401，可能是 API Key 问题
-            if status.as_u16() == 401 {
-                if let Some(pool) = &self.api_key_pool {
-                    pool.cooldown_key(&api_key, std::time::Duration::from_secs(3600));
-                }
-            }
-            return Err(anyhow::anyhow!("Bing Search API error: {} {}", status, text));
-        }
-
-        // 解析 JSON 响应并格式化
-        self.format_bing_response(&text)
-    }
-
-    /// 格式化 Bing Search 响应
-    fn format_bing_response(&self, json_str: &str) -> Result<String> {
-        let value: Value = serde_json::from_str(json_str)?;
-        let mut results = Vec::new();
-
-        // 提取 Web 结果
-        if let Some(web_pages) = value
-            .get("webPages")
-            .and_then(|wp| wp.get("value"))
-            .and_then(|v| v.as_array())
-        {
-            for (idx, item) in web_pages.iter().take(10).enumerate() {
-                let title = item.get("name").and_then(|t| t.as_str()).unwrap_or("");
-                let url = item.get("url").and_then(|u| u.as_str()).unwrap_or("");
-                let snippet = item.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
-
-                results.push(format!(
-                    "{}. [{}]({})\n   {}",
-                    idx + 1,
-                    title,
-                    url,
-                    snippet
-                ));
-            }
-        }
-
-        if results.is_empty() {
-            return Ok("No results found.".to_string());
-        }
-
-        Ok(results.join("\n\n"))
-    }
-}
-
-impl Default for BingSearchClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// DuckDuckGo HTML 搜索客户端（无需 API）
-pub struct DuckDuckGoClient {
-    client: reqwest::Client,
-    rate_limiter: Arc<SimpleRateLimiter>,
-}
-
-impl DuckDuckGoClient {
-    pub fn new() -> Self {
-        Self {
-            client: reqwest::Client::builder()
-                .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .build()
-                .unwrap_or_default(),
-            rate_limiter: Arc::new(SimpleRateLimiter::new(1)), // 1 请求/秒，更保守
-        }
-    }
-
-    /// 执行搜索
-    pub async fn search(&self, query: &str) -> Result<String> {
-        // 限流
-        self.rate_limiter.wait().await;
-
-        let encoded_query = urlencoding::encode(query);
-        let url = format!("https://html.duckduckgo.com/html/?q={}", encoded_query);
-
-        let response = self
-            .client
-            .post(&url)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .body(format!("q={}", encoded_query))
-            .send()
-            .await?;
-
-        let status = response.status();
-        let html = response.text().await?;
-
-        if !status.is_success() {
-            return Err(anyhow::anyhow!("DuckDuckGo HTML error: {}", status));
-        }
-
-        // 解析 HTML 结果
-        self.parse_ddg_html(&html)
-    }
-
-    /// 解析 DuckDuckGo HTML 结果
-    fn parse_ddg_html(&self, html: &str) -> Result<String> {
-        let document = scraper::Html::parse_document(html);
-        let mut results = Vec::new();
-
-        // DuckDuckGo HTML 结果使用 result__body 类
-        let result_selector = scraper::Selector::parse(".result__body").unwrap();
-        let title_selector = scraper::Selector::parse("a.result__a").unwrap();
-        let snippet_selector = scraper::Selector::parse("a.result__snippet").unwrap();
-
-        for (idx, result_elem) in document.select(&result_selector).take(10).enumerate() {
-            if let Some(title_elem) = result_elem.select(&title_selector).next() {
-                let title = title_elem.text().collect::<String>().trim().to_string();
-                let url = title_elem
-                    .value()
-                    .attr("href")
-                    .unwrap_or("")
-                    .to_string();
-
-                let snippet = result_elem
-                    .select(&snippet_selector)
-                    .next()
-                    .map(|e| e.text().collect::<String>().trim().to_string())
-                    .unwrap_or_default();
-
-                results.push(format!(
-                    "{}. [{}]({})\n   {}",
-                    idx + 1,
-                    title,
-                    url,
-                    snippet
-                ));
-            }
-        }
-
-        if results.is_empty() {
-            // 尝试备用选择器
-            let alt_selector = scraper::Selector::parse(".results").unwrap();
-            if let Some(results_elem) = document.select(&alt_selector).next() {
-                let link_selector = scraper::Selector::parse("a.result__url").unwrap();
-                for (idx, link_elem) in results_elem.select(&link_selector).take(10).enumerate() {
-                    let url = link_elem.text().collect::<String>().trim().to_string();
-                    results.push(format!("{}. {}", idx + 1, url));
-                }
-            }
-        }
-
-        if results.is_empty() {
-            return Ok("No results found.".to_string());
-        }
-
-        Ok(results.join("\n\n"))
-    }
-}
-
-impl Default for DuckDuckGoClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Web 搜索工具 - 多引擎支持
+/// Web 搜索工具 - SearXNG + Brave Search
 pub struct WebSearchTool {
-    jina_client: JinaSearchClient,
+    searxng_client: SearXngClient,
     brave_client: Option<BraveSearchClient>,
-    bing_client: Option<BingSearchClient>,
-    ddg_client: DuckDuckGoClient,
-    html_parser: HtmlParser,
 }
 
 impl WebSearchTool {
     pub fn new() -> Self {
-        // 检查环境变量，决定是否初始化带 API Key 的客户端
+        // 检查是否配置了 Brave API Key
         let has_brave_keys = env::var("BRAVE_API_KEYS").is_ok();
-        let has_bing_keys = env::var("BING_API_KEYS").is_ok();
 
         Self {
-            jina_client: JinaSearchClient::new(),
+            searxng_client: SearXngClient::new(),
             brave_client: if has_brave_keys {
                 Some(BraveSearchClient::new())
             } else {
                 None
             },
-            bing_client: if has_bing_keys {
-                Some(BingSearchClient::new())
-            } else {
-                None
-            },
-            ddg_client: DuckDuckGoClient::new(),
-            html_parser: HtmlParser::new(),
         }
     }
 
-    /// 执行搜索（多引擎故障转移）
+    /// 执行搜索（SearXNG 优先，Brave Search 备用）
     pub async fn search(&self, query: &str) -> Result<String> {
-        // 1. 尝试 Jina Search（免费无限）
-        match self.jina_client.search(query).await {
-            Ok(result) if !result.is_empty() && !result.contains("error") => {
-                return Ok(self.format_jina_response(&result));
-            }
-            Ok(_) => {}
+        // 1. 首先尝试 SearXNG
+        match self.searxng_client.search(query).await {
+            Ok(result) => return Ok(result),
             Err(e) => {
-                tracing::warn!("Jina Search failed: {}", e);
+                tracing::warn!("SearXNG search failed: {}", e);
             }
         }
 
-        // 2. 尝试 Brave Search
+        // 2. 如果 SearXNG 失败且有 Brave 客户端，尝试 Brave Search
         if let Some(ref brave) = self.brave_client {
             match brave.search(query).await {
                 Ok(result) => return Ok(result),
@@ -429,79 +269,15 @@ impl WebSearchTool {
             }
         }
 
-        // 3. 尝试 Bing Search
-        if let Some(ref bing) = self.bing_client {
-            match bing.search(query).await {
-                Ok(result) => return Ok(result),
-                Err(e) => {
-                    tracing::warn!("Bing Search failed: {}", e);
-                }
+        // 都失败
+        Err(anyhow::anyhow!(
+            "All search engines failed. SearXNG failed, and Brave Search is {}",
+            if self.brave_client.is_some() {
+                "also failed"
+            } else {
+                "not configured (set BRAVE_API_KEYS to enable)"
             }
-        }
-
-        // 4. 最后尝试 DuckDuckGo HTML
-        match self.ddg_client.search(query).await {
-            Ok(result) => Ok(result),
-            Err(e) => Err(anyhow::anyhow!(
-                "All search engines failed. Last error: {}",
-                e
-            )),
-        }
-    }
-
-    /// 格式化 Jina Search 响应
-    fn format_jina_response(&self, text: &str) -> String {
-        // Jina Search 返回的是 Markdown 格式
-        // 每篇文章格式类似：
-        // Title: ...
-        // URL: ...
-        // Content: ...
-        //
-        // 解析并重新格式化
-
-        let mut results = Vec::new();
-        let mut current_title = String::new();
-        let mut current_url = String::new();
-        let mut current_content = String::new();
-
-        for line in text.lines() {
-            if line.starts_with("Title:") {
-                if !current_title.is_empty() {
-                    results.push(format!(
-                        "[{}]({})\n{}",
-                        current_title, current_url, current_content
-                    ));
-                }
-                current_title = line.strip_prefix("Title:").unwrap_or("").trim().to_string();
-            } else if line.starts_with("URL:") {
-                current_url = line.strip_prefix("URL:").unwrap_or("").trim().to_string();
-            } else if line.starts_with("Content:") {
-                current_content = line.strip_prefix("Content:").unwrap_or("").trim().to_string();
-            } else if !line.is_empty() && !current_content.is_empty() {
-                current_content.push('\n');
-                current_content.push_str(line);
-            }
-        }
-
-        // 添加最后一个结果
-        if !current_title.is_empty() {
-            results.push(format!(
-                "[{}]({})\n{}",
-                current_title, current_url, current_content
-            ));
-        }
-
-        if results.is_empty() {
-            return "No results found.".to_string();
-        }
-
-        // 添加编号
-        results
-            .iter()
-            .enumerate()
-            .map(|(i, r)| format!("{}. {}", i + 1, r))
-            .collect::<Vec<_>>()
-            .join("\n\n")
+        ))
     }
 
     /// 执行批量搜索
@@ -580,18 +356,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_jina_search() {
-        let client = JinaSearchClient::new();
-        let result = client.search("Rust programming").await;
-        // 注意：这个测试需要网络连接
-        if result.is_ok() {
-            assert!(!result.unwrap().is_empty());
-        }
-    }
-
-    #[tokio::test]
-    async fn test_duckduckgo_search() {
-        let client = DuckDuckGoClient::new();
+    async fn test_searxng_search() {
+        let client = SearXngClient::new();
         let result = client.search("Rust programming").await;
         // 注意：这个测试需要网络连接
         if result.is_ok() {
